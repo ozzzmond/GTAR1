@@ -201,13 +201,17 @@ export interface WakeLockSentinelLike {
   addEventListener?(type: string, listener: () => void): void
 }
 
+export type WakeLockStatus = 'active' | 'denied' | 'unsupported' | 'disabled'
+
 export interface WakeLockController {
   acquire(): Promise<boolean>
   release(): Promise<void>
   cleanup(): Promise<void>
   readonly isSupported: boolean
   readonly isAcquired: boolean
-  onChange(callback: (isAcquired: boolean) => void): () => void
+  readonly isDenied: boolean
+  readonly status: WakeLockStatus
+  onChange(callback: (isAcquired: boolean, status?: WakeLockStatus) => void): () => void
 }
 
 export function createWakeLockController(): WakeLockController {
@@ -217,23 +221,44 @@ export function createWakeLockController(): WakeLockController {
   let visibilityHandler: (() => void) | null = null
   let destroyed = false
   let enabled = false
-  const listeners: Array<(isAcquired: boolean) => void> = []
+  let denied = false
+  const listeners: Array<(isAcquired: boolean, status?: WakeLockStatus) => void> = []
 
   let pending: Promise<boolean> | null = null
   let releaseGeneration = 0
 
+  function getCurrentStatus(): WakeLockStatus {
+    if (!enabled) return 'disabled'
+    if (!supported) return 'unsupported'
+    if (sentinel && !sentinel.released) return 'active'
+    if (denied) return 'denied'
+    return 'disabled'
+  }
+
   function dispatchChange() {
     const acquired = Boolean(sentinel && !sentinel.released)
+    const currentStatus = getCurrentStatus()
     listeners.forEach((fn) => {
       try {
-        fn(acquired)
+        fn(acquired, currentStatus)
       } catch {}
     })
   }
 
   function acquireInternal(): Promise<boolean> {
-    if (!supported || destroyed || !enabled) return Promise.resolve(false)
-    if (sentinel && !sentinel.released) return Promise.resolve(true)
+    if (!supported) {
+      denied = false
+      dispatchChange()
+      return Promise.resolve(false)
+    }
+    if (destroyed || !enabled) {
+      denied = false
+      return Promise.resolve(false)
+    }
+    if (sentinel && !sentinel.released) {
+      denied = false
+      return Promise.resolve(true)
+    }
     if (pending) return pending
     const generation = releaseGeneration
     pending = (async () => {
@@ -241,10 +266,12 @@ export function createWakeLockController(): WakeLockController {
         const acquired = await (navigator as any).wakeLock.request('screen')
         if (destroyed || !enabled || generation !== releaseGeneration) {
           await acquired.release()
+          denied = false
           dispatchChange()
           return false
         } else {
           sentinel = acquired
+          denied = false
           if (typeof acquired.addEventListener === 'function') {
             acquired.addEventListener('release', () => {
               if (sentinel === acquired) {
@@ -259,6 +286,7 @@ export function createWakeLockController(): WakeLockController {
       } catch {
         // Page hidden, battery saver, or permission denied
         sentinel = null
+        denied = true
         dispatchChange()
         return false
       } finally {
@@ -270,6 +298,7 @@ export function createWakeLockController(): WakeLockController {
 
   async function releaseInternal(): Promise<void> {
     releaseGeneration++
+    denied = false
     if (sentinel && !sentinel.released) {
       try {
         await sentinel.release()
@@ -309,7 +338,15 @@ export function createWakeLockController(): WakeLockController {
       return Boolean(sentinel && !sentinel.released)
     },
 
-    onChange(callback: (isAcquired: boolean) => void) {
+    get isDenied() {
+      return denied
+    },
+
+    get status() {
+      return getCurrentStatus()
+    },
+
+    onChange(callback: (isAcquired: boolean, status?: WakeLockStatus) => void) {
       listeners.push(callback)
       return () => {
         const idx = listeners.indexOf(callback)
@@ -332,7 +369,6 @@ export function createWakeLockController(): WakeLockController {
       destroyed = true
       teardownVisibilityListener()
       await releaseInternal()
-      listeners.length = 0
     },
   }
 }

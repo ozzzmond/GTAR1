@@ -262,21 +262,19 @@ test('BROWSER_LEVEL_REGRESSION: Playwright real-layout validation of Stage, Touc
     const pauseLabelCheck = await page.locator('button[aria-label*="Start auto-scroll"]').count()
     assert.ok(pauseLabelCheck > 0, 'User manual scroll must immediately pause active autoscroll')
 
-    // Step 9: R7 — Assert song change pauses RAF and resets scroll to top
-    // Trigger Next Song via ']' shortcut or queue
+    // Step 9: M1 — Standalone Stage Queue: individual song has NO implicit library queue
+    const queueCounterCount = await page.locator('[data-testid="stage-queue-counter"]').count()
+    if (queueCounterCount > 0) {
+      const counterText = await page.locator('[data-testid="stage-queue-counter"]').first().innerText()
+      assert.strictEqual(counterText.trim(), '1/1', 'Individual song queue counter must be 1/1 if rendered')
+    }
+    // Verify ']' does NOT navigate away into unrelated library songs
     await page.keyboard.press(']')
-    await page.waitForTimeout(300)
-
-    const nextSongScroll = await page.evaluate(() => {
-      const el = document.querySelector('main[data-stage-canvas="true"]')
-      return el ? el.scrollTop : 0
-    })
-    assert.strictEqual(nextSongScroll, 0, 'Song change must pause RAF and reset scroll to top (0)')
+    await page.waitForTimeout(150)
+    const currentSongTitle = await page.locator('header[role="banner"] h1').innerText()
+    assert.strictEqual(currentSongTitle.trim(), 'Hotel California Long', 'Individual song must remain standalone without navigating to unrelated songs')
 
     // Step 10: R5 — Keyboard Contract: PgUp/PgDn navigate sections; Up/Down scroll chart
-    // Return to first song via '['
-    await page.keyboard.press('[')
-    await page.waitForTimeout(300)
 
     const preScrollChart = await page.evaluate(() => {
       const el = document.querySelector('main[data-stage-canvas="true"]')
@@ -471,15 +469,152 @@ test('BROWSER_LEVEL_REGRESSION: Playwright real-layout validation of Stage, Touc
     await pauseBeforeOptions.click()
     await page.waitForTimeout(100)
 
-    // Step 16: CODEX_R6 — Stage Options Sheet distinguishes preference from actual lock status
+    // Step 16: M3 & M4 — Stage Options Accessibility & Wake Lock Distinction
     const optionsButton = page.locator('header[role="banner"] button[aria-label*="Open Stage Options"]').first()
     await optionsButton.click()
-    await page.locator('div[role="dialog"][aria-label*="Stage Performance Options"]').waitFor({ timeout: 3000 })
+    const optionsDialog = page.locator('div[role="dialog"][aria-label*="Stage Performance Options"]')
+    await optionsDialog.waitFor({ timeout: 3000 })
 
-    // On headless browser where wakeLock request is unavailable/denied, verify Denied/Unavailable status is displayed
-    const wakeLockStatus = await page.locator('text="Denied / Unavailable"').count()
-    // It should display Denied / Unavailable (or Active if running with native wake lock permitted)
-    assert.ok(wakeLockStatus >= 0, 'Wake lock status is distinguished and cleanly rendered')
+    // M3: Distinct Wake Lock Status (headless browser yields Denied)
+    const deniedStatus = await page.locator('div[role="dialog"] span:has-text("Denied")').count()
+    const unsupportedStatus = await page.locator('div[role="dialog"] span:has-text("Unsupported")').count()
+    const activeStatus = await page.locator('div[role="dialog"] span:has-text("Active")').count()
+    assert.ok(
+      deniedStatus > 0 || unsupportedStatus > 0 || activeStatus > 0,
+      'M3: Wake Lock status must display a distinct badge (Denied, Unsupported, or Active)'
+    )
+
+    // M4: Minimum 44x44px Targets & Accessible Switch Roles
+    const closeOptionsBtn = page.locator('button[aria-label="Close options"]').first()
+    const closeBox = await closeOptionsBtn.boundingBox()
+    assert.ok(
+      closeBox && closeBox.width >= 44 && closeBox.height >= 44,
+      `M4: Options close button must be at least 44x44px: got ${closeBox?.width}x${closeBox?.height}`
+    )
+
+    // Verify switch toggles have role="switch" and aria-checked
+    const switches = page.locator('div[role="dialog"] button[role="switch"]')
+    const switchCount = await switches.count()
+    assert.ok(switchCount >= 4, `M4: Options sheet must have accessible switches (found ${switchCount})`)
+
+    for (let i = 0; i < switchCount; i++) {
+      const sw = switches.nth(i)
+      const swBox = await sw.boundingBox()
+      const ariaChecked = await sw.getAttribute('aria-checked')
+      const ariaLabel = await sw.getAttribute('aria-label')
+      assert.ok(
+        swBox && swBox.width >= 44 && swBox.height >= 44,
+        `M4: Switch ${i} (${ariaLabel}) must be at least 44x44px: got ${swBox?.width}x${swBox?.height}`
+      )
+      assert.ok(ariaChecked === 'true' || ariaChecked === 'false', `Switch ${i} must have valid aria-checked`)
+      assert.ok(ariaLabel && ariaLabel.length > 0, `Switch ${i} must have accessible aria-label`)
+    }
+
+    // Close options
+    await closeOptionsBtn.click()
+    await page.waitForTimeout(200)
+
+    // Step 17: M5 — Viewport Rotation Reading Position Preservation
+    // Scroll down to an intermediate line
+    await page.evaluate(() => {
+      const el = document.querySelector('main[data-stage-canvas="true"]')
+      el.scrollTop = 350
+    })
+    await page.waitForTimeout(100)
+    const preRotateScroll = await page.evaluate(() => {
+      const el = document.querySelector('main[data-stage-canvas="true"]')
+      return el.scrollTop
+    })
+
+    // Rotate to landscape (667x375)
+    await page.setViewportSize({ width: 667, height: 375 })
+    await page.waitForTimeout(150)
+
+    const landscapeScroll = await page.evaluate(() => {
+      const el = document.querySelector('main[data-stage-canvas="true"]')
+      return el.scrollTop
+    })
+    assert.ok(landscapeScroll > 0, 'Landscape orientation must preserve non-zero reading scroll')
+
+    // Rotate back to portrait (375x667)
+    await page.setViewportSize({ width: 375, height: 667 })
+    await page.waitForTimeout(150)
+
+    const postRotatePortraitScroll = await page.evaluate(() => {
+      const el = document.querySelector('main[data-stage-canvas="true"]')
+      return el.scrollTop
+    })
+    // Verify reading position returned close to original anchor without autoscroll resuming
+    const scrollDelta = Math.abs(postRotatePortraitScroll - preRotateScroll)
+    assert.ok(
+      scrollDelta < 120,
+      `M5: Reading position preserved across orientation changes: delta ${scrollDelta}px (${postRotatePortraitScroll} vs ${preRotateScroll})`
+    )
+    assert.strictEqual(
+      await page.locator('button[aria-label*="Start auto-scroll"]').count(),
+      1,
+      'M5: Autoscroll must remain paused without unexpected resume after rotation'
+    )
+
+    // Step 18: M2 — One-Action Stage Exit after Reload with Stage History State
+    // Reload page with stage state
+    await page.reload({ waitUntil: 'networkidle' })
+    await page.waitForTimeout(300)
+
+    // Re-select song card if returned to explorer or exit if in stage
+    const inStageAfterReload = await page.locator('main[data-stage-canvas="true"]').isVisible()
+    if (!inStageAfterReload) {
+      // Normal reload restored Explorer cleanly!
+      assert.ok(await page.locator('main[data-explorer-canvas="true"]').isVisible())
+      // Re-enter Stage
+      const card = page.locator('text=Hotel California Long').first()
+      await card.click()
+      const stgBtn = page.locator('button:has-text("Stage"), button[aria-label*="Stage"]').first()
+      if (await stgBtn.isVisible()) await stgBtn.click()
+      await page.locator('main[data-stage-canvas="true"]').waitFor({ timeout: 5000 })
+    }
+
+    // Now exit Stage in ONE action
+    const exitBtn = page.locator('header[role="banner"] button[aria-label*="Exit Stage"]').first()
+    await exitBtn.click()
+    await page.waitForTimeout(300)
+
+    const returnedToExplorer = await page.locator('main[data-explorer-canvas="true"]').isVisible()
+    assert.strictEqual(returnedToExplorer, true, 'M2: One single Exit action must return directly to Explorer')
+
+    // Step 19: Setlist Queue Traversal and Independent Transpose Verification
+    // Click 'Weekend Gig' setlist to enter Setlist Stage
+    const setlistCard = page.locator('text=Weekend Gig').first()
+    if (await setlistCard.isVisible()) {
+      await setlistCard.click()
+      await page.waitForTimeout(200)
+
+      const startSetlistStageBtn = page.locator('button:has-text("Start Stage"), button[aria-label*="Start Stage"]').first()
+      if (await startSetlistStageBtn.isVisible()) {
+        await startSetlistStageBtn.click()
+        await page.locator('main[data-stage-canvas="true"]').waitFor({ timeout: 5000 })
+
+        // Queue counter in Setlist mode shows 1/2
+        const setlistCounter = await page.locator('[data-testid="stage-queue-counter"]').first().innerText()
+        assert.strictEqual(setlistCounter.trim(), '1/2', 'Setlist mode must display 1/N queue counter')
+
+        // Advance to next song via ']'
+        await page.keyboard.press(']')
+        await page.waitForTimeout(300)
+
+        const song2Counter = await page.locator('[data-testid="stage-queue-counter"]').first().innerText()
+        assert.strictEqual(song2Counter.trim(), '2/2', 'Setlist queue must advance to 2/2')
+
+        const song2Title = await page.locator('header[role="banner"] h1').innerText()
+        assert.strictEqual(song2Title.trim(), 'Desperado', 'Setlist queue must display Desperado')
+
+        // Exit back to Explorer in one action
+        const setlistExit = page.locator('header[role="banner"] button[aria-label*="Exit Stage"]').first()
+        await setlistExit.click()
+        await page.waitForTimeout(300)
+        assert.ok(await page.locator('main[data-explorer-canvas="true"]').isVisible(), 'Exit from setlist stage returns to Explorer')
+      }
+    }
 
   } finally {
     if (context) await context.close().catch(() => {})

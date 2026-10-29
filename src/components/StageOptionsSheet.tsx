@@ -15,6 +15,7 @@ import {
 import type { StageChordScale, StageFontWeight, StageLineSpacing } from './SongLineRenderer'
 import type { StageNotationMode } from '../utils/nashvilleNotation'
 import type { SongEntity } from '../types/gtar'
+import type { WakeLockStatus } from '../utils/stagePerformance'
 
 export interface StageOptionsSheetProps {
   isOpen: boolean
@@ -53,6 +54,7 @@ export interface StageOptionsSheetProps {
   // Wake lock & Fullscreen
   wakeLockActive: boolean
   wakeLockAcquired?: boolean
+  wakeLockStatus?: WakeLockStatus
   onToggleWakeLock: () => void
   isFullscreen: boolean
   onToggleFullscreen: () => void
@@ -122,6 +124,7 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
   onToggleAutoHideControls,
   wakeLockActive,
   wakeLockAcquired = false,
+  wakeLockStatus,
   onToggleWakeLock,
   isFullscreen,
   onToggleFullscreen,
@@ -171,14 +174,14 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
             type="button"
             onClick={onClose}
             aria-label="Close options"
-            className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors"
+            className="min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Scrollable Content */}
-        <div className="overflow-y-auto p-5 space-y-6 text-xs text-slate-200">
+        <div className="overflow-y-auto overscroll-contain p-5 space-y-6 text-xs text-slate-200">
           {/* Autoscroll Speed */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
@@ -191,7 +194,8 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
               <button
                 type="button"
                 onClick={() => onAutoScrollSpeedChange(Math.max(5, autoScrollSpeed - 5))}
-                className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold"
+                aria-label="Decrease auto-scroll speed by 5"
+                className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold"
               >
                 -5
               </button>
@@ -202,12 +206,14 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
                 step="1"
                 value={autoScrollSpeed}
                 onChange={(e) => onAutoScrollSpeedChange(Number(e.target.value))}
+                aria-label="Auto-scroll speed slider"
                 className="flex-1 accent-sky-500 cursor-pointer h-2 bg-slate-800 rounded-lg"
               />
               <button
                 type="button"
                 onClick={() => onAutoScrollSpeedChange(Math.min(180, autoScrollSpeed + 5))}
-                className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold"
+                aria-label="Increase auto-scroll speed by 5"
+                className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold"
               >
                 +5
               </button>
@@ -221,7 +227,7 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
               <button
                 type="button"
                 onClick={() => onNotationChange('chords')}
-                className={`py-2 px-3 rounded-xl font-bold transition-all border ${
+                className={`min-h-[44px] py-2 px-3 rounded-xl font-bold transition-all border flex items-center justify-center ${
                   notation === 'chords'
                     ? 'bg-sky-600 border-sky-400 text-white shadow-md'
                     : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750'
@@ -232,7 +238,7 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
               <button
                 type="button"
                 onClick={() => onNotationChange('numbers')}
-                className={`py-2 px-3 rounded-xl font-bold transition-all border ${
+                className={`min-h-[44px] py-2 px-3 rounded-xl font-bold transition-all border flex items-center justify-center ${
                   notation === 'numbers'
                     ? 'bg-amber-500 border-amber-400 text-slate-900 shadow-md'
                     : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750'
@@ -369,16 +375,23 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
               </div>
               <button
                 type="button"
+                role="switch"
+                aria-checked={isTwoColumn}
+                aria-label="Two-Column Layout"
                 onClick={() => onToggleTwoColumn(!isTwoColumn)}
-                className={`w-11 h-6 rounded-full transition-colors relative p-0.5 ${
-                  isTwoColumn ? 'bg-sky-600' : 'bg-slate-700'
-                }`}
+                className="min-w-[44px] min-h-[44px] inline-flex items-center justify-center p-1 rounded-full cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
               >
                 <div
-                  className={`w-5 h-5 rounded-full bg-white transition-transform ${
-                    isTwoColumn ? 'translate-x-5' : 'translate-x-0'
+                  className={`w-11 h-6 rounded-full transition-colors relative p-0.5 ${
+                    isTwoColumn ? 'bg-sky-600' : 'bg-slate-700'
                   }`}
-                />
+                >
+                  <div
+                    className={`w-5 h-5 rounded-full bg-white transition-transform ${
+                      isTwoColumn ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </div>
               </button>
             </div>
 
@@ -399,16 +412,23 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
               </div>
               <button
                 type="button"
+                role="switch"
+                aria-checked={autoHideControls}
+                aria-label="Auto-Hide Controls"
                 onClick={() => onToggleAutoHideControls(!autoHideControls)}
-                className={`w-11 h-6 rounded-full transition-colors relative p-0.5 ${
-                  autoHideControls ? 'bg-sky-600' : 'bg-slate-700'
-                }`}
+                className="min-w-[44px] min-h-[44px] inline-flex items-center justify-center p-1 rounded-full cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
               >
                 <div
-                  className={`w-5 h-5 rounded-full bg-white transition-transform ${
-                    autoHideControls ? 'translate-x-5' : 'translate-x-0'
+                  className={`w-11 h-6 rounded-full transition-colors relative p-0.5 ${
+                    autoHideControls ? 'bg-sky-600' : 'bg-slate-700'
                   }`}
-                />
+                >
+                  <div
+                    className={`w-5 h-5 rounded-full bg-white transition-transform ${
+                      autoHideControls ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </div>
               </button>
             </div>
 
@@ -425,67 +445,105 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
               </div>
               <button
                 type="button"
+                role="switch"
+                aria-checked={showDock}
+                aria-label="Floating Control Dock"
                 onClick={() => onToggleShowDock(!showDock)}
-                className={`w-11 h-6 rounded-full transition-colors relative p-0.5 ${
-                  showDock ? 'bg-sky-600' : 'bg-slate-700'
-                }`}
+                className="min-w-[44px] min-h-[44px] inline-flex items-center justify-center p-1 rounded-full cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
               >
                 <div
-                  className={`w-5 h-5 rounded-full bg-white transition-transform ${
-                    showDock ? 'translate-x-5' : 'translate-x-0'
+                  className={`w-11 h-6 rounded-full transition-colors relative p-0.5 ${
+                    showDock ? 'bg-sky-600' : 'bg-slate-700'
                   }`}
-                />
+                >
+                  <div
+                    className={`w-5 h-5 rounded-full bg-white transition-transform ${
+                      showDock ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </div>
               </button>
             </div>
 
             {/* Wake Lock Controller */}
-            <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-800/60 border border-slate-700/60">
-              <div className="flex items-center gap-2.5">
-                <Sun
-                  className={`w-4 h-4 ${
-                    wakeLockActive && wakeLockAcquired
-                      ? 'text-amber-400'
-                      : wakeLockActive && !wakeLockAcquired
-                      ? 'text-red-400'
-                      : 'text-slate-400'
-                  }`}
-                />
-                <div>
-                  <div className="font-semibold text-slate-100 flex items-center gap-2">
-                    <span>Keep Screen Awake</span>
-                    {wakeLockActive && !wakeLockAcquired && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-950/70 text-red-400 border border-red-800/60 font-mono">
-                        Denied / Unavailable
-                      </span>
-                    )}
-                    {wakeLockActive && wakeLockAcquired && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-950/70 text-emerald-400 border border-emerald-800/60 font-mono">
-                        Active
-                      </span>
-                    )}
+            {/* Distinguishes Active, Denied, Unsupported, and Disabled wake lock states */}
+            {(() => {
+              const effectiveStatus: WakeLockStatus =
+                wakeLockStatus ||
+                (!wakeLockActive ? 'disabled' : wakeLockAcquired ? 'active' : 'denied')
+
+              return (
+                <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-800/60 border border-slate-700/60">
+                  <div className="flex items-center gap-2.5">
+                    <Sun
+                      className={`w-4 h-4 ${
+                        effectiveStatus === 'active'
+                          ? 'text-amber-400'
+                          : effectiveStatus === 'denied'
+                          ? 'text-red-400'
+                          : effectiveStatus === 'unsupported'
+                          ? 'text-amber-300/80'
+                          : 'text-slate-400'
+                      }`}
+                    />
+                    <div>
+                      <div className="font-semibold text-slate-100 flex items-center gap-2">
+                        <span>Keep Screen Awake</span>
+                        {effectiveStatus === 'active' && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-950/70 text-emerald-400 border border-emerald-800/60 font-mono">
+                            Active
+                          </span>
+                        )}
+                        {effectiveStatus === 'denied' && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-950/70 text-red-400 border border-red-800/60 font-mono">
+                            Denied
+                          </span>
+                        )}
+                        {effectiveStatus === 'unsupported' && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-950/70 text-amber-400 border border-amber-800/60 font-mono">
+                            Unsupported
+                          </span>
+                        )}
+                        {effectiveStatus === 'disabled' && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700 font-mono">
+                            Disabled
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-slate-400">
+                        {effectiveStatus === 'active'
+                          ? 'Screen Wake Lock active'
+                          : effectiveStatus === 'denied'
+                          ? 'Permission denied: Screen Wake Lock could not be acquired'
+                          : effectiveStatus === 'unsupported'
+                          ? 'Screen Wake Lock is not supported on this browser or device'
+                          : 'Screen Wake Lock controller (disabled)'}
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-[11px] text-slate-400">
-                    {wakeLockActive && !wakeLockAcquired
-                      ? 'Permission denied or wake lock unsupported on this device'
-                      : 'Screen Wake Lock controller (enabled by default)'}
-                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={wakeLockActive}
+                    aria-label="Keep Screen Awake"
+                    onClick={onToggleWakeLock}
+                    className="min-w-[44px] min-h-[44px] inline-flex items-center justify-center p-1 rounded-full cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+                  >
+                    <div
+                      className={`w-11 h-6 rounded-full transition-colors relative p-0.5 ${
+                        wakeLockActive ? 'bg-amber-500' : 'bg-slate-700'
+                      }`}
+                    >
+                      <div
+                        className={`w-5 h-5 rounded-full bg-white transition-transform ${
+                          wakeLockActive ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </div>
+                  </button>
                 </div>
-              </div>
-              <button
-                type="button"
-                onClick={onToggleWakeLock}
-                className={`w-11 h-6 rounded-full transition-colors relative p-0.5 ${
-                  wakeLockActive ? 'bg-amber-500' : 'bg-slate-700'
-                }`}
-                aria-label={wakeLockActive ? 'Disable wake lock' : 'Enable wake lock'}
-              >
-                <div
-                  className={`w-5 h-5 rounded-full bg-white transition-transform ${
-                    wakeLockActive ? 'translate-x-5' : 'translate-x-0'
-                  }`}
-                />
-              </button>
-            </div>
+              )
+            })()}
 
             {/* Fullscreen Toggle */}
             <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-800/60 border border-slate-700/60">
@@ -507,7 +565,8 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
               <button
                 type="button"
                 onClick={onToggleFullscreen}
-                className={`px-3 py-1.5 rounded-xl font-bold transition-colors ${
+                aria-label={isFullscreen ? 'Exit Fullscreen Mode' : 'Enter Fullscreen Mode'}
+                className={`min-h-[44px] min-w-[72px] px-4 py-2 rounded-xl font-bold transition-colors flex items-center justify-center ${
                   isFullscreen
                     ? 'bg-sky-600 text-white'
                     : 'bg-slate-700 hover:bg-slate-600 text-slate-200'

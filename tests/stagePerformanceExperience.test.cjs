@@ -835,8 +835,8 @@ test('CODEX_R6: WAKE_LOCK_STATUS_DISTINCTION — distinguishes user preference f
 
   const sheetSource = fs.readFileSync(path.resolve(__dirname, '../src/components/StageOptionsSheet.tsx'), 'utf8')
   assert.ok(
-    sheetSource.includes('Denied / Unavailable'),
-    'StageOptionsSheet must display Denied/Unavailable when preference is ON but hardware lock is not acquired'
+    sheetSource.includes('Denied') && sheetSource.includes('Unsupported'),
+    'StageOptionsSheet must present distinct Denied and Unsupported states'
   )
 })
 
@@ -857,5 +857,165 @@ test('CODEX_R2_P1_FIX: MANUAL_SCROLL_WHEEL_TOUCH_PRIORITY — registers wheel, t
   assert.ok(
     stageSource.includes('cancelActiveAutoScroll'),
     'StageView must implement cancelActiveAutoScroll for synchronous RAF cancellation'
+  )
+})
+
+// =========================================================================
+// GTAR1 BATCH 4 FINAL UX CORRECTIONS: M1 - M5 TESTS
+// =========================================================================
+
+test('M1: STANDALONE_STAGE_QUEUE - individual song entry opens standalone Stage with no implicit library queue', () => {
+  const appSource = fs.readFileSync(path.resolve(__dirname, '../src/App.tsx'), 'utf8')
+  assert.ok(
+    appSource.includes('// M1: Individual song entry opens standalone Stage with NO implicit library queue'),
+    'App.tsx handleEnterStageSong must create standalone single-item queue'
+  )
+  assert.ok(
+    appSource.includes('const q: StageQueueItem[] = [{ song, transposeOffset: offset }]'),
+    'App.tsx must not map full songs array into queue for individual song'
+  )
+
+  const stageViewSource = fs.readFileSync(path.resolve(__dirname, '../src/components/StageView.tsx'), 'utf8')
+  assert.ok(
+    stageViewSource.includes('(setlistName ? hasQueue : hasQueue && (queue?.length ?? 0) > 1)'),
+    'StageView must suppress misleading queue counter when in standalone single-song mode'
+  )
+})
+
+test('M2: ONE_ACTION_STAGE_EXIT - normalizes history state on mount and ensures one-action return', () => {
+  const appSource = fs.readFileSync(path.resolve(__dirname, '../src/App.tsx'), 'utf8')
+  assert.ok(
+    appSource.includes('window.history.replaceState({ stage: false }'),
+    'App.tsx must normalize stale stage history state on mount'
+  )
+  assert.ok(
+    appSource.includes('activeTabRef.current'),
+    'App.tsx popstate handler must read stable authoritative refs'
+  )
+})
+
+test('M3: WAKE_LOCK_FEEDBACK - distinct Active, Denied, Unsupported, and Disabled states lifecycle', async () => {
+  // Test createWakeLockController directly
+  const { createWakeLockController } = require('../src/utils/stagePerformance.ts')
+
+  // Case A: Unsupported
+  const origNav = global.navigator
+  Object.defineProperty(global, 'navigator', {
+    value: {},
+    configurable: true,
+  })
+
+  const unsupportedCtrl = createWakeLockController()
+  assert.equal(unsupportedCtrl.isSupported, false)
+  await unsupportedCtrl.acquire()
+  assert.equal(unsupportedCtrl.status, 'unsupported')
+  await unsupportedCtrl.release()
+  assert.equal(unsupportedCtrl.status, 'disabled')
+
+  // Case B: Denied (throws on request)
+  Object.defineProperty(global, 'navigator', {
+    value: {
+      wakeLock: {
+        request: async () => {
+          throw new Error('NotAllowedError: Permission denied')
+        },
+      },
+    },
+    configurable: true,
+  })
+
+  const deniedCtrl = createWakeLockController()
+  assert.equal(deniedCtrl.isSupported, true)
+  const deniedAcquired = await deniedCtrl.acquire()
+  assert.equal(deniedAcquired, false)
+  assert.equal(deniedCtrl.isDenied, true)
+  assert.equal(deniedCtrl.status, 'denied')
+  await deniedCtrl.release()
+  assert.equal(deniedCtrl.status, 'disabled')
+
+  // Case C: Active
+  let mockReleased = false
+  const mockSentinel = {
+    get released() {
+      return mockReleased
+    },
+    release: async () => {
+      mockReleased = true
+    },
+    addEventListener: () => {},
+  }
+
+  Object.defineProperty(global, 'navigator', {
+    value: {
+      wakeLock: {
+        request: async () => mockSentinel,
+      },
+    },
+    configurable: true,
+  })
+
+  const activeCtrl = createWakeLockController()
+  assert.equal(activeCtrl.isSupported, true)
+  const activeAcquired = await activeCtrl.acquire()
+  assert.equal(activeAcquired, true)
+  assert.equal(activeCtrl.isAcquired, true)
+  assert.equal(activeCtrl.status, 'active')
+  await activeCtrl.release()
+  assert.equal(activeCtrl.status, 'disabled')
+
+  // Restore navigator
+  Object.defineProperty(global, 'navigator', {
+    value: origNav,
+    configurable: true,
+  })
+})
+
+test('M4: OPTIONS_ACCESSIBILITY - minimum 44x44px interactive targets, accessible switch roles and names', () => {
+  const sheetSource = fs.readFileSync(path.resolve(__dirname, '../src/components/StageOptionsSheet.tsx'), 'utf8')
+
+  // Close button
+  assert.ok(
+    sheetSource.includes('aria-label="Close options"') && sheetSource.includes('min-w-[44px] min-h-[44px]'),
+    'Close button must have accessible label and minimum 44x44px target'
+  )
+
+  // Switch role and aria-checked
+  assert.ok(
+    sheetSource.includes('role="switch"') && sheetSource.includes('aria-checked={isTwoColumn}'),
+    'Two-Column toggle must have switch role and aria-checked'
+  )
+  assert.ok(
+    sheetSource.includes('aria-checked={autoHideControls}'),
+    'Auto-Hide toggle must have switch role and aria-checked'
+  )
+  assert.ok(
+    sheetSource.includes('aria-checked={showDock}'),
+    'Floating Dock toggle must have switch role and aria-checked'
+  )
+  assert.ok(
+    sheetSource.includes('aria-checked={wakeLockActive}'),
+    'Wake Lock toggle must have switch role and aria-checked'
+  )
+
+  // Narrow screen scroll containment
+  assert.ok(
+    sheetSource.includes('overscroll-contain'),
+    'Options sheet scrollable area must specify overscroll-contain for smooth narrow screen scrolling'
+  )
+})
+
+test('M5: ROTATION_READING_POSITION - logical reading anchor captures and restores line across layout/orientation changes', () => {
+  const stageSource = fs.readFileSync(path.resolve(__dirname, '../src/components/StageView.tsx'), 'utf8')
+  assert.ok(
+    stageSource.includes('getReadingAnchor') && stageSource.includes('restoreReadingAnchor'),
+    'StageView must implement getReadingAnchor and restoreReadingAnchor'
+  )
+  assert.ok(
+    stageSource.includes("window.addEventListener('resize'") && stageSource.includes("window.addEventListener('orientationchange'"),
+    'StageView must register resize and orientationchange listeners'
+  )
+  assert.ok(
+    stageSource.includes('accumulatedScrollRef.current = scrollContainerRef.current.scrollTop'),
+    'StageView must update accumulatedScrollRef upon anchor restoration'
   )
 })

@@ -127,20 +127,36 @@ export const App: React.FC = () => {
     }
   }, [])
 
+  const activeTabRef = useRef<ActiveTab>(activeTab)
+  activeTabRef.current = activeTab
+  const stageQueueRef = useRef<StageQueueItem[]>(stageQueue)
+  stageQueueRef.current = stageQueue
+  const stageReturnTabRef = useRef<'SONGS' | 'SETLISTS' | 'VIEWER'>(stageReturnTab)
+  stageReturnTabRef.current = stageReturnTab
+
+  // M2: Normalize browser history state on mount so Explorer is never desynchronized with stale { stage: true }
+  useEffect(() => {
+    if (window.history.state?.stage) {
+      try {
+        window.history.replaceState({ stage: false }, '', window.location.href)
+      } catch {}
+    }
+  }, [])
+
   // Browser History & Popstate integration for Stage Performance
   useEffect(() => {
     const handlePopState = (e: PopStateEvent) => {
       if (e.state?.stage) {
         // Browser Forward navigation back into Stage
         isExitingStageRef.current = false
-        if (stageQueue.length > 0) {
+        if (stageQueueRef.current.length > 0) {
           setActiveTab('STAGE')
         }
       } else {
         // Browser Back navigation out of Stage
-        if (activeTab === 'STAGE') {
+        if (activeTabRef.current === 'STAGE') {
           isExitingStageRef.current = true
-          setActiveTab(stageReturnTab || 'SONGS')
+          setActiveTab(stageReturnTabRef.current || 'SONGS')
         }
       }
     }
@@ -149,7 +165,7 @@ export const App: React.FC = () => {
     return () => {
       window.removeEventListener('popstate', handlePopState)
     }
-  }, [activeTab, stageReturnTab, stageQueue.length])
+  }, [])
 
   // Derived unique tags
   const allTags = useMemo(() => {
@@ -408,16 +424,15 @@ export const App: React.FC = () => {
     setStageSetlistName(undefined)
     setStageActiveSetlistId(undefined)
 
-    const q: StageQueueItem[] = songs.map((s) => ({
-      song: s,
-      transposeOffset: s.id === song.id ? offset : (s.transposeOffset || 0),
-    }))
-    const idx = songs.findIndex((s) => s.id === song.id)
-    setStageQueue(q.length > 0 ? q : [{ song, transposeOffset: offset }])
-    setStageQueueIndex(idx >= 0 ? idx : 0)
+    // M1: Individual song entry opens standalone Stage with NO implicit library queue
+    const q: StageQueueItem[] = [{ song, transposeOffset: offset }]
+    setStageQueue(q)
+    setStageQueueIndex(0)
     isExitingStageRef.current = false
     try {
-      window.history.pushState({ stage: true }, '', window.location.href)
+      if (!window.history.state?.stage) {
+        window.history.pushState({ stage: true }, '', window.location.href)
+      }
     } catch {}
     setActiveTab('STAGE')
   }
@@ -486,7 +501,9 @@ export const App: React.FC = () => {
     setViewerTransposeOffset(q[initialIndex].transposeOffset)
     isExitingStageRef.current = false
     try {
-      window.history.pushState({ stage: true }, '', window.location.href)
+      if (!window.history.state?.stage) {
+        window.history.pushState({ stage: true }, '', window.location.href)
+      }
     } catch {}
     setActiveTab('STAGE')
   }
@@ -497,6 +514,17 @@ export const App: React.FC = () => {
       try {
         if (window.history.state?.stage) {
           window.history.back()
+          // M2: Safety timeout ensures consistent return to Explorer even if history.back() doesn't fire popstate
+          setTimeout(() => {
+            if (activeTabRef.current === 'STAGE') {
+              setActiveTab(stageReturnTabRef.current || 'SONGS')
+              if (window.history.state?.stage) {
+                try {
+                  window.history.replaceState({ stage: false }, '', window.location.href)
+                } catch {}
+              }
+            }
+          }, 120)
           return
         }
       } catch {}

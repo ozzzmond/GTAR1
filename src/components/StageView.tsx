@@ -10,6 +10,7 @@ import {
 import {
   createFullscreenController,
   createWakeLockController,
+  type WakeLockStatus,
   isIosDevice,
   isStandalonePwa,
 } from '../utils/stagePerformance'
@@ -72,6 +73,80 @@ export interface StageViewProps {
   onNextSong?: () => void
   canPrevSong?: boolean
   canNextSong?: boolean
+}
+
+interface ReadingAnchor {
+  lineIndex: number
+  focalRatio: number
+  offsetInLine: number
+}
+
+function getReadingAnchor(container: HTMLElement): ReadingAnchor | null {
+  if (container.scrollTop <= 2) {
+    return { lineIndex: 0, focalRatio: 0, offsetInLine: 0 }
+  }
+  const maxScroll = container.scrollHeight - container.clientHeight
+  if (maxScroll > 0 && maxScroll - container.scrollTop <= 2) {
+    return { lineIndex: -1, focalRatio: 1, offsetInLine: 1 }
+  }
+
+  const containerRect = container.getBoundingClientRect()
+  const focalY = containerRect.top + Math.min(140, Math.max(20, container.clientHeight * 0.2))
+  const lines = container.querySelectorAll<HTMLElement>('[data-stage-line="true"]')
+  if (lines.length === 0) return null
+
+  let bestLine: HTMLElement | null = null
+  let bestDist = Infinity
+
+  for (let i = 0; i < lines.length; i++) {
+    const el = lines[i]
+    const rect = el.getBoundingClientRect()
+    if (rect.top <= focalY && rect.bottom >= focalY) {
+      bestLine = el
+      break
+    }
+    const dist = Math.abs(rect.top - focalY)
+    if (dist < bestDist) {
+      bestDist = dist
+      bestLine = el
+    }
+  }
+
+  if (!bestLine) return null
+  const lineIndexStr = bestLine.getAttribute('data-line-index')
+  const lineIndex = lineIndexStr !== null ? parseInt(lineIndexStr, 10) : 0
+  const lineRect = bestLine.getBoundingClientRect()
+  const focalRatio = (focalY - containerRect.top) / (container.clientHeight || 1)
+  const offsetInLine = lineRect.height > 0 ? (focalY - lineRect.top) / lineRect.height : 0
+
+  return { lineIndex, focalRatio, offsetInLine }
+}
+
+function restoreReadingAnchor(container: HTMLElement, anchor: ReadingAnchor | null) {
+  if (!anchor) return
+  if (anchor.lineIndex === 0 && anchor.focalRatio === 0) {
+    container.scrollTop = 0
+    return
+  }
+  const maxScroll = container.scrollHeight - container.clientHeight
+  if (anchor.lineIndex === -1 && maxScroll > 0) {
+    container.scrollTop = maxScroll
+    return
+  }
+
+  const lineEl = container.querySelector<HTMLElement>(`[data-stage-line="true"][data-line-index="${anchor.lineIndex}"]`)
+  if (!lineEl) {
+    return
+  }
+
+  const containerRect = container.getBoundingClientRect()
+  const targetFocalY = containerRect.top + anchor.focalRatio * container.clientHeight
+  const currentLineRect = lineEl.getBoundingClientRect()
+  const lineFocalPoint = currentLineRect.top + anchor.offsetInLine * currentLineRect.height
+  const delta = lineFocalPoint - targetFocalY
+
+  const targetScrollTop = Math.max(0, Math.min(maxScroll, container.scrollTop + delta))
+  container.scrollTop = targetScrollTop
 }
 
 export const StageView: React.FC<StageViewProps> = ({
@@ -201,6 +276,18 @@ export const StageView: React.FC<StageViewProps> = ({
 
   // Screen Wake Lock actual hardware acquisition status
   const [isWakeLockAcquired, setIsWakeLockAcquired] = useState<boolean>(false)
+  const [wakeLockStatus, setWakeLockStatus] = useState<WakeLockStatus>(() => {
+    try {
+      const saved = localStorage.getItem(STAGE_WAKE_LOCK_KEY)
+      const pref = saved !== null ? saved === 'true' : true
+      if (!pref) return 'disabled'
+      if (typeof navigator === 'undefined' || !('wakeLock' in navigator)) return 'unsupported'
+      return 'disabled'
+    } catch {
+      return 'disabled'
+    }
+  })
+  const readingAnchorRef = useRef<ReadingAnchor | null>(null)
 
   // Auto-scroll speed: 5–180 px/s, default 35
   const [autoScrollSpeed, setAutoScrollSpeed] = useState<number>(() => {
@@ -262,8 +349,7 @@ export const StageView: React.FC<StageViewProps> = ({
     return splitSongLinesForColumns(parsed.lines)
   }, [parsed.lines, isTwoColumn])
 
-  // --- Reading Position Preservation ---
-  // Capture scroll ratio before layout-altering changes
+  // --- Reading Position Preservation (M5: Logical Anchor Across Orientation/Resize/Layout) ---
   const captureScrollRatio = useCallback(() => {
     const el = scrollContainerRef.current
     if (!el) return
@@ -273,35 +359,102 @@ export const StageView: React.FC<StageViewProps> = ({
     } else {
       lastScrollRatioRef.current = 0
     }
+    readingAnchorRef.current = getReadingAnchor(el)
   }, [])
 
-  // Restore scroll ratio after layout changes
+  // Restore reading anchor after typography/layout changes
   useLayoutEffect(() => {
-    if (lastScrollRatioRef.current !== null && scrollContainerRef.current) {
+    if (scrollContainerRef.current) {
       const el = scrollContainerRef.current
-      const maxScroll = el.scrollHeight - el.clientHeight
-      if (maxScroll > 0) {
-        el.scrollTop = lastScrollRatioRef.current * maxScroll
+      if (readingAnchorRef.current) {
+        restoreReadingAnchor(el, readingAnchorRef.current)
         accumulatedScrollRef.current = el.scrollTop
+        lastProgrammaticScrollTopRef.current = el.scrollTop
+        readingAnchorRef.current = null
+        lastScrollRatioRef.current = null
+      } else if (lastScrollRatioRef.current !== null) {
+        const maxScroll = el.scrollHeight - el.clientHeight
+        if (maxScroll > 0) {
+          el.scrollTop = lastScrollRatioRef.current * maxScroll
+          accumulatedScrollRef.current = el.scrollTop
+          lastProgrammaticScrollTopRef.current = el.scrollTop
+        }
+        lastScrollRatioRef.current = null
       }
-      lastScrollRatioRef.current = null
     }
   }, [fontSize, chordScale, fontWeight, lineSpacing, fontFamily, notation, isTwoColumn])
+
+  // Viewport resize and orientation change handler (M5)
+  useEffect(() => {
+    let resizeTimer: any = null
+    let isResizing = false
+
+    const handleBeforeResize = () => {
+      if (!isResizing && scrollContainerRef.current) {
+        readingAnchorRef.current = getReadingAnchor(scrollContainerRef.current)
+        isResizing = true
+      }
+    }
+
+    const handleAfterResize = () => {
+      if (scrollContainerRef.current && readingAnchorRef.current) {
+        restoreReadingAnchor(scrollContainerRef.current, readingAnchorRef.current)
+        accumulatedScrollRef.current = scrollContainerRef.current.scrollTop
+        lastProgrammaticScrollTopRef.current = scrollContainerRef.current.scrollTop
+      }
+      isResizing = false
+      readingAnchorRef.current = null
+    }
+
+    const onResize = () => {
+      handleBeforeResize()
+      clearTimeout(resizeTimer)
+      resizeTimer = setTimeout(handleAfterResize, 40)
+    }
+
+    window.addEventListener('resize', onResize)
+    window.addEventListener('orientationchange', onResize)
+
+    return () => {
+      window.removeEventListener('resize', onResize)
+      window.removeEventListener('orientationchange', onResize)
+      clearTimeout(resizeTimer)
+    }
+  }, [])
 
   // Occurrence transition identity: combines song.id with entryId or queue index
   const currentOccurrenceId = queue?.[currentQueueIndex]?.entryId || `${song.id}-${currentQueueIndex}`
 
-  // --- Wake Lock Lifecycle ---
+  // --- Wake Lock Lifecycle (M3) ---
   useEffect(() => {
     const controller = createWakeLockController()
     wakeLockControllerRef.current = controller
 
-    const unsubscribe = controller.onChange((acquired) => {
+    const unsubscribe = controller.onChange((acquired, status) => {
       setIsWakeLockAcquired(acquired)
+      if (status) {
+        setWakeLockStatus(status)
+      } else if (!wakeLockPreference) {
+        setWakeLockStatus('disabled')
+      } else if (acquired) {
+        setWakeLockStatus('active')
+      } else if (!controller.isSupported) {
+        setWakeLockStatus('unsupported')
+      } else {
+        setWakeLockStatus('denied')
+      }
     })
 
     if (wakeLockPreference) {
-      controller.acquire().catch(() => {})
+      controller.acquire().then((acquired) => {
+        setIsWakeLockAcquired(acquired)
+        setWakeLockStatus(controller.status)
+      }).catch(() => {
+        setIsWakeLockAcquired(false)
+        setWakeLockStatus('denied')
+      })
+    } else {
+      setWakeLockStatus('disabled')
     }
 
     return () => {
@@ -314,9 +467,16 @@ export const StageView: React.FC<StageViewProps> = ({
     const controller = wakeLockControllerRef.current
     if (!controller) return
     if (wakeLockPreference) {
-      controller.acquire().catch(() => {})
+      controller.acquire().then((acquired) => {
+        setIsWakeLockAcquired(acquired)
+        setWakeLockStatus(controller.status)
+      }).catch(() => {
+        setIsWakeLockAcquired(false)
+        setWakeLockStatus('denied')
+      })
     } else {
       controller.release().catch(() => {})
+      setWakeLockStatus('disabled')
     }
     try {
       localStorage.setItem(STAGE_WAKE_LOCK_KEY, String(wakeLockPreference))
@@ -851,8 +1011,11 @@ export const StageView: React.FC<StageViewProps> = ({
                 <h1 className="text-sm sm:text-base font-extrabold text-white truncate">
                   {song.title || 'Untitled Song'}
                 </h1>
-                {hasQueue && (
-                  <span className="px-1.5 py-0.5 rounded-full bg-sky-950/80 text-sky-400 border border-sky-800/60 text-[10px] font-mono font-bold shrink-0">
+                {(setlistName ? hasQueue : hasQueue && (queue?.length ?? 0) > 1) && (
+                  <span
+                    data-testid="stage-queue-counter"
+                    className="px-1.5 py-0.5 rounded-full bg-sky-950/80 text-sky-400 border border-sky-800/60 text-[10px] font-mono font-bold shrink-0"
+                  >
                     {currentQueueIndex + 1}/{queue?.length}
                   </span>
                 )}
@@ -1170,6 +1333,7 @@ export const StageView: React.FC<StageViewProps> = ({
         }}
         wakeLockActive={wakeLockPreference}
         wakeLockAcquired={isWakeLockAcquired}
+        wakeLockStatus={wakeLockStatus}
         onToggleWakeLock={() => setWakeLockPreference((prev) => !prev)}
         isFullscreen={isFullscreen}
         onToggleFullscreen={handleToggleFullscreen}
