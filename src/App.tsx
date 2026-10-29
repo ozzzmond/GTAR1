@@ -108,12 +108,6 @@ export const App: React.FC = () => {
 
   // Apply theme runtime on mount and updates
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(SETTINGS_KEYS.themeMode)
-      if (stored !== stageTheme) {
-        localStorage.setItem(SETTINGS_KEYS.themeMode, stageTheme)
-      }
-    } catch { /* Best-effort persistence */ }
     applyThemeRuntime(stageTheme, customThemeColors)
   }, [stageTheme, customThemeColors])
 
@@ -130,6 +124,7 @@ export const App: React.FC = () => {
     const handleStorage = (e: StorageEvent) => {
       if (
         !e.key ||
+        e.key === SETTINGS_KEYS.appearance ||
         e.key === SETTINGS_KEYS.themeMode ||
         e.key === SETTINGS_KEYS.customThemeColors ||
         e.key === SETTINGS_KEYS.factoryThemeOverrides ||

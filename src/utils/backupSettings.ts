@@ -1,5 +1,6 @@
 import { normalizeFontSettings, applyFontSettings, validateFontSettings, type FontSettings } from './customFonts'
 export const SETTINGS_KEYS = {
+  appearance: 'gtar_appearance_state',
   themeMode: 'gtar_theme_store',
   factoryThemeOverrides: 'gtar_factory_theme_overrides',
   customThemeColors: 'gtar_custom_theme_colors',
@@ -8,6 +9,8 @@ export const SETTINGS_KEYS = {
   fontSizePx: 'gtar_stage_font_size',
   scrollSpeed: 'gtar_stage_scroll_speed',
 } as const
+
+export const APPEARANCE_STATE_VERSION = 1 as const
 
 export const SETTINGS_CHANGED = 'gtar-settings-restored'
 export const STANDALONE_PALETTE_KEY = 'gtar_standalone_custom_theme_colors'
@@ -100,6 +103,13 @@ export interface CloudThemeSettings {
   themeMode?: ThemeMode
   customThemeColors?: CustomThemeColors
   factoryThemeOverrides?: FactoryThemeOverrides
+}
+
+export interface AppearanceSnapshot {
+  version: typeof APPEARANCE_STATE_VERSION
+  themeMode: ThemeMode
+  customThemeColors: CustomThemeColors
+  factoryThemeOverrides: FactoryThemeOverrides
 }
 
 export const DEFAULT_CUSTOM_COLORS: CustomThemeColors = {
@@ -509,6 +519,148 @@ export function tryReadCloudThemeSettings(storage: Pick<Storage, 'getItem'> = lo
   }
 }
 
+export function normalizeFactoryThemeOverrides(overrides: unknown): FactoryThemeOverrides {
+  if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) return {}
+  const valid: FactoryThemeOverrides = {}
+  for (const [id, palette] of Object.entries(overrides)) {
+    if (
+      id !== 'custom' &&
+      THEME_MODES.includes(id as ThemeMode) &&
+      palette &&
+      typeof palette === 'object' &&
+      !validateBackupSettings({ factoryThemeOverrides: { [id]: palette } }).length
+    ) {
+      valid[id as Exclude<ThemeMode, 'custom'>] = normalizeCustomThemeColors(palette as CustomThemeColors)
+    }
+  }
+  return valid
+}
+
+export function validateAppearanceSnapshot(value: unknown): string[] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return ['appearanceState: must be an object']
+  }
+  const obj = value as Record<string, unknown>
+  const errors: string[] = []
+  if (obj.version !== APPEARANCE_STATE_VERSION) {
+    errors.push('appearanceState.version: unsupported schema version')
+  }
+  if (!obj.themeMode || !THEME_MODES.includes(obj.themeMode as ThemeMode)) {
+    errors.push('appearanceState.themeMode: unsupported theme')
+  }
+  errors.push(...validateBackupSettings({
+    themeMode: obj.themeMode as ThemeMode,
+    customThemeColors: obj.customThemeColors,
+    factoryThemeOverrides: obj.factoryThemeOverrides,
+  }))
+  return errors
+}
+
+export function readAppearanceSnapshot(storage: Pick<Storage, 'getItem'> = localStorage): AppearanceSnapshot | null {
+  try {
+    const raw = storage.getItem(SETTINGS_KEYS.appearance)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    const errors = validateAppearanceSnapshot(parsed)
+    if (errors.length > 0) return null
+    return {
+      version: APPEARANCE_STATE_VERSION,
+      themeMode: parsed.themeMode as ThemeMode,
+      customThemeColors: canonicalizeThemePalette(parsed.customThemeColors, true),
+      factoryThemeOverrides: normalizeFactoryThemeOverrides(parsed.factoryThemeOverrides),
+    }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Reads authoritative appearance state snapshot or migrates existing valid Batch 5 settings.
+ *
+ * Migration limitations for historically corrupt state:
+ * Older versions that crashed during multi-key writes without atomic snapshots
+ * cannot be retroactively disambiguated if leftover keys contain valid JSON.
+ * However, any keys with malformed JSON, invalid color tokens, invalid identities,
+ * or prototype pollution are safely isolated, rejected, and defaulted.
+ */
+export function migrateOrReadAppearance(
+  storage: Pick<Storage, 'getItem' | 'setItem'> = localStorage
+): AppearanceSnapshot {
+  const snapshot = readAppearanceSnapshot(storage)
+  if (snapshot) return snapshot
+
+  // Legacy Batch 5 migration
+  let mode: ThemeMode = 'solarized-dark'
+  let overrides: FactoryThemeOverrides = {}
+  let standalone: CustomThemeColors = normalizeCustomThemeColors()
+
+  try {
+    const rawMode = storage.getItem(SETTINGS_KEYS.themeMode)
+    if (rawMode && (THEME_MODES as readonly string[]).includes(rawMode)) {
+      mode = rawMode as ThemeMode
+    }
+
+    const rawOverrides = storage.getItem(SETTINGS_KEYS.factoryThemeOverrides)
+    if (rawOverrides) {
+      try {
+        const parsed = JSON.parse(rawOverrides)
+        overrides = normalizeFactoryThemeOverrides(parsed)
+      } catch { /* Malformed JSON ignored */ }
+    }
+
+    const rawColors = storage.getItem(SETTINGS_KEYS.customThemeColors)
+    let parsedColors: CustomThemeColors | undefined
+    if (rawColors) {
+      try {
+        const parsed = JSON.parse(rawColors)
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          if (!validateBackupSettings({ customThemeColors: parsed }).length) {
+            parsedColors = parsed as CustomThemeColors
+          }
+        }
+      } catch { /* Malformed JSON ignored */ }
+    }
+
+    const rawStandalone = storage.getItem(STANDALONE_PALETTE_KEY)
+    let parsedStandalone: CustomThemeColors | undefined
+    if (rawStandalone) {
+      try {
+        const parsed = JSON.parse(rawStandalone)
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && !parsed.identity) {
+          if (!validateBackupSettings({ customThemeColors: parsed }).length) {
+            parsedStandalone = parsed as CustomThemeColors
+          }
+        }
+      } catch { /* Malformed JSON ignored */ }
+    }
+
+    if (parsedStandalone) {
+      standalone = normalizeCustomThemeColors(parsedStandalone)
+    } else if (parsedColors && !parsedColors.identity) {
+      standalone = normalizeCustomThemeColors(parsedColors)
+    }
+
+    if (parsedColors?.identity) {
+      const slot = parsedColors.identity.factoryId
+      if (!overrides[slot]) {
+        overrides[slot] = normalizeCustomThemeColors(parsedColors)
+      }
+      if (mode === 'custom') {
+        mode = slot
+      }
+    }
+  } catch { /* Fallback */ }
+
+  const migrated: AppearanceSnapshot = {
+    version: APPEARANCE_STATE_VERSION,
+    themeMode: mode,
+    customThemeColors: canonicalizeThemePalette(standalone, true),
+    factoryThemeOverrides: overrides,
+  }
+
+  return migrated
+}
+
 function applyCloudThemePaletteToDocument(mode: ThemeMode, colors: CustomThemeColors): void {
   if (typeof document === 'undefined') return
   if (document.body) {
@@ -562,14 +714,25 @@ export function persistCloudThemeSettings(
   storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> = localStorage
 ): CloudThemeSettings {
   const normalized = normalizeCloudThemeSettings(settings)
+  const prevAppearance = storage.getItem(SETTINGS_KEYS.appearance)
   const prevOverrides = storage.getItem(SETTINGS_KEYS.factoryThemeOverrides)
   const prevColors = storage.getItem(SETTINGS_KEYS.customThemeColors)
   const prevMode = storage.getItem(SETTINGS_KEYS.themeMode)
   const prevStandalone = storage.getItem(STANDALONE_PALETTE_KEY)
 
-  const nextOverridesRaw = JSON.stringify(normalized.factoryThemeOverrides ?? {})
-  const nextColorsRaw = JSON.stringify(normalized.customThemeColors ?? canonicalizeThemePalette(DEFAULT_CUSTOM_COLORS, true))
+  const nextOverrides = normalized.factoryThemeOverrides ?? {}
+  const nextStandalone = normalized.customThemeColors ?? canonicalizeThemePalette(DEFAULT_CUSTOM_COLORS, true)
   const nextModeRaw = normalized.themeMode ?? 'solarized-dark'
+
+  const nextOverridesRaw = JSON.stringify(nextOverrides)
+  const nextColorsRaw = JSON.stringify(nextStandalone)
+  const snapshot: AppearanceSnapshot = {
+    version: APPEARANCE_STATE_VERSION,
+    themeMode: nextModeRaw,
+    customThemeColors: canonicalizeThemePalette(nextStandalone, true),
+    factoryThemeOverrides: nextOverrides,
+  }
+  const snapshotRaw = JSON.stringify(snapshot)
 
   const restoreKey = (key: string, prev: string | null) => {
     try {
@@ -585,17 +748,20 @@ export function persistCloudThemeSettings(
     storage.setItem(SETTINGS_KEYS.factoryThemeOverrides, nextOverridesRaw)
     storage.setItem(SETTINGS_KEYS.customThemeColors, nextColorsRaw)
     storage.setItem(SETTINGS_KEYS.themeMode, nextModeRaw)
+    storage.setItem(SETTINGS_KEYS.appearance, snapshotRaw)
     if (prevStandalone !== null && typeof storage.removeItem === 'function') {
-      storage.removeItem(STANDALONE_PALETTE_KEY)
+      try { storage.removeItem(STANDALONE_PALETTE_KEY) } catch { /* ignore */ }
     }
     if (
       storage.getItem(SETTINGS_KEYS.factoryThemeOverrides) !== nextOverridesRaw ||
       storage.getItem(SETTINGS_KEYS.customThemeColors) !== nextColorsRaw ||
-      storage.getItem(SETTINGS_KEYS.themeMode) !== nextModeRaw
+      storage.getItem(SETTINGS_KEYS.themeMode) !== nextModeRaw ||
+      storage.getItem(SETTINGS_KEYS.appearance) !== snapshotRaw
     ) {
       throw new Error('Theme settings save could not be verified in localStorage')
     }
   } catch (err) {
+    restoreKey(SETTINGS_KEYS.appearance, prevAppearance)
     restoreKey(SETTINGS_KEYS.factoryThemeOverrides, prevOverrides)
     restoreKey(SETTINGS_KEYS.customThemeColors, prevColors)
     restoreKey(SETTINGS_KEYS.themeMode, prevMode)
@@ -622,49 +788,60 @@ export function readBackupSettings(storage?: Pick<Storage, 'getItem'>): BackupSe
   if (!store) return {}
   const data: BackupSettings = {}
 
-  // 1. Theme Mode
-  const theme = store.getItem(SETTINGS_KEYS.themeMode)
-  if (theme !== null && (THEME_MODES as readonly string[]).includes(theme)) {
-    data.themeMode = theme as ThemeMode
-  }
+  // Check authoritative appearance snapshot first
+  const snapshot = readAppearanceSnapshot(store)
+  if (snapshot) {
+    data.themeMode = snapshot.themeMode
+    data.customThemeColors = snapshot.customThemeColors
+    if (Object.keys(snapshot.factoryThemeOverrides).length > 0) {
+      data.factoryThemeOverrides = snapshot.factoryThemeOverrides
+    }
+  } else {
+    // Fallback: isolate corrupt keys from legacy storage
+    // 1. Theme Mode
+    const theme = store.getItem(SETTINGS_KEYS.themeMode)
+    if (theme !== null && (THEME_MODES as readonly string[]).includes(theme)) {
+      data.themeMode = theme as ThemeMode
+    }
 
-  // 2. Custom Theme Colors (isolated from corrupt JSON / invalid color tokens)
-  const rawColors = store.getItem(SETTINGS_KEYS.customThemeColors)
-  if (rawColors !== null) {
-    try {
-      const parsed = JSON.parse(rawColors)
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        const errors = validateBackupSettings({ customThemeColors: parsed })
-        if (errors.length === 0) {
-          data.customThemeColors = parsed as CustomThemeColors
-        } else {
-          console.warn('Isolating corrupt customThemeColors from backup export:', errors)
+    // 2. Custom Theme Colors (isolated from corrupt JSON / invalid color tokens)
+    const rawColors = store.getItem(SETTINGS_KEYS.customThemeColors)
+    if (rawColors !== null) {
+      try {
+        const parsed = JSON.parse(rawColors)
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          const errors = validateBackupSettings({ customThemeColors: parsed })
+          if (errors.length === 0) {
+            data.customThemeColors = parsed as CustomThemeColors
+          } else {
+            console.warn('Isolating corrupt customThemeColors from backup export:', errors)
+          }
         }
+      } catch {
+        console.warn('Isolating malformed customThemeColors JSON from backup export')
       }
-    } catch {
-      console.warn('Isolating malformed customThemeColors JSON from backup export')
+    }
+
+    // 3. Factory Theme Overrides (isolated from corrupt JSON / invalid color tokens)
+    const rawOverrides = store.getItem(SETTINGS_KEYS.factoryThemeOverrides)
+    if (rawOverrides !== null) {
+      try {
+        const parsed = JSON.parse(rawOverrides)
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          const errors = validateBackupSettings({ factoryThemeOverrides: parsed })
+          if (errors.length === 0) {
+            data.factoryThemeOverrides = parsed as FactoryThemeOverrides
+          } else {
+            console.warn('Isolating corrupt factoryThemeOverrides from backup export:', errors)
+          }
+        }
+      } catch {
+        console.warn('Isolating malformed factoryThemeOverrides JSON from backup export')
+      }
     }
   }
 
-  // 3. Factory Theme Overrides (isolated from corrupt JSON / invalid color tokens)
-  const rawOverrides = store.getItem(SETTINGS_KEYS.factoryThemeOverrides)
-  if (rawOverrides !== null) {
-    try {
-      const parsed = JSON.parse(rawOverrides)
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        const errors = validateBackupSettings({ factoryThemeOverrides: parsed })
-        if (errors.length === 0) {
-          data.factoryThemeOverrides = parsed as FactoryThemeOverrides
-        } else {
-          console.warn('Isolating corrupt factoryThemeOverrides from backup export:', errors)
-        }
-      }
-    } catch {
-      console.warn('Isolating malformed factoryThemeOverrides JSON from backup export')
-    }
-  }
-
-  // 4. Stage Settings
+  // Stage Settings
   const stage: Record<string, unknown> = {}
   for (const key of ['fontStyle', 'fontSizePx', 'scrollSpeed', 'isTwoColumn'] as const) {
     const value = store.getItem(SETTINGS_KEYS[key])
@@ -688,15 +865,30 @@ export function readBackupSettings(storage?: Pick<Storage, 'getItem'>): BackupSe
   return data
 }
 
-export function restoreBackupSettings(settings: BackupSettings, storage?: Pick<Storage, 'setItem'>) {
+export function restoreBackupSettings(settings: BackupSettings, storage?: Pick<Storage, 'setItem' | 'getItem'>) {
   const store = storage || (typeof localStorage !== 'undefined' ? localStorage : null)
   if (!store) return
   // Validate the whole object first; never write a valid prefix of malformed settings.
   const errors = validateBackupSettings(settings as Record<string, unknown>)
   if (errors.length) throw new Error(errors.join('\n'))
+
+  const current = migrateOrReadAppearance(store as Pick<Storage, 'getItem' | 'setItem'>)
+  const nextMode = settings.themeMode || current.themeMode
+  const nextOverrides = settings.factoryThemeOverrides !== undefined ? settings.factoryThemeOverrides : current.factoryThemeOverrides
+  const nextStandalone = settings.customThemeColors !== undefined ? normalizeCustomThemeColors(settings.customThemeColors) : current.customThemeColors
+
+  const snapshot: AppearanceSnapshot = {
+    version: APPEARANCE_STATE_VERSION,
+    themeMode: nextMode,
+    customThemeColors: canonicalizeThemePalette(nextStandalone, true),
+    factoryThemeOverrides: nextOverrides,
+  }
+
   if (settings.factoryThemeOverrides !== undefined) store.setItem(SETTINGS_KEYS.factoryThemeOverrides, JSON.stringify(settings.factoryThemeOverrides))
   if (settings.themeMode !== undefined) store.setItem(SETTINGS_KEYS.themeMode, settings.themeMode)
   if (settings.customThemeColors !== undefined) store.setItem(SETTINGS_KEYS.customThemeColors, JSON.stringify(settings.customThemeColors))
+  store.setItem(SETTINGS_KEYS.appearance, JSON.stringify(snapshot))
+
   for (const [key, value] of Object.entries(settings.stageSettings ?? {})) {
     store.setItem(SETTINGS_KEYS[key as keyof typeof settings.stageSettings], String(value))
   }
