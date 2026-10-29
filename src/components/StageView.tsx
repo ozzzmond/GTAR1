@@ -237,6 +237,9 @@ export const StageView: React.FC<StageViewProps> = ({
   const lastScrollRatioRef = useRef<number | null>(null)
   const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null)
   const isProgrammaticScrollRef = useRef<boolean>(false)
+  const lastProgrammaticScrollTopRef = useRef<number>(0)
+  const animIdRef = useRef<number | null>(null)
+  const isAutoScrollingRef = useRef<boolean>(isAutoScrolling)
 
   // Controllers
   const wakeLockControllerRef = useRef<ReturnType<typeof createWakeLockController> | null>(null)
@@ -387,9 +390,25 @@ export const StageView: React.FC<StageViewProps> = ({
     }
   }, [isOptionsOpen, isKeyPickerOpen, inPerformanceMode, autoHideControls, triggerOverlaysShow])
 
+  // Keep synchronous ref aligned with auto-scrolling state
+  useEffect(() => {
+    isAutoScrollingRef.current = isAutoScrolling
+  }, [isAutoScrolling])
+
+  // Synchronously kill scheduled RAF and pause auto-scrolling
+  const cancelActiveAutoScroll = useCallback(() => {
+    if (animIdRef.current !== null) {
+      cancelAnimationFrame(animIdRef.current)
+      animIdRef.current = null
+    }
+    isProgrammaticScrollRef.current = false
+    isAutoScrollingRef.current = false
+    setIsAutoScrolling(false)
+  }, [])
+
   // Reset scroll position and cancel any active autoscroll when song or occurrence transition occurs
   useEffect(() => {
-    setIsAutoScrolling(false)
+    cancelActiveAutoScroll()
     accumulatedScrollRef.current = 0
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTop = 0
@@ -399,11 +418,16 @@ export const StageView: React.FC<StageViewProps> = ({
   // --- Auto-Scroll Engine (requestAnimationFrame with bounded elapsed-time accounting) ---
   useEffect(() => {
     const container = scrollContainerRef.current
-    if (!container || !isAutoScrolling) return
+    if (!container || !isAutoScrolling) {
+      if (animIdRef.current !== null) {
+        cancelAnimationFrame(animIdRef.current)
+        animIdRef.current = null
+      }
+      return
+    }
 
     accumulatedScrollRef.current = container.scrollTop
     let lastTime: number | null = null
-    let animId: number
 
     const step = (now: number) => {
       if (!lastTime) {
@@ -416,37 +440,80 @@ export const StageView: React.FC<StageViewProps> = ({
 
       accumulatedScrollRef.current += (autoScrollSpeed * deltaMs) / 1000
       isProgrammaticScrollRef.current = true
+      lastProgrammaticScrollTopRef.current = accumulatedScrollRef.current
       container.scrollTop = accumulatedScrollRef.current
 
       // Check if reached bottom
       const maxScroll = container.scrollHeight - container.clientHeight
       if (container.scrollTop >= maxScroll - 2) {
-        setIsAutoScrolling(false)
+        cancelActiveAutoScroll()
         return
       }
 
-      animId = requestAnimationFrame(step)
+      animIdRef.current = requestAnimationFrame(step)
     }
 
-    animId = requestAnimationFrame(step)
+    animIdRef.current = requestAnimationFrame(step)
 
     return () => {
-      cancelAnimationFrame(animId)
+      if (animIdRef.current !== null) {
+        cancelAnimationFrame(animIdRef.current)
+        animIdRef.current = null
+      }
     }
-  }, [isAutoScrolling, autoScrollSpeed])
+  }, [isAutoScrolling, autoScrollSpeed, cancelActiveAutoScroll])
 
   // Invariant: Stop/pause auto-scroll when document becomes hidden; NEVER automatically resume
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
-        setIsAutoScrolling(false)
+        cancelActiveAutoScroll()
       }
     }
     document.addEventListener('visibilitychange', handleVisibilityChange)
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [])
+  }, [cancelActiveAutoScroll])
+
+  // Intercept wheel, touch drag, and pointer interactions before next RAF can overwrite position
+  useEffect(() => {
+    const container = scrollContainerRef.current
+    if (!container) return
+
+    const handleWheel = () => {
+      if (isAutoScrollingRef.current) {
+        cancelActiveAutoScroll()
+      }
+    }
+
+    const handleTouchMove = () => {
+      if (isAutoScrollingRef.current) {
+        cancelActiveAutoScroll()
+      }
+    }
+
+    const handlePointerDown = (e: PointerEvent) => {
+      if (!isAutoScrollingRef.current) return
+      const rect = container.getBoundingClientRect()
+      // Detect clicks on vertical scrollbar area
+      if (e.clientX >= rect.right - 24) {
+        cancelActiveAutoScroll()
+      }
+    }
+
+    container.addEventListener('wheel', handleWheel, { passive: true })
+    container.addEventListener('touchmove', handleTouchMove, { passive: true })
+    container.addEventListener('pointerdown', handlePointerDown, { passive: true })
+    window.addEventListener('wheel', handleWheel, { passive: true })
+
+    return () => {
+      container.removeEventListener('wheel', handleWheel)
+      container.removeEventListener('touchmove', handleTouchMove)
+      container.removeEventListener('pointerdown', handlePointerDown)
+      window.removeEventListener('wheel', handleWheel)
+    }
+  }, [cancelActiveAutoScroll])
 
   // --- Section Navigation Bounds ---
   const [canPrevSection, setCanPrevSection] = useState<boolean>(false)
@@ -486,16 +553,22 @@ export const StageView: React.FC<StageViewProps> = ({
 
   // Sync scroll accumulator and pause autoscroll on manual user scroll
   const handleScroll = () => {
-    if (!scrollContainerRef.current) return
+    const container = scrollContainerRef.current
+    if (!container) return
+
     if (isProgrammaticScrollRef.current) {
+      const delta = Math.abs(container.scrollTop - lastProgrammaticScrollTopRef.current)
+      if (delta <= 2) {
+        isProgrammaticScrollRef.current = false
+        updateSectionNavBounds()
+        return
+      }
       isProgrammaticScrollRef.current = false
-      updateSectionNavBounds()
-      return
     }
 
-    accumulatedScrollRef.current = scrollContainerRef.current.scrollTop
-    if (isAutoScrolling) {
-      setIsAutoScrolling(false)
+    accumulatedScrollRef.current = container.scrollTop
+    if (isAutoScrollingRef.current) {
+      cancelActiveAutoScroll()
     }
     updateSectionNavBounds()
   }
@@ -527,12 +600,12 @@ export const StageView: React.FC<StageViewProps> = ({
     if (prevSections.length > 0) {
       const targetTop = prevSections[prevSections.length - 1].targetScrollTop
       accumulatedScrollRef.current = targetTop
-      setIsAutoScrolling(false)
+      cancelActiveAutoScroll()
       container.scrollTo({ top: targetTop, behavior: 'smooth' })
       setCanPrevSection(targets.some((t) => t.targetScrollTop <= targetTop - 12))
       setCanNextSection(targets.some((t) => t.targetScrollTop > targetTop + 12))
     }
-  }, [triggerOverlaysShow])
+  }, [triggerOverlaysShow, cancelActiveAutoScroll])
 
   const handleNextSection = useCallback(() => {
     triggerOverlaysShow()
@@ -555,12 +628,12 @@ export const StageView: React.FC<StageViewProps> = ({
     if (next) {
       const targetTop = next.targetScrollTop
       accumulatedScrollRef.current = targetTop
-      setIsAutoScrolling(false)
+      cancelActiveAutoScroll()
       container.scrollTo({ top: targetTop, behavior: 'smooth' })
       setCanPrevSection(targets.some((t) => t.targetScrollTop <= targetTop - 12))
       setCanNextSection(targets.some((t) => t.targetScrollTop > targetTop + 12))
     }
-  }, [triggerOverlaysShow])
+  }, [triggerOverlaysShow, cancelActiveAutoScroll])
 
   // --- Transpose Controls (-11..+11 bound) ---
   const handleTransposeChange = (delta: number) => {
@@ -638,18 +711,37 @@ export const StageView: React.FC<StageViewProps> = ({
           e.preventDefault()
           triggerOverlaysShow()
           if (scrollContainerRef.current) {
+            cancelActiveAutoScroll()
             scrollContainerRef.current.scrollBy({ top: -80, behavior: 'smooth' })
             accumulatedScrollRef.current = Math.max(0, scrollContainerRef.current.scrollTop - 80)
-            if (isAutoScrolling) setIsAutoScrolling(false)
           }
           break
         case 'ArrowDown':
           e.preventDefault()
           triggerOverlaysShow()
           if (scrollContainerRef.current) {
+            cancelActiveAutoScroll()
             scrollContainerRef.current.scrollBy({ top: 80, behavior: 'smooth' })
             accumulatedScrollRef.current = scrollContainerRef.current.scrollTop + 80
-            if (isAutoScrolling) setIsAutoScrolling(false)
+          }
+          break
+        case 'Home':
+          e.preventDefault()
+          triggerOverlaysShow()
+          if (scrollContainerRef.current) {
+            cancelActiveAutoScroll()
+            scrollContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' })
+            accumulatedScrollRef.current = 0
+          }
+          break
+        case 'End':
+          e.preventDefault()
+          triggerOverlaysShow()
+          if (scrollContainerRef.current) {
+            cancelActiveAutoScroll()
+            const maxScroll = scrollContainerRef.current.scrollHeight - scrollContainerRef.current.clientHeight
+            scrollContainerRef.current.scrollTo({ top: maxScroll, behavior: 'smooth' })
+            accumulatedScrollRef.current = maxScroll
           }
           break
         case 'ArrowLeft':
@@ -829,6 +921,11 @@ export const StageView: React.FC<StageViewProps> = ({
         ref={scrollContainerRef}
         onScroll={handleScroll}
         onTouchStart={handleTouchStart}
+        onTouchMove={() => {
+          if (isAutoScrollingRef.current) {
+            cancelActiveAutoScroll()
+          }
+        }}
         onTouchEnd={handleTouchEnd}
         onClick={() => {
           if (!showStageOverlays) {

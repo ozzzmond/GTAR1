@@ -839,3 +839,23 @@ test('CODEX_R6: WAKE_LOCK_STATUS_DISTINCTION — distinguishes user preference f
     'StageOptionsSheet must display Denied/Unavailable when preference is ON but hardware lock is not acquired'
   )
 })
+
+test('CODEX_R2_P1_FIX: MANUAL_SCROLL_WHEEL_TOUCH_PRIORITY — registers wheel, touchmove and pointerdown listeners for immediate RAF cancellation', () => {
+  const stageSource = fs.readFileSync(path.resolve(__dirname, '../src/components/StageView.tsx'), 'utf8')
+  assert.ok(
+    stageSource.includes("container.addEventListener('wheel'"),
+    'StageView must attach wheel listener on scroll container'
+  )
+  assert.ok(
+    stageSource.includes("container.addEventListener('touchmove'"),
+    'StageView must attach touchmove listener on scroll container'
+  )
+  assert.ok(
+    stageSource.includes("container.addEventListener('pointerdown'"),
+    'StageView must attach pointerdown listener on scroll container'
+  )
+  assert.ok(
+    stageSource.includes('cancelActiveAutoScroll'),
+    'StageView must implement cancelActiveAutoScroll for synchronous RAF cancellation'
+  )
+})

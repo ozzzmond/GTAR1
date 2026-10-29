@@ -11,7 +11,7 @@ const assert = require('node:assert/strict')
 const http = require('node:http')
 const fs = require('node:fs')
 const path = require('node:path')
-const { chromium } = require('playwright')
+const { chromium, firefox } = require('playwright')
 
 const DIST_DIR = path.resolve(__dirname, '../dist')
 const PORT = 5198
@@ -376,24 +376,100 @@ test('BROWSER_LEVEL_REGRESSION: Playwright real-layout validation of Stage, Touc
     assert.strictEqual(idbResult.e1Offset, 1, 'Real IndexedDB readback for Entry A must be 1')
     assert.strictEqual(idbResult.e2Offset, 2, 'Real IndexedDB readback for Entry B must be 2')
 
-    // Step 15: CODEX_R3_NEW — Continuous autoscroll: RAF updates must advance without self-pausing
+    // Step 15: R2 — Continuous autoscroll: RAF updates advance for >= 2 seconds without self-pausing
     const playFabContinuous = page.locator('button[aria-label*="auto-scroll"]').first()
     await playFabContinuous.click() // Start autoscroll
-    await page.waitForTimeout(500) // 500ms of continuous RAF frames
 
-    // Verify autoscroll is still active (Pause FAB is shown, not Play)
+    const initialScrollTop = await page.evaluate(() => {
+      const el = document.querySelector('main[data-stage-canvas="true"]')
+      return el ? el.scrollTop : 0
+    })
+
+    // Advance for >= 2 seconds of continuous RAF frames
+    await page.waitForTimeout(2100)
+
+    // Verify autoscroll is still actively running (Pause FAB shown)
     const isStillAutoscrolling = await page.locator('button[aria-label*="Pause auto-scroll"]').count()
-    assert.strictEqual(isStillAutoscrolling, 1, 'Autoscroll must advance continuously without self-pausing on RAF scroll events')
+    assert.strictEqual(isStillAutoscrolling, 1, 'R2: Autoscroll must advance continuously for >=2 seconds without self-pausing')
 
-    // Now dispatch manual drag/scroll to verify intentional user pause
+    const advancedScrollTop = await page.evaluate(() => {
+      const el = document.querySelector('main[data-stage-canvas="true"]')
+      return el ? el.scrollTop : 0
+    })
+    assert.ok(advancedScrollTop > initialScrollTop, 'R2: Reading position must advance forward during continuous autoscroll')
+
+    // Step 15b: R3 — Wheel during playback pauses immediately and preserves user position
     await page.evaluate(() => {
       const el = document.querySelector('main[data-stage-canvas="true"]')
-      el.scrollTop += 60
+      el.dispatchEvent(new WheelEvent('wheel', { deltaY: 150, bubbles: true }))
+      el.scrollTop += 120
       el.dispatchEvent(new Event('scroll'))
     })
     await page.waitForTimeout(100)
-    const isPausedByUser = await page.locator('button[aria-label*="Start auto-scroll"]').count()
-    assert.strictEqual(isPausedByUser, 1, 'Manual user scroll must pause autoscroll')
+
+    const isPausedByWheel = await page.locator('button[aria-label*="Start auto-scroll"]').count()
+    assert.strictEqual(isPausedByWheel, 1, 'R3: Wheel during playback must pause autoscroll immediately')
+
+    const postWheelScrollTop = await page.evaluate(() => {
+      const el = document.querySelector('main[data-stage-canvas="true"]')
+      return el ? el.scrollTop : 0
+    })
+
+    // Wait to verify RAF does NOT overwrite user's reading position
+    await page.waitForTimeout(250)
+    const preservedWheelScrollTop = await page.evaluate(() => {
+      const el = document.querySelector('main[data-stage-canvas="true"]')
+      return el ? el.scrollTop : 0
+    })
+    assert.strictEqual(preservedWheelScrollTop, postWheelScrollTop, 'R3: Reading position after wheel must be preserved without snap-back')
+
+    // Step 15c: R4 — Touch drag during playback pauses and preserves user position
+    // Resume playback
+    const resumePlay = page.locator('button[aria-label*="auto-scroll"]').first()
+    await resumePlay.click()
+    await page.waitForTimeout(150)
+    assert.strictEqual(await page.locator('button[aria-label*="Pause auto-scroll"]').count(), 1, 'Autoscroll resumed for touch test')
+
+    // Dispatch touch drag
+    await page.evaluate(() => {
+      const el = document.querySelector('main[data-stage-canvas="true"]')
+      el.dispatchEvent(new Event('touchmove', { bubbles: true }))
+      el.scrollTop += 160
+      el.dispatchEvent(new Event('scroll'))
+    })
+    await page.waitForTimeout(100)
+
+    const isPausedByTouch = await page.locator('button[aria-label*="Start auto-scroll"]').count()
+    assert.strictEqual(isPausedByTouch, 1, 'R4: Touch drag during playback must pause autoscroll immediately')
+
+    const postTouchScrollTop = await page.evaluate(() => {
+      const el = document.querySelector('main[data-stage-canvas="true"]')
+      return el ? el.scrollTop : 0
+    })
+
+    // Wait to verify position does not snap back
+    await page.waitForTimeout(250)
+    const preservedTouchScrollTop = await page.evaluate(() => {
+      const el = document.querySelector('main[data-stage-canvas="true"]')
+      return el ? el.scrollTop : 0
+    })
+    assert.strictEqual(preservedTouchScrollTop, postTouchScrollTop, 'R4: Reading position after touch drag must be preserved without snap-back')
+
+    // Step 15d: R5 — Play resumes from manually selected position
+    const resumeFromManual = page.locator('button[aria-label*="auto-scroll"]').first()
+    await resumeFromManual.click()
+    await page.waitForTimeout(400)
+
+    const resumedScrollTop = await page.evaluate(() => {
+      const el = document.querySelector('main[data-stage-canvas="true"]')
+      return el ? el.scrollTop : 0
+    })
+    assert.ok(resumedScrollTop >= preservedTouchScrollTop, 'R5: Auto-scroll must resume advancing from manually selected position')
+
+    // Pause autoscroll before next step
+    const pauseBeforeOptions = page.locator('button[aria-label*="Pause auto-scroll"]').first()
+    await pauseBeforeOptions.click()
+    await page.waitForTimeout(100)
 
     // Step 16: CODEX_R6 — Stage Options Sheet distinguishes preference from actual lock status
     const optionsButton = page.locator('header[role="banner"] button[aria-label*="Open Stage Options"]').first()
@@ -409,5 +485,18 @@ test('BROWSER_LEVEL_REGRESSION: Playwright real-layout validation of Stage, Touc
     if (context) await context.close().catch(() => {})
     if (browser) await browser.close().catch(() => {})
     if (server) await new Promise((r) => server.close(r))
+  }
+})
+
+test('BROWSER_LEVEL_REGRESSION: Firefox engine support check (skipped when not installed on host)', async (t) => {
+  let ffBrowser
+  try {
+    ffBrowser = await firefox.launch({ headless: true })
+  } catch (err) {
+    t.skip(`Firefox engine not installed on host (${err.message.split('\n')[0]}) — skipped`)
+    return
+  }
+  if (ffBrowser) {
+    await ffBrowser.close()
   }
 })
