@@ -1,93 +1,426 @@
 import React from 'react'
 import type { SongLine, ChordSegment } from '../types/gtar'
-import { chordLyricWords } from '../utils/chordLyricLayout'
+import { CHORD_TOKEN_REGEX, parseChordProLine } from '../utils/songParser'
+import { chordLyricWords, twoLineSegments } from '../utils/chordLyricLayout'
+import {
+  chordTokenToNashville,
+  isValidMusicalKey,
+  type StageNotationMode,
+} from '../utils/nashvilleNotation'
+
+export type StageChordScale = 1.0 | 1.1 | 1.2 | 1.3
+export type StageFontWeight = 'regular' | 'medium' | 'bold'
+export type StageLineSpacing = 'compact' | 'normal' | 'relaxed'
 
 export interface SongLineRendererProps {
   lines: SongLine[]
-  fontSizePx?: number
+  fontSizePx: number
+  fontFamily?: 'mono' | 'sans' | 'serif'
+  onChordClick?: (chord: string, targetEl?: HTMLElement) => void
+  onChordHover?: (chord: string, targetEl: HTMLElement) => void
+  onChordLeave?: (chord: string) => void
+  chordScale?: number
+  fontWeight?: StageFontWeight
+  lineSpacing?: StageLineSpacing
+  notation?: StageNotationMode
+  referenceKey?: string | null
 }
 
+interface LineSpacingConfig {
+  lineHeightMultiplier: number
+  chordRowPt: string
+  chordRowPb: string
+  lyricRowPt: string
+  lyricRowPb: string
+  emptySpacerHeight: string
+  sectionHeaderPt: string
+  sectionHeaderPb: string
+  chordProPadding: string
+  chordProMb: string
+}
+
+const SPACING_CONFIGS: Record<StageLineSpacing, LineSpacingConfig> = {
+  compact: {
+    lineHeightMultiplier: 1.2,
+    chordRowPt: '2px',
+    chordRowPb: '0px',
+    lyricRowPt: '0px',
+    lyricRowPb: '3px',
+    emptySpacerHeight: '14px',
+    sectionHeaderPt: '10px',
+    sectionHeaderPb: '4px',
+    chordProPadding: '2px 0 3px',
+    chordProMb: 'mb-0.5',
+  },
+  normal: {
+    lineHeightMultiplier: 1.35,
+    chordRowPt: '4px',
+    chordRowPb: '1px',
+    lyricRowPt: '1px',
+    lyricRowPb: '5px',
+    emptySpacerHeight: '20px',
+    sectionHeaderPt: '14px',
+    sectionHeaderPb: '8px',
+    chordProPadding: '4px 0 5px',
+    chordProMb: 'mb-1',
+  },
+  relaxed: {
+    lineHeightMultiplier: 1.6,
+    chordRowPt: '7px',
+    chordRowPb: '3px',
+    lyricRowPt: '3px',
+    lyricRowPb: '9px',
+    emptySpacerHeight: '28px',
+    sectionHeaderPt: '20px',
+    sectionHeaderPb: '12px',
+    chordProPadding: '8px 0 10px',
+    chordProMb: 'mb-1.5',
+  },
+}
+
+const FONT_WEIGHT_CONFIGS: Record<StageFontWeight, { lyricClass: string; chordClass: string }> = {
+  regular: {
+    lyricClass: 'font-normal',
+    chordClass: 'font-bold',
+  },
+  medium: {
+    lyricClass: 'font-medium',
+    chordClass: 'font-bold',
+  },
+  bold: {
+    lyricClass: 'font-semibold',
+    chordClass: 'font-black',
+  },
+}
+
+/**
+ * Splits a chord line text (preserving whitespace) so chord tokens are individually clickable,
+ * matching Android detectTapGestures + extractChordAtOffset.
+ * When notation === 'numbers', tokens are converted to relative scale degrees (Nashville Number System)
+ * and interactions (clicks, chord diagrams) are suppressed.
+ */
+function renderInteractiveChordLine(
+  text: string,
+  onChordClick?: (chord: string, targetEl?: HTMLElement) => void,
+  chordScale: number = 1.0,
+  isHighContrast: boolean = false,
+  notation: StageNotationMode = 'chords',
+  referenceKey?: string | null,
+  onChordHover?: (chord: string, targetEl: HTMLElement) => void,
+  onChordLeave?: (chord: string) => void
+): React.ReactNode[] {
+  const elements: React.ReactNode[] = []
+  let i = 0
+  let pendingSpacingCompensation = 0
+  const isNumbersMode = notation === 'numbers' && isValidMusicalKey(referenceKey)
+
+  while (i < text.length) {
+    if (text[i] === ' ' || text[i] === '\t') {
+      let spaceStr = ''
+      while (i < text.length && (text[i] === ' ' || text[i] === '\t')) {
+        spaceStr += text[i]
+        i++
+      }
+
+      if (pendingSpacingCompensation > 0) {
+        spaceStr += ' '.repeat(pendingSpacingCompensation)
+        pendingSpacingCompensation = 0
+      } else if (pendingSpacingCompensation < 0) {
+        const canAbsorb = Math.min(-pendingSpacingCompensation, Math.max(0, spaceStr.length - 1))
+        spaceStr = spaceStr.slice(canAbsorb)
+        pendingSpacingCompensation += canAbsorb
+      }
+
+      elements.push(<span key={`sp-${i}`}>{spaceStr}</span>)
+    } else {
+      const start = i
+      while (i < text.length && text[i] !== ' ' && text[i] !== '\t') {
+        i++
+      }
+      const rawToken = text.substring(start, i)
+
+      // Handle hyphenated compound chords like "<C#m>-<B>" or "C#m-B"
+      if (rawToken.includes('-') || rawToken.includes('\u2013') || rawToken.includes('\u2014')) {
+        const subParts = rawToken.split(/([\u2013\u2014-]|--)/)
+        for (let sIdx = 0; sIdx < subParts.length; sIdx++) {
+          const sub = subParts[sIdx]
+          if (sub === '-' || sub === '\u2013' || sub === '\u2014' || sub === '--') {
+            elements.push(<span key={`sep-${start}-${sIdx}`}>{sub}</span>)
+            continue
+          }
+          const cleanSub = sub.replace(/^[[<({|,:;~-]+|[\]>)}|,:;~-]+$/g, '').trim()
+          if (cleanSub && CHORD_TOKEN_REGEX.test(cleanSub)) {
+            const displayToken = isNumbersMode ? chordTokenToNashville(cleanSub, referenceKey!) : cleanSub
+            if (isNumbersMode) {
+              pendingSpacingCompensation += (cleanSub.length - displayToken.length)
+            }
+            elements.push(
+              <span
+                key={`chord-${start}-${sIdx}`}
+                id={`stage-chord-${start}-${sIdx}`}
+                tabIndex={isNumbersMode ? undefined : 0}
+                role={isNumbersMode ? undefined : 'button'}
+                onClick={isNumbersMode ? undefined : () => onChordClick?.(cleanSub, typeof document !== 'undefined' ? document.getElementById(`stage-chord-${start}-${sIdx}`) || undefined : undefined)}
+                onMouseEnter={isNumbersMode ? undefined : (e) => onChordHover?.(cleanSub, e.currentTarget as HTMLElement)}
+                onMouseLeave={isNumbersMode ? undefined : () => onChordLeave?.(cleanSub)}
+                onKeyDown={
+                  isNumbersMode
+                    ? undefined
+                    : (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          onChordClick?.(cleanSub, e.currentTarget as HTMLElement)
+                        }
+                      }
+                }
+                className={`stage-chord-token ${isNumbersMode ? 'stage-number-token cursor-default' : 'cursor-pointer'} select-none`}
+                style={{
+                  ...(chordScale !== 1.0
+                    ? {
+                        display: 'inline-block',
+                        transform: `scale(${chordScale})`,
+                        transformOrigin: 'left bottom',
+                        verticalAlign: 'baseline',
+                      }
+                    : undefined),
+                  ...(isHighContrast ? { textShadow: '0 1px 2px rgba(0,0,0,0.8)' } : undefined),
+                }}
+              >
+                {displayToken}
+              </span>
+            )
+          } else {
+            elements.push(<span key={`tok-${start}-${sIdx}`}>{sub}</span>)
+          }
+        }
+      } else {
+        const cleanToken = rawToken.replace(/^[[<({|,:;~-]+|[\]>)}|,:;~-]+$/g, '').trim()
+        if (cleanToken && CHORD_TOKEN_REGEX.test(cleanToken)) {
+          const displayToken = isNumbersMode ? chordTokenToNashville(cleanToken, referenceKey!) : cleanToken
+          if (isNumbersMode) {
+            pendingSpacingCompensation += (cleanToken.length - displayToken.length)
+          }
+          elements.push(
+            <span
+              key={`chord-${start}`}
+              id={`stage-chord-${start}`}
+              tabIndex={isNumbersMode ? undefined : 0}
+              role={isNumbersMode ? undefined : 'button'}
+              onClick={isNumbersMode ? undefined : () => onChordClick?.(cleanToken, typeof document !== 'undefined' ? document.getElementById(`stage-chord-${start}`) || undefined : undefined)}
+              onMouseEnter={isNumbersMode ? undefined : (e) => onChordHover?.(cleanToken, e.currentTarget as HTMLElement)}
+              onMouseLeave={isNumbersMode ? undefined : () => onChordLeave?.(cleanToken)}
+              onKeyDown={
+                isNumbersMode
+                  ? undefined
+                  : (e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        onChordClick?.(cleanToken, e.currentTarget as HTMLElement)
+                      }
+                    }
+              }
+              className={`stage-chord-token ${isNumbersMode ? 'stage-number-token cursor-default' : 'cursor-pointer'} select-none`}
+              style={{
+                ...(chordScale !== 1.0
+                  ? {
+                      display: 'inline-block',
+                      transform: `scale(${chordScale})`,
+                      transformOrigin: 'left bottom',
+                      verticalAlign: 'baseline',
+                    }
+                  : undefined),
+                ...(isHighContrast ? { textShadow: '0 1px 2px rgba(0,0,0,0.8)' } : undefined),
+              }}
+            >
+              {displayToken}
+            </span>
+          )
+        } else {
+          elements.push(<span key={`tok-${start}`}>{rawToken}</span>)
+        }
+      }
+    }
+  }
+
+  if (pendingSpacingCompensation > 0) {
+    elements.push(<span key={`sp-end`}>{' '.repeat(pendingSpacingCompensation)}</span>)
+  }
+
+  return elements
+}
+
+/**
+ * 1:1 Jetpack Compose RenderSongLine translation from Android SongViewerScreen.kt:
+ * - EmptyLine: customizable spacer height
+ * - SectionHeader: muted-accent block with explicit line height and padding
+ * - ChordLine: Bold in #B58900, with independent scaling & weights
+ * - LyricLine: In #EEE8D5, with selectable font weight
+ * - TabLine: Monospace in #35B8AD
+ * - Standalone Progression: Clean floating chord labels with comfortable spacing
+ */
 export const SongLineRenderer: React.FC<SongLineRendererProps> = ({
   lines,
-  fontSizePx = 18,
+  fontSizePx,
+  fontFamily = 'mono',
+  onChordClick,
+  onChordHover,
+  onChordLeave,
+  chordScale = 1.0,
+  fontWeight = 'regular',
+  lineSpacing = 'normal',
+  notation = 'chords',
+  referenceKey,
 }) => {
+  const fontClass =
+    fontFamily === 'serif'
+      ? 'stage-serif'
+      : fontFamily === 'sans'
+      ? 'stage-sans'
+      : 'stage-mono'
+
+  const spacing = SPACING_CONFIGS[lineSpacing] || SPACING_CONFIGS.normal
+  const weightConfig = FONT_WEIGHT_CONFIGS[fontWeight] || FONT_WEIGHT_CONFIGS.regular
+  const isHighContrast = chordScale >= 1.2 && fontWeight === 'bold'
+
+  const renderAnchored = (segments: ChordSegment[], key: number) => (
+    <div key={key} data-stage-line="true" data-line-index={key} className={`${fontClass} stage-anchored-line select-text`}
+      style={{ fontSize: fontSizePx, padding: spacing.chordProPadding, display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+      {chordLyricWords(segments).map((word, wordIndex) => (
+        <span key={wordIndex} className="stage-anchored-word" style={{ display: 'inline-flex', maxWidth: '100%', minWidth: 0 }}>
+          {word.map((segment, segmentIndex) => (
+            <span key={segmentIndex} className="stage-anchor" data-chord={segment.chord}
+              style={{ display: 'inline-flex', flexDirection: 'column', minWidth: 0, maxWidth: '100%' }}>
+              <span className={`stage-chord-text stage-mono ${weightConfig.chordClass} select-none`}
+                style={{ fontSize: `${chordScale * 0.9}em`, lineHeight: 1.2, minHeight: '1.2em', whiteSpace: 'pre',
+                  paddingRight: segment.chord ? '0.35em' : undefined, color: 'var(--custom-stage-chord)' }}>
+                {segment.chord ? renderInteractiveChordLine(segment.chord, onChordClick, 1, isHighContrast, notation, referenceKey, onChordHover, onChordLeave) : '\u00a0'}
+              </span>
+              <span className={`stage-lyric-text ${weightConfig.lyricClass}`}
+                style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', lineHeight: spacing.lineHeightMultiplier, color: 'var(--custom-stage-text)' }}>
+                {segment.text || '\u00a0'}
+              </span>
+            </span>
+          ))}
+        </span>
+      ))}
+    </div>
+  )
+
   return (
     <div
-      className="space-y-3 font-mono leading-relaxed select-text"
       style={{ fontSize: `${fontSizePx}px` }}
+      className="select-text"
     >
-      {lines.map((line, lineIndex) => {
-        if (line.type === 'EMPTY') {
-          return <div key={lineIndex} className="h-4" />
-        }
+      {lines.map((line, idx) => {
+        const previous = lines[idx - 1]
+        if (line.type === 'LYRIC' && previous?.type === 'CHORD_ROW' && previous.isOverLyric) return null
+        switch (line.type) {
+          case 'EMPTY':
+            return <div key={idx} data-stage-line="true" data-line-index={idx} style={{ height: spacing.emptySpacerHeight }} />
 
-        if (line.type === 'SECTION_HEADER') {
-          return (
-            <div
-              key={lineIndex}
-              className="pt-4 pb-1 text-amber-400 font-bold tracking-wide uppercase text-sm border-b border-slate-700/60"
-            >
-              {line.title}
-            </div>
-          )
-        }
+          case 'SECTION_HEADER':
+            return (
+              <div key={idx} role="heading" aria-level={3}
+                data-stage-line="true"
+                data-stage-section="true"
+                data-section-title={line.title}
+                data-section-index={idx}
+                data-line-index={idx}
+                className={`${fontClass} stage-section-header select-none`}
+                style={{
+                  fontSize: `${fontSizePx}px`, lineHeight: `${fontSizePx * spacing.lineHeightMultiplier}px`,
+                  paddingTop: spacing.sectionHeaderPt, paddingBottom: spacing.sectionHeaderPb, margin: 0,
+                  color: 'var(--custom-stage-section)', fontWeight: 600, letterSpacing: '0.04em',
+                  whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', breakAfter: 'avoid',
+                  overflowAnchor: 'none',
+                }}>
+                [{line.title}]
+              </div>
+            )
 
-        if (line.type === 'TAB') {
-          return (
-            <div
-              key={lineIndex}
-              className="text-slate-400 bg-slate-950/60 px-2 py-1 rounded text-xs whitespace-pre overflow-x-auto"
-            >
-              {line.content}
-            </div>
-          )
-        }
+          case 'CHORD_ROW':
+            if (line.isOverLyric && lines[idx + 1]?.type === 'LYRIC') {
+              return renderAnchored(twoLineSegments(line.raw, (lines[idx + 1] as { lyrics: string }).lyrics), idx)
+            }
+            return (
+              <div
+                key={idx}
+                data-stage-line="true"
+                data-line-index={idx}
+                style={{
+                  paddingTop: spacing.chordRowPt,
+                  paddingBottom: spacing.chordRowPb,
+                  fontSize: `${fontSizePx}px`,
+                  lineHeight: `${fontSizePx * spacing.lineHeightMultiplier}px`,
+                  letterSpacing: '0.8px',
+                  color: 'var(--custom-stage-chord)',
+                  whiteSpace: 'pre-wrap',
+                  overflowWrap: 'break-word',
+                  wordBreak: 'break-word',
+                }}
+                className={`stage-mono stage-chord-text ${weightConfig.chordClass} whitespace-pre-wrap select-text`}
+              >
+                {renderInteractiveChordLine(line.raw, onChordClick, chordScale, isHighContrast, notation, referenceKey, onChordHover, onChordLeave)}
+              </div>
+            )
 
-        if (line.type === 'CHORD_ROW') {
-          return (
-            <div
-              key={lineIndex}
-              className="text-sky-400 font-bold whitespace-pre overflow-x-auto"
-            >
-              {line.raw}
-            </div>
-          )
-        }
+          case 'LYRIC': {
+            if (/\[[A-G][b#]?[^\]]*\]|<[A-G][b#]?[^>]*>/.test(line.lyrics)) {
+              return renderAnchored(parseChordProLine(line.lyrics), idx)
+            }
 
-        if (line.type === 'LYRIC') {
-          return (
-            <div key={lineIndex} className="text-slate-200 whitespace-pre-wrap">
-              {line.lyrics}
-            </div>
-          )
-        }
+            return (
+              <div
+                key={idx}
+                data-stage-line="true"
+                data-line-index={idx}
+                style={{
+                  paddingTop: spacing.lyricRowPt,
+                  paddingBottom: spacing.lyricRowPb,
+                  fontSize: `${fontSizePx}px`,
+                  lineHeight: `${fontSizePx * spacing.lineHeightMultiplier}px`,
+                  letterSpacing: '0.8px',
+                  color: 'var(--custom-stage-text)',
+                  whiteSpace: 'pre-wrap',
+                  overflowWrap: 'break-word',
+                  wordBreak: 'break-word',
+                }}
+                className={`${fontClass} stage-lyric-text ${weightConfig.lyricClass} whitespace-pre-wrap select-text`}
+              >
+                {line.lyrics}
+              </div>
+            )
+          }
 
-        if (line.type === 'CHORD_PRO') {
-          const words = chordLyricWords(line.segments)
-          return (
-            <div
-              key={lineIndex}
-              className="flex flex-wrap gap-x-2 gap-y-1 items-end"
-            >
-              {words.map((wordSegments, wIdx) => (
-                <span key={wIdx} className="inline-flex flex-col items-start">
-                  <span className="text-sky-400 font-bold min-h-[1.25em] text-[0.9em]">
-                    {wordSegments.map((s, sIdx) => (
-                      <span key={sIdx} className="mr-0.5">
-                        {s.chord || ''}
-                      </span>
-                    ))}
-                  </span>
-                  <span className="text-slate-200 whitespace-pre">
-                    {wordSegments.map((s) => s.text).join('')}
-                  </span>
-                </span>
-              ))}
-            </div>
-          )
-        }
+          case 'TAB':
+            {
+              const tabFontSize = Math.max(11, fontSizePx - 1)
+              return (
+                <div
+                  key={idx}
+                  data-stage-line="true"
+                  data-line-index={idx}
+                  style={{
+                    paddingTop: '1.5px',
+                    paddingBottom: '1.5px',
+                    fontSize: `${tabFontSize}px`,
+                    lineHeight: `${tabFontSize * 1.25}px`,
+                    letterSpacing: '0.8px',
+                    color: 'var(--custom-actionColor)',
+                  }}
+                  className="stage-mono stage-tab-text font-normal whitespace-pre overflow-x-auto select-text"
+                >
+                  {line.content}
+                </div>
+              )
+            }
 
-        return null
+          case 'CHORD_PRO':
+            return renderAnchored(line.segments, idx)
+
+          default:
+            return null
+        }
       })}
     </div>
   )

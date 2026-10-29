@@ -36,6 +36,28 @@ export interface SetlistFolder {
   updatedAt: number
 }
 
+export interface ActiveSongState {
+  id?: string
+  title: string
+  artist: string
+  key: string
+  /** Explicit user confirmation of the authored chord basis; never inferred. */
+  confirmedChartKey?: string
+  originalKey?: string
+  capo: string
+  bpm: string
+  time?: string
+  year?: string
+  rawContent: string
+  format: SongFormat
+  transposeOffset: number
+  tags?: string | string[]
+  isDeleted?: boolean
+  isFavorite?: boolean
+  createdAt?: number
+  lastOpenedAt?: number
+}
+
 export interface WebSetlistSongRef {
   /** Stable entry ID for this occurrence within the setlist */
   entryId?: string
@@ -82,6 +104,7 @@ export interface ChordRowLine {
   type: 'CHORD_ROW'
   chords: string[]
   raw: string
+  isOverLyric?: boolean
 }
 
 export interface LyricLine {
@@ -113,7 +136,7 @@ export interface ParsedGtarSong {
   bpm?: string
   time?: string
   year?: string
-  tags?: string[]
+  tags?: string[] | string
   format: SongFormat
   lines: SongLine[]
 }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import type { SongEntity, WebSetlist, SetlistFolder } from './types/gtar'
+import type { SongEntity, WebSetlist, SetlistFolder, ActiveSongState } from './types/gtar'
 import {
   loadAllSongs,
   loadAllSetlists,
@@ -17,7 +17,7 @@ import {
 import { Header, type ActiveTab } from './components/Header'
 import { SongbookHomeView } from './components/SongbookHomeView'
 import { SongViewer } from './components/SongViewer'
-import { SongEditor } from './components/SongEditor'
+import { DesktopEditor } from './components/DesktopEditor'
 import { SetlistManager } from './components/SetlistManager'
 import { BackupModal } from './components/BackupModal'
 import { LocalProfileModal } from './components/LocalProfileModal'
@@ -122,22 +122,75 @@ export const App: React.FC = () => {
     }
   }, [currentNavTarget, folders, setlists])
 
-  // Song handlers
-  const handleSaveSong = async (song: SongEntity) => {
-    await saveSong(song)
+  const handleUpdateSongEntity = (updated: Partial<ActiveSongState>): boolean => {
+    if (!updated.id) return false
+    const existing = songs.find((s) => s.id === updated.id)
+    if (!existing) return false
+
+    const updatedTags = updated.tags
+    const parsedTags = typeof updatedTags === 'string'
+      ? updatedTags.split(',').map((t: string) => t.trim()).filter(Boolean)
+      : Array.isArray(updatedTags)
+      ? updatedTags
+      : existing.tags
+
+    const merged: SongEntity = {
+      ...existing,
+      ...updated,
+      id: String(updated.id),
+      tags: parsedTags,
+      updatedAt: Date.now(),
+    }
+    saveSong(merged).catch(() => {})
+    setSongs((prev) => prev.map((s) => (s.id === merged.id ? merged : s)))
+    if (selectedSong?.id === merged.id) {
+      setSelectedSong(merged)
+      if (updated.transposeOffset !== undefined) {
+        setViewerTransposeOffset(updated.transposeOffset)
+      }
+    }
+    return true
+  }
+
+  const handleSaveFromEditor = (updated: any): boolean => {
+    const songId = updated.id || generateUUID()
+    const songTags = typeof updated.tags === 'string'
+      ? updated.tags.split(',').map((t: string) => t.trim()).filter(Boolean)
+      : Array.isArray(updated.tags) ? updated.tags : []
+
+    const entity: SongEntity = {
+      id: songId,
+      title: updated.title || 'Untitled Song',
+      artist: updated.artist || '',
+      key: updated.key || '',
+      originalKey: updated.originalKey || undefined,
+      confirmedChartKey: updated.confirmedChartKey || undefined,
+      capo: updated.capo || undefined,
+      bpm: updated.bpm || undefined,
+      time: updated.time || undefined,
+      year: updated.year || undefined,
+      tags: songTags,
+      rawContent: updated.rawContent || '',
+      format: updated.format || 'CHORD_PRO',
+      isFavorite: updated.isFavorite,
+      transposeOffset: updated.transposeOffset || 0,
+      createdAt: updated.createdAt || Date.now(),
+      updatedAt: Date.now(),
+    }
+
+    saveSong(entity).catch(() => {})
     setSongs((prev) => {
-      const idx = prev.findIndex((s) => s.id === song.id)
+      const idx = prev.findIndex((s) => s.id === entity.id)
       if (idx >= 0) {
         const next = [...prev]
-        next[idx] = song
+        next[idx] = entity
         return next
       }
-      return [song, ...prev]
+      return [entity, ...prev]
     })
-    setSelectedSong(song)
-    setViewerTransposeOffset(song.transposeOffset || 0)
-    setActiveTab('VIEWER')
-    setEditingSong(null)
+    setSelectedSong(entity)
+    setViewerTransposeOffset(entity.transposeOffset || 0)
+    return true
   }
 
   const handleBulkUpdateSongs = async (updatedSongs: SongEntity[]) => {
@@ -385,7 +438,7 @@ export const App: React.FC = () => {
               onEditSong={handleEditSong}
               onNewSong={handleNewSong}
               onDeleteSong={handleDeleteSong}
-              onSaveSong={handleSaveSong}
+              onSaveSong={handleSaveFromEditor as any}
               onBulkUpdateSongs={handleBulkUpdateSongs}
               onBulkDeleteSongs={handleBulkDeleteSongs}
               onSaveSetlist={handleSaveSetlist}
@@ -405,21 +458,41 @@ export const App: React.FC = () => {
               }}
               onEdit={handleEditSong}
               onBack={() => setActiveTab('SONGS')}
+              onUpdateSong={handleUpdateSongEntity}
             />
           )}
 
-          {activeTab === 'EDITOR' && (
-            <SongEditor
-              initialSong={editingSong || undefined}
-              onSave={handleSaveSong}
-              onDelete={editingSong?.id ? handleDeleteSong : undefined}
-              onCancel={() => {
+          {activeTab === 'EDITOR' && editingSong && (
+            <DesktopEditor
+              song={{
+                id: editingSong.id || generateUUID(),
+                title: editingSong.title || '',
+                artist: editingSong.artist || '',
+                key: editingSong.key || '',
+                originalKey: editingSong.originalKey,
+                confirmedChartKey: editingSong.confirmedChartKey,
+                capo: editingSong.capo || '',
+                bpm: editingSong.bpm || '',
+                time: editingSong.time,
+                year: editingSong.year,
+                tags: Array.isArray(editingSong.tags) ? editingSong.tags.join(', ') : editingSong.tags || '',
+                rawContent: editingSong.rawContent ?? '',
+                format: editingSong.format || 'CHORD_PRO',
+                transposeOffset: editingSong.transposeOffset || 0,
+              }}
+              transposeOffset={editingSong.transposeOffset || 0}
+              onUpdateSong={handleUpdateSongEntity}
+              onSaveSong={handleSaveFromEditor}
+              onClose={() => {
                 if (selectedSong) {
                   setActiveTab('VIEWER')
                 } else {
                   setActiveTab('SONGS')
                 }
                 setEditingSong(null)
+              }}
+              onNewSong={() => {
+                setEditingSong({})
               }}
             />
           )}
