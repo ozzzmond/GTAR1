@@ -470,7 +470,7 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
             {(() => {
               const effectiveStatus: WakeLockStatus =
                 wakeLockStatus ||
-                (!wakeLockActive ? 'disabled' : wakeLockAcquired ? 'active' : 'denied')
+                (!wakeLockActive ? 'disabled' : wakeLockAcquired ? 'active' : 'inactive')
 
               return (
                 <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-800/60 border border-slate-700/60">
@@ -479,6 +479,10 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
                       className={`w-4 h-4 ${
                         effectiveStatus === 'active'
                           ? 'text-amber-400'
+                          : effectiveStatus === 'acquiring'
+                          ? 'text-sky-400 animate-pulse'
+                          : effectiveStatus === 'inactive'
+                          ? 'text-amber-300/70'
                           : effectiveStatus === 'denied'
                           ? 'text-red-400'
                           : effectiveStatus === 'unsupported'
@@ -492,6 +496,16 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
                         {effectiveStatus === 'active' && (
                           <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-950/70 text-emerald-400 border border-emerald-800/60 font-mono">
                             Active
+                          </span>
+                        )}
+                        {effectiveStatus === 'acquiring' && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-sky-950/70 text-sky-400 border border-sky-800/60 font-mono">
+                            Acquiring
+                          </span>
+                        )}
+                        {effectiveStatus === 'inactive' && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-950/70 text-amber-300 border border-amber-800/60 font-mono">
+                            Inactive
                           </span>
                         )}
                         {effectiveStatus === 'denied' && (
@@ -513,6 +527,10 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
                       <div className="text-[11px] text-slate-400">
                         {effectiveStatus === 'active'
                           ? 'Screen Wake Lock active'
+                          : effectiveStatus === 'acquiring'
+                          ? 'Acquiring Screen Wake Lock…'
+                          : effectiveStatus === 'inactive'
+                          ? 'Screen Wake Lock inactive (system released)'
                           : effectiveStatus === 'denied'
                           ? 'Permission denied: Screen Wake Lock could not be acquired'
                           : effectiveStatus === 'unsupported'

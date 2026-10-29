@@ -441,7 +441,7 @@ export const StageView: React.FC<StageViewProps> = ({
       } else if (!controller.isSupported) {
         setWakeLockStatus('unsupported')
       } else {
-        setWakeLockStatus('denied')
+        setWakeLockStatus('inactive')
       }
     })
 

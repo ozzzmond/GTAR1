@@ -201,7 +201,7 @@ export interface WakeLockSentinelLike {
   addEventListener?(type: string, listener: () => void): void
 }
 
-export type WakeLockStatus = 'active' | 'denied' | 'unsupported' | 'disabled'
+export type WakeLockStatus = 'active' | 'denied' | 'unsupported' | 'disabled' | 'acquiring' | 'inactive'
 
 export interface WakeLockController {
   acquire(): Promise<boolean>
@@ -224,15 +224,19 @@ export function createWakeLockController(): WakeLockController {
   let denied = false
   const listeners: Array<(isAcquired: boolean, status?: WakeLockStatus) => void> = []
 
+  let isAcquiring = false
+  let isSystemReleased = false
   let pending: Promise<boolean> | null = null
-  let releaseGeneration = 0
+  let activeGeneration = 0
 
   function getCurrentStatus(): WakeLockStatus {
     if (!enabled) return 'disabled'
     if (!supported) return 'unsupported'
     if (sentinel && !sentinel.released) return 'active'
+    if (isAcquiring) return 'acquiring'
     if (denied) return 'denied'
-    return 'disabled'
+    if (isSystemReleased) return 'inactive'
+    return 'inactive'
   }
 
   function dispatchChange() {
@@ -248,34 +252,51 @@ export function createWakeLockController(): WakeLockController {
   function acquireInternal(): Promise<boolean> {
     if (!supported) {
       denied = false
+      isAcquiring = false
+      isSystemReleased = false
       dispatchChange()
       return Promise.resolve(false)
     }
     if (destroyed || !enabled) {
       denied = false
+      isAcquiring = false
       return Promise.resolve(false)
     }
     if (sentinel && !sentinel.released) {
       denied = false
+      isAcquiring = false
+      isSystemReleased = false
       return Promise.resolve(true)
     }
     if (pending) return pending
-    const generation = releaseGeneration
+
+    activeGeneration++
+    const generation = activeGeneration
+    isAcquiring = true
+    denied = false
+    isSystemReleased = false
+    dispatchChange()
+
     pending = (async () => {
       try {
         const acquired = await (navigator as any).wakeLock.request('screen')
-        if (destroyed || !enabled || generation !== releaseGeneration) {
-          await acquired.release()
-          denied = false
-          dispatchChange()
+        if (destroyed || !enabled || generation !== activeGeneration) {
+          try {
+            await acquired.release()
+          } catch {}
           return false
         } else {
           sentinel = acquired
           denied = false
+          isAcquiring = false
+          isSystemReleased = false
           if (typeof acquired.addEventListener === 'function') {
             acquired.addEventListener('release', () => {
               if (sentinel === acquired) {
                 sentinel = null
+                if (enabled && !destroyed) {
+                  isSystemReleased = true
+                }
                 dispatchChange()
               }
             })
@@ -285,20 +306,30 @@ export function createWakeLockController(): WakeLockController {
         }
       } catch {
         // Page hidden, battery saver, or permission denied
-        sentinel = null
-        denied = true
-        dispatchChange()
+        if (generation === activeGeneration) {
+          sentinel = null
+          denied = true
+          isAcquiring = false
+          isSystemReleased = false
+          dispatchChange()
+        }
         return false
       } finally {
-        pending = null
+        if (generation === activeGeneration) {
+          isAcquiring = false
+          pending = null
+        }
       }
     })()
     return pending
   }
 
   async function releaseInternal(): Promise<void> {
-    releaseGeneration++
+    activeGeneration++
     denied = false
+    isAcquiring = false
+    isSystemReleased = false
+    pending = null
     if (sentinel && !sentinel.released) {
       try {
         await sentinel.release()

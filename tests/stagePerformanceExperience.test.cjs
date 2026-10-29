@@ -963,6 +963,122 @@ test('M3: WAKE_LOCK_FEEDBACK - distinct Active, Denied, Unsupported, and Disable
   await activeCtrl.release()
   assert.equal(activeCtrl.status, 'disabled')
 
+  // Case D: Acquiring (pending request)
+  let resolvePendingRequest
+  mockReleased = false
+  Object.defineProperty(global, 'navigator', {
+    value: {
+      wakeLock: {
+        request: () => new Promise((resolve) => {
+          resolvePendingRequest = resolve
+        }),
+      },
+    },
+    configurable: true,
+  })
+
+  const acquiringCtrl = createWakeLockController()
+  const acquirePromise = acquiringCtrl.acquire()
+  assert.equal(acquiringCtrl.status, 'acquiring', 'Pending request must reflect acquiring status')
+  resolvePendingRequest(mockSentinel)
+  await acquirePromise
+  assert.equal(acquiringCtrl.status, 'active')
+  await acquiringCtrl.release()
+  assert.equal(acquiringCtrl.status, 'disabled')
+
+  // Case E: Inactive (system released while enabled)
+  let releaseCallback
+  const systemSentinel = {
+    released: false,
+    release: async () => {},
+    addEventListener: (event, cb) => {
+      if (event === 'release') releaseCallback = cb
+    },
+  }
+  Object.defineProperty(global, 'navigator', {
+    value: {
+      wakeLock: {
+        request: async () => systemSentinel,
+      },
+    },
+    configurable: true,
+  })
+
+  const systemCtrl = createWakeLockController()
+  await systemCtrl.acquire()
+  assert.equal(systemCtrl.status, 'active')
+  systemSentinel.released = true
+  if (releaseCallback) releaseCallback()
+  assert.equal(systemCtrl.status, 'inactive', 'System-released lock while user preference enabled must be inactive')
+  await systemCtrl.release()
+  assert.equal(systemCtrl.status, 'disabled', 'User turning off preference must become disabled')
+
+  // Case F: Pending request race (ON -> OFF -> ON)
+  let resolveReq1
+  let resolveReq2
+  let callCount = 0
+
+  Object.defineProperty(global, 'navigator', {
+    value: {
+      wakeLock: {
+        request: () => {
+          callCount++
+          if (callCount === 1) {
+            return new Promise((resolve) => {
+              resolveReq1 = resolve
+            })
+          }
+          return new Promise((resolve) => {
+            resolveReq2 = resolve
+          })
+        },
+      },
+    },
+    configurable: true,
+  })
+
+  const raceCtrl = createWakeLockController()
+  const p1 = raceCtrl.acquire() // Generation 1 (ON)
+  assert.equal(raceCtrl.status, 'acquiring')
+
+  await raceCtrl.release() // Generation 2 (OFF)
+  assert.equal(raceCtrl.status, 'disabled')
+
+  const p2 = raceCtrl.acquire() // Generation 3 (ON)
+  assert.equal(raceCtrl.status, 'acquiring')
+  assert.equal(callCount, 2, 'Superseded request must trigger new generation acquire request')
+
+  // Now resolve first stale request
+  let req1Released = false
+  const sentinel1 = {
+    released: false,
+    release: async () => {
+      req1Released = true
+    },
+  }
+  resolveReq1(sentinel1)
+  const res1 = await p1
+  assert.equal(res1, false, 'Stale request must resolve false and not take ownership')
+  assert.equal(req1Released, true, 'Stale acquired sentinel must be immediately released')
+  assert.equal(raceCtrl.status, 'acquiring', 'Stale completion must not overwrite current acquiring status')
+
+  // Resolve second active request
+  let req2Released = false
+  const sentinel2 = {
+    released: false,
+    release: async () => {
+      req2Released = true
+    },
+  }
+  resolveReq2(sentinel2)
+  const res2 = await p2
+  assert.equal(res2, true, 'Active generation request must acquire ownership')
+  assert.equal(raceCtrl.status, 'active', 'Active generation must set status to active')
+  assert.equal(raceCtrl.isAcquired, true)
+
+  await raceCtrl.cleanup()
+  assert.equal(req2Released, true, 'Cleanup must release active lock')
+
   // Restore navigator
   Object.defineProperty(global, 'navigator', {
     value: origNav,
