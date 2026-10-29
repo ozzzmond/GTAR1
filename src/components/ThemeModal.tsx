@@ -131,6 +131,58 @@ function headerDefaults(colors: Partial<CustomThemeColors>) {
   }
 }
 
+function surfaceDefaults(colors: Partial<CustomThemeColors>) {
+  const bg = colors.bgHex || DEFAULT_CUSTOM_COLORS.bgHex
+  const hex = bg.replace('#', '')
+  const r = parseInt(hex.substring(0, 2), 16) || 0
+  const g = parseInt(hex.substring(2, 4), 16) || 0
+  const b = parseInt(hex.substring(4, 6), 16) || 0
+  const light = (r * 299 + g * 587 + b * 114) / 1000 > 150
+
+  if (!light) {
+    return {
+      toolbarBg: colors.toolbarBg || DEFAULT_CUSTOM_COLORS.toolbarBg!,
+      filterBarBg: colors.filterBarBg || DEFAULT_CUSTOM_COLORS.filterBarBg!,
+      searchBg: colors.searchBg || DEFAULT_CUSTOM_COLORS.searchBg!,
+      searchBorder: colors.searchBorder || DEFAULT_CUSTOM_COLORS.searchBorder!,
+      iconColor: colors.iconColor || DEFAULT_CUSTOM_COLORS.iconColor!,
+      setlistCardBg: colors.setlistCardBg || DEFAULT_CUSTOM_COLORS.setlistCardBg!,
+      songCardBg: colors.songCardBg || DEFAULT_CUSTOM_COLORS.songCardBg!,
+      cardBorder: colors.cardBorder || DEFAULT_CUSTOM_COLORS.cardBorder!,
+      selectedCardBg: colors.selectedCardBg || DEFAULT_CUSTOM_COLORS.selectedCardBg!,
+      selectedCardBorder: colors.selectedCardBorder || DEFAULT_CUSTOM_COLORS.selectedCardBorder!,
+      buttonBg: colors.buttonBg || DEFAULT_CUSTOM_COLORS.buttonBg!,
+      buttonText: colors.buttonText || DEFAULT_CUSTOM_COLORS.buttonText!,
+      inputBg: colors.inputBg || DEFAULT_CUSTOM_COLORS.inputBg!,
+      inputText: colors.inputText || DEFAULT_CUSTOM_COLORS.inputText!,
+      inputBorder: colors.inputBorder || DEFAULT_CUSTOM_COLORS.inputBorder!,
+      accentColor: colors.accentColor || DEFAULT_CUSTOM_COLORS.accentColor!,
+    }
+  }
+
+  const cardSurface = colors.songCardBg || colors.setlistCardBg || '#FFFFFF'
+  const border = colors.cardBorder || '#' + Math.max(0, r - 35).toString(16).padStart(2, '0') + Math.max(0, g - 35).toString(16).padStart(2, '0') + Math.max(0, b - 35).toString(16).padStart(2, '0')
+
+  return {
+    toolbarBg: colors.toolbarBg || bg,
+    filterBarBg: colors.filterBarBg || cardSurface,
+    searchBg: colors.searchBg || cardSurface,
+    searchBorder: colors.searchBorder || border,
+    iconColor: colors.iconColor || '#64748B',
+    setlistCardBg: colors.setlistCardBg || cardSurface,
+    songCardBg: colors.songCardBg || cardSurface,
+    cardBorder: border,
+    selectedCardBg: colors.selectedCardBg || '#EEF7F6',
+    selectedCardBorder: colors.selectedCardBorder || '#2AA198',
+    buttonBg: colors.buttonBg || '#' + Math.max(0, r - 15).toString(16).padStart(2, '0') + Math.max(0, g - 15).toString(16).padStart(2, '0') + Math.max(0, b - 15).toString(16).padStart(2, '0'),
+    buttonText: colors.buttonText || '#111827',
+    inputBg: colors.inputBg || '#FFFFFF',
+    inputText: colors.inputText || '#111827',
+    inputBorder: colors.inputBorder || border,
+    accentColor: colors.accentColor || '#0284C7',
+  }
+}
+
 export function normalizeCustomThemeColors(
   colors?: Partial<CustomThemeColors> | null
 ): CustomThemeColors {
@@ -140,6 +192,7 @@ export function normalizeCustomThemeColors(
     ...colors,
     ...typographyDefaults(colors),
     ...headerDefaults(colors),
+    ...surfaceDefaults(colors),
     actionColor: colors.actionColor || colors.uiLinkText || '#2AA198',
     selectionColor: colors.selectionColor || colors.selectedCardBorder || '#2AA198',
     sectionIconColor: colors.sectionIconColor || colors.iconColor || '#2AA198',

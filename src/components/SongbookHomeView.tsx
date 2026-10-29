@@ -359,36 +359,36 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
   }
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 bg-slate-900 overflow-y-auto">
+    <div data-explorer-canvas="true" className="explorer-canvas flex-1 flex flex-col min-w-0 bg-app-base overflow-y-auto">
       {/* ========================================================================= */}
       {/* 1. Breadcrumbs & Scope Bar                                               */}
       {/* ========================================================================= */}
-      <div className="bg-slate-900/90 border-b border-slate-800 px-4 py-2 flex flex-wrap items-center justify-between gap-2">
-        <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-xs text-slate-400">
+      <div className="ui-filter-bar bg-app-filter border-b border-app-border px-4 py-2 flex flex-wrap items-center justify-between gap-2">
+        <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-xs text-app-muted">
           {breadcrumbItems.map((item, idx) => (
             <React.Fragment key={idx}>
-              {idx > 0 && <ChevronRight className="w-3.5 h-3.5 text-slate-600 shrink-0" />}
+              {idx > 0 && <ChevronRight className="w-3.5 h-3.5 text-app-muted/70 shrink-0" />}
               {item.target ? (
                 <button
                   type="button"
                   onClick={() => onSelectNavTarget(item.target!)}
-                  className="hover:text-sky-300 font-medium transition-colors"
+                  className="text-app-muted hover:text-app-link font-medium transition-colors"
                 >
                   {item.label}
                 </button>
               ) : (
-                <span className="text-white font-semibold">{item.label}</span>
+                <span className="ui-primary-text text-app-heading font-semibold">{item.label}</span>
               )}
             </React.Fragment>
           ))}
           {searchQuery && (
-            <span className="ml-2 px-2 py-0.5 rounded-full bg-sky-950/70 border border-sky-800 text-sky-300 text-[11px] flex items-center gap-1">
+            <span className="ml-2 px-2 py-0.5 rounded-full bg-app-surface border border-app-border text-app-accent text-[11px] flex items-center gap-1">
               <span>Filter: "{searchQuery}"</span>
               <button
                 type="button"
                 onClick={onClearSearch}
                 aria-label="Clear active filter"
-                className="hover:text-white"
+                className="hover:text-app-heading"
               >
                 <X className="w-3 h-3" />
               </button>
@@ -405,7 +405,7 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
                 aria-label="Filter songs by metadata"
                 value={metadataFilter}
                 onChange={(e) => setMetadataFilter(e.target.value as MetadataFilter)}
-                className="bg-slate-800 border border-slate-700 text-slate-300 text-xs rounded-xl px-2.5 py-1 outline-none focus:border-sky-500"
+                className="bg-app-surface border border-app-border text-app-text text-xs rounded-xl px-2.5 py-1 outline-none"
               >
                 <option value="ALL">All Metadata</option>
                 <option value="HAS_KEY">Has Musical Key</option>
@@ -413,12 +413,12 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
               </select>
 
               {/* Sort Switcher */}
-              <div className="flex items-center bg-slate-800 border border-slate-700 rounded-xl p-0.5 text-xs">
+              <div className="flex items-center bg-app-surface border border-app-border rounded-xl p-0.5 text-xs">
                 <button
                   type="button"
                   onClick={() => handleSortChange('title')}
                   className={`px-2.5 py-0.5 rounded-lg font-medium transition-colors ${
-                    sortField === 'title' ? 'bg-sky-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                    sortField === 'title' ? 'bg-app-action text-app-on-action' : 'text-app-muted hover:text-app-text'
                   }`}
                 >
                   Title {sortField === 'title' && (sortDirection === 'asc' ? '↑' : '↓')}
@@ -427,7 +427,7 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
                   type="button"
                   onClick={() => handleSortChange('artist')}
                   className={`px-2.5 py-0.5 rounded-lg font-medium transition-colors ${
-                    sortField === 'artist' ? 'bg-sky-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                    sortField === 'artist' ? 'bg-app-action text-app-on-action' : 'text-app-muted hover:text-app-text'
                   }`}
                 >
                   Artist {sortField === 'artist' && (sortDirection === 'asc' ? '↑' : '↓')}
@@ -436,7 +436,7 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
                   type="button"
                   onClick={() => handleSortChange('date')}
                   className={`px-2.5 py-0.5 rounded-lg font-medium transition-colors ${
-                    sortField === 'date' ? 'bg-sky-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                    sortField === 'date' ? 'bg-app-action text-app-on-action' : 'text-app-muted hover:text-app-text'
                   }`}
                 >
                   Date {sortField === 'date' && (sortDirection === 'asc' ? '↑' : '↓')}
@@ -453,7 +453,7 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
                 className={`px-2.5 py-1 rounded-xl text-xs font-semibold border transition-colors flex items-center gap-1.5 ${
                   isSelectionMode
                     ? 'bg-amber-600/20 border-amber-500/60 text-amber-300'
-                    : 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white'
+                    : 'ui-button bg-app-button border-app-border text-app-button-text hover:brightness-110'
                 }`}
               >
                 {isSelectionMode ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
@@ -466,7 +466,7 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
             <button
               type="button"
               onClick={() => onOpenSetlistManager()}
-              className="px-3 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-xs text-slate-200 font-semibold flex items-center gap-1.5 transition-colors"
+              className="ui-button px-3 py-1 bg-app-button hover:brightness-110 border border-app-border rounded-xl text-xs text-app-button-text font-semibold flex items-center gap-1.5 transition-colors"
             >
               <Layers className="w-3.5 h-3.5 text-purple-400" />
               <span>Manage Setlists</span>
@@ -477,7 +477,7 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
 
       {/* Multi-selection Bar */}
       {isSelectionMode && (
-        <div className="bg-amber-950/30 border-b border-amber-800/40 px-4 py-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div className="bg-app-surface/90 border-b border-app-border px-4 py-2 flex flex-wrap items-center justify-between gap-2 text-xs text-app-text">
           <div className="flex items-center gap-3">
             <span className="font-semibold text-amber-200">
               {selectedSongIds.size} {selectedSongIds.size === 1 ? 'song' : 'songs'} selected
@@ -503,7 +503,7 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
               type="button"
               disabled={selectedSongIds.size === 0}
               onClick={() => setShowAddToSetlistModal(true)}
-              className="px-3 py-1 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-semibold flex items-center gap-1 shadow-sm transition-colors"
+              className="px-3 py-1 rounded-xl bg-app-action hover:brightness-110 disabled:opacity-50 text-app-on-action font-semibold flex items-center gap-1 shadow-sm transition-colors"
             >
               <ListPlus className="w-3.5 h-3.5" />
               <span>Add to Setlist</span>
@@ -528,13 +528,13 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
         {/* CASE A: Single Setlist View */}
         {currentNavTarget.type === 'SETLIST' && activeSetlist && (
           <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-slate-800/70 border border-slate-700/80 rounded-2xl">
+            <div className="ui-setlist-card flex flex-wrap items-center justify-between gap-3 p-4 bg-app-setlist border border-app-border rounded-2xl">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-purple-600/20 text-purple-400 flex items-center justify-center">
                   <ListMusic className="w-6 h-6" />
                 </div>
                 <div>
-                  <h1 className="text-lg font-bold text-white">{activeSetlist.name}</h1>
+                  <h1 className="ui-primary-text text-lg font-bold text-app-heading">{activeSetlist.name}</h1>
                   <p className="text-xs text-slate-400">
                     {activeSetlist.songs?.length || 0} performance entries • Canonical reference links preserved
                   </p>
@@ -584,22 +584,22 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
                     <div
                       key={ref.entryId || `${ref.id}_${idx}`}
                       onClick={() => onPlaySetlistSong(ref.id, transpose)}
-                      className="group flex items-center justify-between p-3 rounded-xl bg-slate-800/60 hover:bg-slate-800 border border-slate-700/60 cursor-pointer transition-all shadow-sm"
+                      className="ui-song-card group flex items-center justify-between p-3 rounded-xl bg-app-song hover:brightness-95 border border-app-border cursor-pointer transition-all shadow-sm"
                     >
                       <div className="flex items-center gap-3 min-w-0">
-                        <span className="w-6 text-center text-xs font-bold text-slate-500 group-hover:text-sky-400">
+                        <span className="w-6 text-center text-xs font-bold text-app-muted group-hover:text-app-link">
                           {idx + 1}
                         </span>
                         <div>
-                          <div className="text-sm font-bold text-white group-hover:text-sky-300 transition-colors truncate">
+                          <div className="ui-primary-text text-sm font-bold text-app-heading group-hover:text-app-link transition-colors truncate">
                             {title}
                           </div>
-                          <div className="text-xs text-slate-400 truncate">{artist}</div>
+                          <div className="ui-secondary-text text-xs text-app-muted truncate">{artist}</div>
                         </div>
                       </div>
 
                       <div className="flex items-center gap-3">
-                        <span className="px-2 py-0.5 rounded-md bg-slate-900 border border-slate-700 text-sky-300 text-xs font-mono font-bold">
+                        <span className="px-2 py-0.5 rounded-md bg-app-base border border-app-border text-app-accent text-xs font-mono font-bold">
                           {key}
                           {transpose !== 0 && (
                             <span className="text-[10px] text-purple-400 ml-1">
@@ -646,7 +646,7 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
         {isSetlistContext && currentNavTarget.type !== 'SETLIST' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-white flex items-center gap-2">
+              <h2 className="ui-primary-text text-base font-bold text-app-heading flex items-center gap-2">
                 <ListMusic className="w-4 h-4 text-purple-400" />
                 <span>
                   {currentNavTarget.type === 'FOLDER'
@@ -675,17 +675,17 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
                   <div
                     key={sl.id}
                     onClick={() => onSelectNavTarget({ type: 'SETLIST', setlistId: sl.id })}
-                    className="group p-4 rounded-2xl bg-slate-800/70 hover:bg-slate-800 border border-slate-700/70 hover:border-sky-500/50 cursor-pointer transition-all shadow-sm flex flex-col justify-between"
+                    className="ui-setlist-card group p-4 rounded-2xl bg-app-setlist hover:brightness-95 border border-app-border cursor-pointer transition-all shadow-sm flex flex-col justify-between"
                   >
                     <div>
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex items-center gap-2">
                           <ListMusic className="w-4 h-4 text-purple-400" />
-                          <h3 className="text-sm font-bold text-white group-hover:text-sky-300 transition-colors">
+                          <h3 className="ui-primary-text text-sm font-bold text-app-heading group-hover:text-app-link transition-colors">
                             {sl.name}
                           </h3>
                         </div>
-                        <span className="text-[10px] text-slate-400 px-2 py-0.5 rounded-full bg-slate-900 border border-slate-700">
+                        <span className="text-[10px] text-app-muted px-2 py-0.5 rounded-full bg-app-base border border-app-border">
                           {sl.songs?.length || 0} songs
                         </span>
                       </div>
@@ -698,7 +698,7 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
                       )}
                     </div>
 
-                    <div className="mt-4 pt-3 border-t border-slate-750 flex items-center justify-between text-xs text-slate-400">
+                    <div className="mt-4 pt-3 border-t border-app-border flex items-center justify-between text-xs text-app-muted">
                       <span>Updated {new Date(sl.updatedAt || sl.createdAt).toLocaleDateString()}</span>
                       <button
                         type="button"
@@ -706,7 +706,7 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
                           e.stopPropagation()
                           onOpenSetlistManager(sl.id)
                         }}
-                        className="text-sky-400 hover:text-sky-300 font-semibold"
+                        className="text-app-link hover:underline font-semibold"
                       >
                         Manage →
                       </button>
@@ -735,7 +735,7 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
               <button
                 type="button"
                 onClick={onNewSong}
-                className="px-3 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-semibold text-xs transition-colors flex items-center gap-1.5 shadow-sm"
+                className="px-3 py-1.5 rounded-xl bg-app-action hover:brightness-110 text-app-on-action font-semibold text-xs transition-colors flex items-center gap-1.5 shadow-sm"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add Song</span>
@@ -789,10 +789,10 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
                           onSelectSong(song)
                         }
                       }}
-                      className={`group relative p-3.5 rounded-2xl bg-slate-800/70 hover:bg-slate-800 border transition-all cursor-pointer flex flex-col justify-between shadow-sm ${
+                      className={`ui-song-card group relative p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between shadow-sm ${
                         isSelected
-                          ? 'border-amber-500 bg-amber-950/20'
-                          : 'border-slate-700/70 hover:border-sky-500/50'
+                          ? 'ui-selection-card bg-app-selected border-app-selected-border'
+                          : 'bg-app-song hover:brightness-95 border-app-border'
                       }`}
                     >
                       <div>
@@ -821,10 +821,10 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
                             )}
 
                             <div className="min-w-0 flex-1">
-                              <h3 className="text-sm font-bold text-white group-hover:text-sky-300 transition-colors truncate">
+                              <h3 className="ui-primary-text text-sm font-bold text-app-heading group-hover:text-app-link transition-colors truncate">
                                 {song.title}
                               </h3>
-                              <p className="text-xs text-slate-400 truncate">
+                              <p className="ui-secondary-text text-xs text-app-muted truncate">
                                 {song.artist || 'Unknown Artist'}
                               </p>
                             </div>
@@ -849,7 +849,7 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
                             {isMenuOpen && (
                               <div
                                 ref={menuRef}
-                                className="absolute right-0 mt-1 w-44 bg-slate-900 border border-slate-700 rounded-xl p-1.5 shadow-2xl z-20 text-xs"
+                                className="absolute right-0 mt-1 w-44 bg-app-surface border border-app-border rounded-xl p-1.5 shadow-2xl z-20 text-xs text-app-text"
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 {onEnterStageSong && (
@@ -943,10 +943,10 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
                       </div>
 
                       {/* Card Footer: Metadata Badges */}
-                      <div className="mt-3 pt-2.5 border-t border-slate-750 flex items-center justify-between text-xs text-slate-400">
+                      <div className="mt-3 pt-2.5 border-t border-app-border flex items-center justify-between text-xs text-app-muted">
                         <div className="flex items-center gap-1.5">
                           {song.key && (
-                            <span className="px-1.5 py-0.2 rounded bg-slate-900 border border-slate-700 text-sky-300 font-mono font-bold text-[11px]">
+                            <span className="px-1.5 py-0.2 rounded bg-app-base border border-app-border text-app-accent font-mono font-bold text-[11px]">
                               {song.key}
                             </span>
                           )}
@@ -999,13 +999,13 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
           onClick={() => setShowAddToSetlistModal(false)}
         >
           <div
-            className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-5 text-slate-100 shadow-2xl space-y-4"
+            className="bg-app-surface border border-app-border rounded-2xl w-full max-w-md p-5 text-app-text shadow-2xl space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center gap-2">
                 <ListPlus className="w-5 h-5 text-purple-400" />
-                <h3 id="add-to-setlist-title" className="text-base font-bold text-white">
+                <h3 id="add-to-setlist-title" className="ui-primary-text text-base font-bold text-app-heading">
                   Add to Setlist
                 </h3>
               </div>
@@ -1030,7 +1030,7 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
                 <select
                   value={targetSetlistId}
                   onChange={(e) => setTargetSetlistId(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-xl px-3 py-2 outline-none focus:border-sky-500"
+                  className="w-full bg-app-base border border-app-border text-app-text text-xs rounded-xl px-3 py-2 outline-none"
                 >
                   <option value="">-- Choose Setlist --</option>
                   <option value="__NEW__">+ Create Brand New Setlist...</option>
@@ -1062,7 +1062,7 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
               <button
                 type="button"
                 onClick={() => setShowAddToSetlistModal(false)}
-                className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold"
+                className="ui-button px-3.5 py-1.5 rounded-xl bg-app-button hover:brightness-110 text-app-button-text text-xs font-semibold border border-app-border"
               >
                 Cancel
               </button>
@@ -1070,7 +1070,7 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
                 type="button"
                 disabled={!targetSetlistId || (targetSetlistId === '__NEW__' && !newSetlistNameInput.trim())}
                 onClick={handleConfirmAddToSetlist}
-                className="px-4 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-xs font-semibold shadow-sm transition-colors"
+                className="px-4 py-1.5 rounded-xl bg-app-action hover:brightness-110 disabled:opacity-50 text-app-on-action text-xs font-semibold shadow-sm transition-colors"
               >
                 Add Entries
               </button>

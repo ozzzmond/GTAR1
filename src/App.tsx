@@ -703,7 +703,7 @@ export const App: React.FC = () => {
 
       <div className="flex-1 flex overflow-hidden">
         {/* Desktop Sidebar: Music Explorer Navigation */}
-        <aside className="hidden md:block w-64 lg:w-72 shrink-0">
+        <aside className="hidden md:block w-64 lg:w-72 shrink-0 bg-app-toolbar border-r border-app-border">
           <ExplorerNavigation
             currentSelection={currentNavTarget}
             onSelectTarget={handleSelectNavTarget}
@@ -733,7 +733,7 @@ export const App: React.FC = () => {
               onClick={() => setIsMobileDrawerOpen(false)}
             />
             {/* Drawer Content */}
-            <div className="relative w-72 max-w-[80vw] h-full bg-slate-900 z-10 shadow-2xl flex flex-col">
+            <div className="relative w-72 max-w-[80vw] h-full bg-app-toolbar border-r border-app-border z-10 shadow-2xl flex flex-col">
               <ExplorerNavigation
                 currentSelection={currentNavTarget}
                 onSelectTarget={handleSelectNavTarget}
@@ -757,7 +757,7 @@ export const App: React.FC = () => {
           ref={explorerMainRef}
           onScroll={handleExplorerScroll}
           data-explorer-canvas="true"
-          className="flex-1 flex flex-col min-w-0 overflow-y-auto"
+          className="flex-1 flex flex-col min-w-0 overflow-y-auto bg-app-base"
         >
           {activeTab === 'SONGS' && (
             <SongbookHomeView

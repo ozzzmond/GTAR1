@@ -3,7 +3,7 @@ import { Gauge, Sliders, Volume2, X } from 'lucide-react'
 import { MetronomeEngine } from '../utils/metronome'
 import { GuitarReferenceTuner, GUITAR_STRINGS } from '../utils/guitarTuner'
 
-/** Local-only panels adapted from Legacy BandSyncModal; GTAR1 sheet conventions. */
+/** Local-only panels for metronome and guitar reference tuner; GTAR1 sheet conventions. */
 export function StageToolsModal({ onClose, initialBpm }: { onClose: () => void; initialBpm?: number }) {
   const [tab, setTab] = useState<'metronome' | 'tuner'>('metronome')
   const [metronome] = useState(() => {
