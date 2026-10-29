@@ -167,3 +167,38 @@ test('BACKUP_VALIDATION_ERRORS: invalid JSON or malformed input reports errors c
   assert.equal(nonObjectRes.isValid, false)
   assert.match(nonObjectRes.error, /must be a JSON object/)
 })
+
+test('THEME_AND_FONTS_BACKUP_INTEROP: preserves theme and overrides through backup export and import without breaking legacy compatibility', () => {
+  const payloadWithTheme = {
+    app: 'GTAR1',
+    schemaVersion: 1,
+    version: '0.1.0-dev',
+    exportedAt: new Date().toISOString(),
+    themeMode: 'crimson-stage',
+    factoryThemeOverrides: {
+      'crimson-stage': {
+        identity: { factoryId: 'crimson-stage', displayName: 'Rock Crimson' },
+        actionColor: '#E11D48',
+        selectionColor: '#E11D48',
+        sectionIconColor: '#FB7185',
+        uiPrimaryText: '#FEE2E2',
+        uiSecondaryText: '#FCA5A5',
+        uiSectionText: '#FEE2E2',
+        uiMutedText: '#E07A8A',
+        uiLinkText: '#FB7185',
+        bgHex: '#120d0f',
+        textHex: '#FEE2E2',
+        chordHex: '#E11D48',
+        sectionHex: '#FB7185',
+      },
+    },
+    songs: [],
+    setlists: [],
+  }
+
+  const parsed = parseBackupJson(JSON.stringify(payloadWithTheme))
+  assert.equal(parsed.isValid, true)
+  assert.ok(parsed.themeSettings)
+  assert.equal(parsed.themeSettings.themeMode, 'crimson-stage')
+  assert.equal(parsed.themeSettings.factoryThemeOverrides['crimson-stage'].identity.displayName, 'Rock Crimson')
+})

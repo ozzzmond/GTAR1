@@ -158,4 +158,7 @@ export interface GtarBackupPayload {
   songs: SongEntity[]
   setlists: WebSetlist[]
   folders?: SetlistFolder[]
+  themeMode?: string
+  customThemeColors?: Record<string, any>
+  factoryThemeOverrides?: Record<string, any>
 }

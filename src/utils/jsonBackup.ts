@@ -15,12 +15,14 @@ import { canonicalSongKey } from './musicalKey'
 import { detectSongKey } from './songParser'
 import { generateUUID } from './uuid'
 import { normalizeTags } from './tags'
+import { readBackupSettings, restoreBackupSettings, validateBackupSettings, type BackupSettings } from './backupSettings'
 
 export interface ParsedBackupResult {
   isValid: boolean
   songs: SongEntity[]
   setlists: WebSetlist[]
   folders: SetlistFolder[]
+  themeSettings?: BackupSettings
   error?: string
 }
 
@@ -29,11 +31,15 @@ export function createBackupPayload(
   setlists: WebSetlist[],
   folders: SetlistFolder[] = []
 ): GtarBackupPayload {
+  const settings = readBackupSettings()
   return {
     app: 'GTAR1',
     schemaVersion: 1,
     version: GTAR1_VERSION,
     exportedAt: new Date().toISOString(),
+    ...(settings.themeMode ? { themeMode: settings.themeMode } : {}),
+    ...(settings.customThemeColors ? { customThemeColors: settings.customThemeColors } : {}),
+    ...(settings.factoryThemeOverrides ? { factoryThemeOverrides: settings.factoryThemeOverrides } : {}),
     songs: songs.map((s) => ({
       ...s,
       key: s.key ? canonicalSongKey(s.key) : undefined,
@@ -188,10 +194,23 @@ export function parseBackupJson(jsonString: string): ParsedBackupResult {
   const setlists = rawSetlists.map(normalizeBackupSetlist)
   const folders = rawFolders.map(normalizeBackupFolder)
 
+  let themeSettings: BackupSettings | undefined
+  const settingsCandidate: Record<string, unknown> = {}
+  if ('themeMode' in parsed) settingsCandidate.themeMode = parsed.themeMode
+  if ('customThemeColors' in parsed) settingsCandidate.customThemeColors = parsed.customThemeColors
+  if ('factoryThemeOverrides' in parsed) settingsCandidate.factoryThemeOverrides = parsed.factoryThemeOverrides
+  if (Object.keys(settingsCandidate).length > 0) {
+    const errors = validateBackupSettings(settingsCandidate)
+    if (errors.length === 0) {
+      themeSettings = settingsCandidate as BackupSettings
+    }
+  }
+
   return {
     isValid: true,
     songs,
     setlists,
     folders,
+    ...(themeSettings ? { themeSettings } : {}),
   }
 }
