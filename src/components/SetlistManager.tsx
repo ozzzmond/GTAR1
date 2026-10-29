@@ -13,6 +13,7 @@ export interface SetlistManagerProps {
   onSaveFolder: (folder: SetlistFolder) => Promise<void>
   onDeleteFolder: (id: string) => Promise<void>
   onPlaySong: (songId: string, transposeOffset?: number) => void
+  onEnterStageSetlist?: (setlist: WebSetlist, startIndex?: number) => void
 }
 
 export const SetlistManager: React.FC<SetlistManagerProps> = ({
@@ -25,6 +26,7 @@ export const SetlistManager: React.FC<SetlistManagerProps> = ({
   onSaveFolder,
   onDeleteFolder,
   onPlaySong,
+  onEnterStageSetlist,
 }) => {
   const [selectedSetlistId, setSelectedSetlistId] = useState<string | null>(
     initialSelectedSetlistId || setlists[0]?.id || null
@@ -611,6 +613,16 @@ export const SetlistManager: React.FC<SetlistManagerProps> = ({
                     </select>
                   </div>
 
+                  {onEnterStageSetlist && currentSetlist.songs?.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => onEnterStageSetlist(currentSetlist, 0)}
+                      className="px-3 py-1.5 text-xs text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg font-bold transition-colors flex items-center gap-1.5 shadow-sm"
+                    >
+                      ▶ Play Setlist in Stage
+                    </button>
+                  )}
+
                   <button
                     onClick={handleDeleteSetlist}
                     className="px-3 py-1.5 text-xs text-red-300 hover:text-red-200 bg-red-950/40 hover:bg-red-950 border border-red-900/60 rounded-lg transition-colors"
@@ -755,6 +767,15 @@ export const SetlistManager: React.FC<SetlistManagerProps> = ({
                               className="px-2.5 py-1 text-xs bg-slate-800 hover:bg-sky-600 text-slate-300 hover:text-white rounded-lg transition-colors ml-2"
                             >
                               View
+                            </button>
+                          )}
+                          {!isMissing && onEnterStageSetlist && (
+                            <button
+                              onClick={() => onEnterStageSetlist(currentSetlist, index)}
+                              className="px-2.5 py-1 text-xs bg-emerald-700/80 hover:bg-emerald-600 text-white rounded-lg transition-colors ml-1 font-semibold"
+                              title="Play in Stage Performance"
+                            >
+                              Stage
                             </button>
                           )}
                           <button

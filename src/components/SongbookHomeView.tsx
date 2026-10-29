@@ -43,6 +43,8 @@ export interface SongbookHomeViewProps {
   onOpenSetlistManager: (setlistId?: string) => void
   searchQuery: string
   onClearSearch: () => void
+  onEnterStageSong?: (song: SongEntity) => void
+  onEnterStageSetlist?: (setlist: WebSetlist, startIndex?: number) => void
 }
 
 type SortField = 'title' | 'artist' | 'date'
@@ -67,6 +69,8 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
   onOpenSetlistManager,
   searchQuery,
   onClearSearch,
+  onEnterStageSong,
+  onEnterStageSetlist,
 }) => {
   // Sort and filter states
   const [sortField, setSortField] = useState<SortField>(() => {
@@ -537,6 +541,16 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                {onEnterStageSetlist && activeSetlist.songs?.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => onEnterStageSetlist(activeSetlist, 0)}
+                    className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    <span>Play in Stage</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => onOpenSetlistManager(activeSetlist.id)}
@@ -593,17 +607,31 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
                             </span>
                           )}
                         </span>
+                        {onEnterStageSetlist && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              onEnterStageSetlist(activeSetlist, idx)
+                            }}
+                            className="p-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
+                            title="Play in Stage"
+                            aria-label="Play in Stage"
+                          >
+                            <Play className="w-3.5 h-3.5 fill-current" />
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation()
                             onPlaySetlistSong(ref.id, transpose)
                           }}
-                          className="p-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white transition-colors"
+                          className="p-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors"
                           title="Open in Viewer"
                           aria-label="Open in Viewer"
                         >
-                          <Play className="w-3.5 h-3.5 fill-current" />
+                          <Music className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </div>
@@ -824,6 +852,19 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
                                 className="absolute right-0 mt-1 w-44 bg-slate-900 border border-slate-700 rounded-xl p-1.5 shadow-2xl z-20 text-xs"
                                 onClick={(e) => e.stopPropagation()}
                               >
+                                {onEnterStageSong && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveMenuSongId(null)
+                                      onEnterStageSong(song)
+                                    }}
+                                    className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-slate-800 text-emerald-300 flex items-center gap-2"
+                                  >
+                                    <Play className="w-3.5 h-3.5 fill-current" />
+                                    <span>Play in Stage</span>
+                                  </button>
+                                )}
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -832,7 +873,7 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
                                   }}
                                   className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-slate-800 text-slate-200 flex items-center gap-2"
                                 >
-                                  <Play className="w-3.5 h-3.5 text-sky-400" />
+                                  <Music className="w-3.5 h-3.5 text-sky-400" />
                                   <span>View Chart</span>
                                 </button>
                                 <button
@@ -916,9 +957,26 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
                           )}
                         </div>
 
-                        <span className="text-[10px] text-slate-500">
-                          {new Date(song.updatedAt || song.createdAt).toLocaleDateString()}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          {onEnterStageSong && !isSelectionMode && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                onEnterStageSong(song)
+                              }}
+                              title="Play in Stage"
+                              aria-label={`Play ${song.title} in Stage`}
+                              className="px-2 py-0.5 rounded-md bg-emerald-700/80 hover:bg-emerald-600 text-white font-semibold text-[11px] transition-colors flex items-center gap-1"
+                            >
+                              <Play className="w-2.5 h-2.5 fill-current" />
+                              <span>Stage</span>
+                            </button>
+                          )}
+                          <span className="text-[10px] text-slate-500">
+                            {new Date(song.updatedAt || song.createdAt).toLocaleDateString()}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   )

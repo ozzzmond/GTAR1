@@ -19,6 +19,7 @@ import { SongbookHomeView } from './components/SongbookHomeView'
 import { SongViewer } from './components/SongViewer'
 import { DesktopEditor } from './components/DesktopEditor'
 import { SetlistManager } from './components/SetlistManager'
+import { StageView, type StageQueueItem } from './components/StageView'
 import { BackupModal } from './components/BackupModal'
 import { LocalProfileModal } from './components/LocalProfileModal'
 import {
@@ -37,6 +38,13 @@ export const App: React.FC = () => {
   const [viewerTransposeOffset, setViewerTransposeOffset] = useState<number>(0)
   const [editingSong, setEditingSong] = useState<Partial<SongEntity> | null>(null)
   const [activeSetlistManagerId, setActiveSetlistManagerId] = useState<string | undefined>(undefined)
+
+  // Stage Performance Queue & Return Navigation State
+  const [stageQueue, setStageQueue] = useState<StageQueueItem[]>([])
+  const [stageQueueIndex, setStageQueueIndex] = useState<number>(0)
+  const [stageReturnTab, setStageReturnTab] = useState<'SONGS' | 'SETLISTS' | 'VIEWER'>('SONGS')
+  const [stageSetlistName, setStageSetlistName] = useState<string | undefined>(undefined)
+  const [stageActiveSetlistId, setStageActiveSetlistId] = useState<string | undefined>(undefined)
 
   // Navigation & Explorer State
   const [currentNavTarget, setCurrentNavTarget] = useState<ExplorerNavTarget>({
@@ -327,6 +335,91 @@ export const App: React.FC = () => {
     }
   }
 
+  // Stage Performance Handlers
+  const handleEnterStageSong = (song: SongEntity, transposeOffset?: number) => {
+    const offset = transposeOffset ?? song.transposeOffset ?? 0
+    setSelectedSong(song)
+    setViewerTransposeOffset(offset)
+    setStageReturnTab(activeTab === 'VIEWER' ? 'VIEWER' : 'SONGS')
+    setStageSetlistName(undefined)
+    setStageActiveSetlistId(undefined)
+
+    const q: StageQueueItem[] = songs.map((s) => ({
+      song: s,
+      transposeOffset: s.id === song.id ? offset : (s.transposeOffset || 0),
+    }))
+    const idx = songs.findIndex((s) => s.id === song.id)
+    setStageQueue(q.length > 0 ? q : [{ song, transposeOffset: offset }])
+    setStageQueueIndex(idx >= 0 ? idx : 0)
+    setActiveTab('STAGE')
+  }
+
+  const handleEnterStageSetlist = (setlist: WebSetlist, startIndex: number = 0) => {
+    setStageReturnTab(activeTab === 'SETLISTS' ? 'SETLISTS' : 'SONGS')
+    setStageSetlistName(setlist.name)
+    setStageActiveSetlistId(setlist.id)
+
+    const q: StageQueueItem[] = []
+    for (const ref of setlist.songs) {
+      const master = songs.find((s) => s.id === ref.id)
+      if (master) {
+        q.push({
+          song: master,
+          transposeOffset: ref.transposeOffset ?? master.transposeOffset ?? 0,
+          entryId: ref.entryId,
+        })
+      }
+    }
+
+    if (q.length > 0) {
+      setStageQueue(q)
+      const safeIndex = Math.max(0, Math.min(q.length - 1, startIndex))
+      setStageQueueIndex(safeIndex)
+      setSelectedSong(q[safeIndex].song)
+      setViewerTransposeOffset(q[safeIndex].transposeOffset)
+      setActiveTab('STAGE')
+    }
+  }
+
+  const handleExitStage = () => {
+    setActiveTab(stageReturnTab || 'SONGS')
+  }
+
+  const handleSelectStageQueueIndex = (index: number) => {
+    if (stageQueue[index]) {
+      setStageQueueIndex(index)
+      setSelectedSong(stageQueue[index].song)
+      setViewerTransposeOffset(stageQueue[index].transposeOffset)
+    }
+  }
+
+  const handleStageTransposeChange = (newOffset: number) => {
+    if (stageQueue[stageQueueIndex]) {
+      const currentItem = stageQueue[stageQueueIndex]
+      const nextQueue = [...stageQueue]
+      nextQueue[stageQueueIndex] = {
+        ...currentItem,
+        transposeOffset: newOffset,
+      }
+      setStageQueue(nextQueue)
+      setViewerTransposeOffset(newOffset)
+
+      // If in setlist mode and item has an entryId: persist per-occurrence setlist transpose
+      if (stageActiveSetlistId && currentItem.entryId) {
+        const sl = setlists.find((s) => s.id === stageActiveSetlistId)
+        if (sl) {
+          const updatedSongs = sl.songs.map((ref) =>
+            ref.entryId === currentItem.entryId
+              ? { ...ref, transposeOffset: newOffset }
+              : ref
+          )
+          const updatedSetlist = { ...sl, songs: updatedSongs }
+          handleSaveSetlist(updatedSetlist)
+        }
+      }
+    }
+  }
+
   const handleOpenSetlistManager = (setlistId?: string) => {
     setActiveSetlistManagerId(setlistId)
     setActiveTab('SETLISTS')
@@ -355,6 +448,21 @@ export const App: React.FC = () => {
           <p className="text-xs">{loadError}</p>
         </div>
       </div>
+    )
+  }
+
+  if (activeTab === 'STAGE' && stageQueue[stageQueueIndex]) {
+    return (
+      <StageView
+        song={stageQueue[stageQueueIndex].song}
+        transposeOffset={stageQueue[stageQueueIndex].transposeOffset}
+        onTransposeChange={handleStageTransposeChange}
+        onBack={handleExitStage}
+        queue={stageQueue}
+        currentQueueIndex={stageQueueIndex}
+        onSelectQueueIndex={handleSelectStageQueueIndex}
+        setlistName={stageSetlistName}
+      />
     )
   }
 
@@ -447,6 +555,8 @@ export const App: React.FC = () => {
               onOpenSetlistManager={handleOpenSetlistManager}
               searchQuery={searchQuery}
               onClearSearch={() => setSearchQuery('')}
+              onEnterStageSong={handleEnterStageSong}
+              onEnterStageSetlist={handleEnterStageSetlist}
             />
           )}
 
@@ -459,6 +569,7 @@ export const App: React.FC = () => {
               onEdit={handleEditSong}
               onBack={() => setActiveTab('SONGS')}
               onUpdateSong={handleUpdateSongEntity}
+              onEnterStage={handleEnterStageSong}
             />
           )}
 
@@ -508,6 +619,7 @@ export const App: React.FC = () => {
               onSaveFolder={handleSaveFolder}
               onDeleteFolder={handleDeleteFolder}
               onPlaySong={handlePlaySetlistSong}
+              onEnterStageSetlist={handleEnterStageSetlist}
             />
           )}
         </main>

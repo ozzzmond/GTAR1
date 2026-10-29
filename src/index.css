@@ -2,6 +2,21 @@
 
 :root {
   color-scheme: dark;
+  --custom-stage-bg: #020617;
+  --custom-stage-surface: #0f172a;
+  --custom-stage-border: #334155;
+  --custom-stage-text: #f8fafc;
+  --custom-stage-chord: #f59e0b;
+  --custom-stage-section: #a78bfa;
+  --custom-stage-tab: #38bdf8;
+
+  --color-app-base: var(--custom-stage-bg);
+  --color-app-surface: var(--custom-stage-surface);
+  --color-app-border: var(--custom-stage-border);
+  --color-app-text: var(--custom-stage-text);
+  --color-app-heading: #ffffff;
+  --color-app-accent: #38bdf8;
+  --color-app-muted: #94a3b8;
 }
 
 body {
@@ -11,6 +26,24 @@ body {
   color: #f8fafc;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+.text-app-text { color: var(--color-app-text, #f8fafc); }
+.text-app-heading { color: var(--color-app-heading, #ffffff); }
+.text-app-accent { color: var(--color-app-accent, #38bdf8); }
+.text-app-muted { color: var(--color-app-muted, #94a3b8); }
+.bg-app-base { background-color: var(--color-app-base, #020617); }
+.bg-app-surface { background-color: var(--color-app-surface, #0f172a); }
+.border-app-border { border-color: var(--color-app-border, #334155); }
+
+.stage-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+.stage-sans {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+.stage-serif {
+  font-family: Georgia, Cambria, "Times New Roman", Times, serif;
 }
 
 /* Custom dark scrollbar */

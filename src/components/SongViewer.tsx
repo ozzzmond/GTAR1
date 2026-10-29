@@ -4,6 +4,7 @@ import { parseGtarSong } from '../utils/songParser'
 import { SongLineRenderer } from './SongLineRenderer'
 import { KeyPickerModal } from './KeyPickerModal'
 import { transposeContext } from '../utils/songKeySemantics'
+import { Play } from 'lucide-react'
 import {
   NOTATION_STORAGE_KEY,
   getTrustworthySongKey,
@@ -15,9 +16,10 @@ export interface SongViewerProps {
   onEdit: (song: SongEntity) => void
   onBack: () => void
   onUpdateSong?: (updated: Partial<SongEntity>) => void
+  onEnterStage?: (song: SongEntity, transposeOffset: number) => void
 }
 
-export const SongViewer: React.FC<SongViewerProps> = ({ song, onEdit, onBack, onUpdateSong }) => {
+export const SongViewer: React.FC<SongViewerProps> = ({ song, onEdit, onBack, onUpdateSong, onEnterStage }) => {
   const [transposeOffset, setTransposeOffset] = useState<number>(song.transposeOffset || 0)
   const [fontSize, setFontSize] = useState<number>(18)
   const [isKeyPickerOpen, setIsKeyPickerOpen] = useState(false)
@@ -144,6 +146,18 @@ export const SongViewer: React.FC<SongViewerProps> = ({ song, onEdit, onBack, on
               A+
             </button>
           </div>
+
+          {onEnterStage && (
+            <button
+              type="button"
+              onClick={() => onEnterStage(song, transposeOffset)}
+              className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm transition-colors flex items-center gap-1.5 shadow-sm"
+              title="Enter Stage Performance Mode (Alt+1)"
+            >
+              <Play className="w-4 h-4 fill-current" />
+              <span>Stage</span>
+            </button>
+          )}
 
           <button
             onClick={() => onEdit(song)}

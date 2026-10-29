@@ -13,7 +13,7 @@ import {
   ListMusic,
 } from 'lucide-react'
 
-export type ActiveTab = 'SONGS' | 'SETLISTS' | 'VIEWER' | 'EDITOR'
+export type ActiveTab = 'SONGS' | 'SETLISTS' | 'VIEWER' | 'EDITOR' | 'STAGE'
 
 export interface HeaderProps {
   activeTab: ActiveTab

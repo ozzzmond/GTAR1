@@ -1,0 +1,271 @@
+/**
+ * stagePerformance.ts
+ *
+ * Cross-platform performance controllers for GTAR1 Stage View:
+ *   1. Fullscreen — safe feature-detection wrapper with iOS / iOS-PWA awareness.
+ *   2. Screen Wake Lock — centralized controller keeping screen awake during gigs,
+ *      handling visibility re-acquisition and clean release on unmount.
+ */
+
+type VendorDocument = Document & {
+  webkitFullscreenEnabled?: boolean
+  mozFullScreenEnabled?: boolean
+  msFullscreenEnabled?: boolean
+  webkitFullscreenElement?: Element
+  mozFullScreenElement?: Element
+  msFullscreenElement?: Element
+  webkitExitFullscreen?: () => void
+  mozCancelFullScreen?: () => void
+  msExitFullscreen?: () => void
+}
+
+type VendorElement = HTMLElement & {
+  webkitRequestFullscreen?: () => void
+  mozRequestFullScreen?: () => void
+  msRequestFullscreen?: () => void
+}
+
+/**
+ * Returns true when running on iOS device.
+ */
+export function isIosDevice(): boolean {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false
+
+  const ua = navigator.userAgent || ''
+  const platform = (navigator as unknown as { platform?: string }).platform || ''
+
+  if (/iPhone|iPad|iPod/i.test(ua)) return true
+  if (/iPhone|iPad|iPod/i.test(platform)) return true
+
+  const touchPoints = typeof navigator.maxTouchPoints === 'number' ? navigator.maxTouchPoints : 0
+  const hasTouch =
+    touchPoints > 0 ||
+    (typeof window !== 'undefined' && 'ontouchstart' in window) ||
+    (typeof document !== 'undefined' && 'ontouchend' in document)
+  if (/Macintosh|MacIntel/i.test(platform) && hasTouch) return true
+  if (/Macintosh/i.test(ua) && hasTouch) return true
+
+  if ('standalone' in navigator) return true
+
+  return false
+}
+
+/**
+ * Returns true when running as an installed standalone PWA.
+ */
+export function isStandalonePwa(): boolean {
+  if (typeof window === 'undefined') return false
+  if ((navigator as Navigator & { standalone?: boolean }).standalone === true) return true
+  try {
+    return window.matchMedia('(display-mode: standalone)').matches
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Returns true when native Fullscreen API is supported.
+ */
+export function isFullscreenApiSupported(): boolean {
+  if (typeof document === 'undefined') return false
+  return Boolean(
+    document.fullscreenEnabled ||
+      (document as VendorDocument).webkitFullscreenEnabled ||
+      (document as VendorDocument).mozFullScreenEnabled ||
+      (document as VendorDocument).msFullscreenEnabled
+  )
+}
+
+// ---------------------------------------------------------------------------
+// 1. Fullscreen Controller
+// ---------------------------------------------------------------------------
+
+export interface FullscreenController {
+  toggle(): void
+  readonly isSupported: boolean
+  onChange(callback: (isFullscreen: boolean) => void): () => void
+  cleanup(): void
+}
+
+export function createFullscreenController(): FullscreenController {
+  const supported = isFullscreenApiSupported()
+  const listeners: Array<(isFullscreen: boolean) => void> = []
+
+  const getCurrentState = (): boolean => {
+    if (typeof document === 'undefined') return false
+    return Boolean(
+      document.fullscreenElement ||
+        (document as VendorDocument).webkitFullscreenElement ||
+        (document as VendorDocument).mozFullScreenElement ||
+        (document as VendorDocument).msFullscreenElement
+    )
+  }
+
+  const dispatchChange = () => {
+    const isFs = getCurrentState()
+    listeners.forEach((cb) => {
+      try {
+        cb(isFs)
+      } catch {
+        // Guard listener failures
+      }
+    })
+  }
+
+  const EVENTS = ['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange', 'MSFullscreenChange']
+
+  if (supported && typeof document !== 'undefined') {
+    EVENTS.forEach((evt) => document.addEventListener(evt, dispatchChange))
+  }
+
+  return {
+    get isSupported() {
+      return supported
+    },
+
+    toggle() {
+      if (typeof document === 'undefined') return
+      if (!supported) return
+      try {
+        if (getCurrentState()) {
+          if (document.exitFullscreen) {
+            document.exitFullscreen().catch(() => {})
+          } else if ((document as VendorDocument).webkitExitFullscreen) {
+            ;(document as VendorDocument).webkitExitFullscreen?.()
+          } else if ((document as VendorDocument).mozCancelFullScreen) {
+            ;(document as VendorDocument).mozCancelFullScreen?.()
+          } else if ((document as VendorDocument).msExitFullscreen) {
+            ;(document as VendorDocument).msExitFullscreen?.()
+          }
+        } else {
+          const el = document.documentElement
+          if (el.requestFullscreen) {
+            el.requestFullscreen().catch(() => {})
+          } else if ((el as VendorElement).webkitRequestFullscreen) {
+            ;(el as VendorElement).webkitRequestFullscreen?.()
+          } else if ((el as VendorElement).mozRequestFullScreen) {
+            ;(el as VendorElement).mozRequestFullScreen?.()
+          } else if ((el as VendorElement).msRequestFullscreen) {
+            ;(el as VendorElement).msRequestFullscreen?.()
+          }
+        }
+      } catch {
+        // Ignore synchronous permission or gesture errors
+      }
+    },
+
+    onChange(callback) {
+      listeners.push(callback)
+      return () => {
+        const idx = listeners.indexOf(callback)
+        if (idx !== -1) listeners.splice(idx, 1)
+      }
+    },
+
+    cleanup() {
+      if (supported && typeof document !== 'undefined') {
+        EVENTS.forEach((evt) => document.removeEventListener(evt, dispatchChange))
+      }
+      listeners.length = 0
+    },
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 2. Screen Wake Lock Controller
+// ---------------------------------------------------------------------------
+
+export interface WakeLockSentinelLike {
+  released: boolean
+  release(): Promise<void>
+}
+
+export interface WakeLockController {
+  acquire(): Promise<void>
+  release(): Promise<void>
+  cleanup(): Promise<void>
+  readonly isSupported: boolean
+}
+
+export function createWakeLockController(): WakeLockController {
+  const supported = typeof navigator !== 'undefined' && 'wakeLock' in navigator
+
+  let sentinel: WakeLockSentinelLike | null = null
+  let visibilityHandler: (() => void) | null = null
+  let destroyed = false
+
+  let pending: Promise<void> | null = null
+  let releaseGeneration = 0
+
+  function acquireInternal(): Promise<void> {
+    if (!supported || destroyed || (sentinel && !sentinel.released)) return Promise.resolve()
+    if (pending) return pending
+    const generation = releaseGeneration
+    pending = (async () => {
+      try {
+        const acquired = await (navigator as any).wakeLock.request('screen')
+        if (destroyed || generation !== releaseGeneration) {
+          await acquired.release()
+        } else {
+          sentinel = acquired
+        }
+      } catch {
+        // Page hidden or permission denied
+      } finally {
+        pending = null
+      }
+    })()
+    return pending
+  }
+
+  async function releaseInternal(): Promise<void> {
+    releaseGeneration++
+    if (sentinel && !sentinel.released) {
+      try {
+        await sentinel.release()
+      } catch {
+        // Guard release
+      }
+    }
+    sentinel = null
+  }
+
+  function setupVisibilityListener() {
+    if (!supported || typeof document === 'undefined') return
+    visibilityHandler = () => {
+      if (document.visibilityState === 'visible' && !destroyed) {
+        acquireInternal()
+      }
+    }
+    document.addEventListener('visibilitychange', visibilityHandler)
+  }
+
+  function teardownVisibilityListener() {
+    if (visibilityHandler && typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', visibilityHandler)
+      visibilityHandler = null
+    }
+  }
+
+  setupVisibilityListener()
+
+  return {
+    get isSupported() {
+      return supported
+    },
+
+    async acquire() {
+      await acquireInternal()
+    },
+
+    async release() {
+      await releaseInternal()
+    },
+
+    async cleanup() {
+      destroyed = true
+      teardownVisibilityListener()
+      await releaseInternal()
+    },
+  }
+}
