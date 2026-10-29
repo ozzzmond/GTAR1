@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import type { SongEntity, WebSetlist, SetlistFolder, ActiveSongState } from './types/gtar'
 import {
   loadAllSongs,
@@ -46,6 +46,13 @@ export const App: React.FC = () => {
   const [stageSetlistName, setStageSetlistName] = useState<string | undefined>(undefined)
   const [stageActiveSetlistId, setStageActiveSetlistId] = useState<string | undefined>(undefined)
 
+  const isExitingStageRef = useRef<boolean>(false)
+
+  // Serialized persistence queue ref for setlist updates
+  const setlistsRef = useRef<WebSetlist[]>(setlists)
+  setlistsRef.current = setlists
+  const setlistSaveQueueRef = useRef<Promise<void>>(Promise.resolve())
+
   // Navigation & Explorer State
   const [currentNavTarget, setCurrentNavTarget] = useState<ExplorerNavTarget>({
     type: 'ALL_SONGS',
@@ -92,6 +99,21 @@ export const App: React.FC = () => {
       isMounted = false
     }
   }, [])
+
+  // Browser History & Popstate integration for Stage Performance
+  useEffect(() => {
+    const handlePopState = (e: PopStateEvent) => {
+      if (activeTab === 'STAGE') {
+        isExitingStageRef.current = true
+        setActiveTab(stageReturnTab || 'SONGS')
+      }
+    }
+
+    window.addEventListener('popstate', handlePopState)
+    return () => {
+      window.removeEventListener('popstate', handlePopState)
+    }
+  }, [activeTab, stageReturnTab])
 
   // Derived unique tags
   const allTags = useMemo(() => {
@@ -351,37 +373,89 @@ export const App: React.FC = () => {
     const idx = songs.findIndex((s) => s.id === song.id)
     setStageQueue(q.length > 0 ? q : [{ song, transposeOffset: offset }])
     setStageQueueIndex(idx >= 0 ? idx : 0)
+    isExitingStageRef.current = false
+    try {
+      window.history.pushState({ stage: true }, '', window.location.href)
+    } catch {}
     setActiveTab('STAGE')
   }
 
-  const handleEnterStageSetlist = (setlist: WebSetlist, startIndex: number = 0) => {
+  const handleEnterStageSetlist = (
+    setlist: WebSetlist,
+    targetOccurrence?: number | string
+  ) => {
     setStageReturnTab(activeTab === 'SETLISTS' ? 'SETLISTS' : 'SONGS')
     setStageSetlistName(setlist.name)
     setStageActiveSetlistId(setlist.id)
 
+    // Build playable queue preserving entry identities
     const q: StageQueueItem[] = []
+    const playableEntryIdToIndex = new Map<string, number>()
+
     for (const ref of setlist.songs) {
       const master = songs.find((s) => s.id === ref.id)
       if (master) {
+        const itemIndex = q.length
+        const entryId = ref.entryId || generateUUID()
+        playableEntryIdToIndex.set(entryId, itemIndex)
         q.push({
           song: master,
           transposeOffset: ref.transposeOffset ?? master.transposeOffset ?? 0,
-          entryId: ref.entryId,
+          entryId,
         })
       }
     }
 
-    if (q.length > 0) {
-      setStageQueue(q)
-      const safeIndex = Math.max(0, Math.min(q.length - 1, startIndex))
-      setStageQueueIndex(safeIndex)
-      setSelectedSong(q[safeIndex].song)
-      setViewerTransposeOffset(q[safeIndex].transposeOffset)
-      setActiveTab('STAGE')
+    if (q.length === 0) {
+      // Gracefully handle missing-only queue
+      return
     }
+
+    let initialIndex = 0
+    if (typeof targetOccurrence === 'string') {
+      const mapped = playableEntryIdToIndex.get(targetOccurrence)
+      if (mapped !== undefined) {
+        initialIndex = mapped
+      }
+    } else if (typeof targetOccurrence === 'number') {
+      // Resolve clicked original setlist row by its entryId if available
+      const originalRef = setlist.songs[targetOccurrence]
+      if (originalRef?.entryId && playableEntryIdToIndex.has(originalRef.entryId)) {
+        initialIndex = playableEntryIdToIndex.get(originalRef.entryId)!
+      } else if (originalRef) {
+        // Fallback: match by song id
+        const found = q.findIndex((item) => item.song.id === originalRef.id)
+        if (found >= 0) {
+          initialIndex = found
+        } else {
+          initialIndex = Math.max(0, Math.min(q.length - 1, targetOccurrence))
+        }
+      } else {
+        initialIndex = Math.max(0, Math.min(q.length - 1, targetOccurrence))
+      }
+    }
+
+    setStageQueue(q)
+    setStageQueueIndex(initialIndex)
+    setSelectedSong(q[initialIndex].song)
+    setViewerTransposeOffset(q[initialIndex].transposeOffset)
+    isExitingStageRef.current = false
+    try {
+      window.history.pushState({ stage: true }, '', window.location.href)
+    } catch {}
+    setActiveTab('STAGE')
   }
 
   const handleExitStage = () => {
+    if (!isExitingStageRef.current) {
+      isExitingStageRef.current = true
+      try {
+        if (window.history.state?.stage) {
+          window.history.back()
+          return
+        }
+      } catch {}
+    }
     setActiveTab(stageReturnTab || 'SONGS')
   }
 
@@ -406,16 +480,27 @@ export const App: React.FC = () => {
 
       // If in setlist mode and item has an entryId: persist per-occurrence setlist transpose
       if (stageActiveSetlistId && currentItem.entryId) {
-        const sl = setlists.find((s) => s.id === stageActiveSetlistId)
-        if (sl) {
-          const updatedSongs = sl.songs.map((ref) =>
-            ref.entryId === currentItem.entryId
-              ? { ...ref, transposeOffset: newOffset }
-              : ref
-          )
-          const updatedSetlist = { ...sl, songs: updatedSongs }
-          handleSaveSetlist(updatedSetlist)
-        }
+        const targetSetlistId = stageActiveSetlistId
+        const targetEntryId = currentItem.entryId
+
+        // Serialize async persistence to guarantee latest authoritative state
+        setlistSaveQueueRef.current = setlistSaveQueueRef.current
+          .then(async () => {
+            const currentSetlists = setlistsRef.current
+            const sl = currentSetlists.find((s) => s.id === targetSetlistId)
+            if (sl) {
+              const updatedSongs = sl.songs.map((ref) =>
+                ref.entryId === targetEntryId
+                  ? { ...ref, transposeOffset: newOffset }
+                  : ref
+              )
+              const updatedSetlist = { ...sl, songs: updatedSongs }
+              await handleSaveSetlist(updatedSetlist)
+            }
+          })
+          .catch(() => {
+            // Guard chain continuity on failure
+          })
       }
     }
   }

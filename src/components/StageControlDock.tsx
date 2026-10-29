@@ -167,6 +167,10 @@ export const StageControlDock: React.FC<StageControlDockProps> = ({
     return () => {
       window.removeEventListener('resize', handleResize)
       window.removeEventListener('orientationchange', handleResize)
+      if (activePointerRef.current?.timer) {
+        clearTimeout(activePointerRef.current.timer)
+        activePointerRef.current.timer = null
+      }
     }
   }, [])
 

@@ -372,6 +372,15 @@ export const StageView: React.FC<StageViewProps> = ({
     }
   }, [isOptionsOpen, isKeyPickerOpen, autoHideControls, triggerOverlaysShow])
 
+  // Reset scroll position and cancel any active autoscroll when song changes
+  useEffect(() => {
+    setIsAutoScrolling(false)
+    accumulatedScrollRef.current = 0
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = 0
+    }
+  }, [song.id])
+
   // --- Auto-Scroll Engine (requestAnimationFrame with elapsed-time accounting) ---
   useEffect(() => {
     const container = scrollContainerRef.current
@@ -421,10 +430,13 @@ export const StageView: React.FC<StageViewProps> = ({
     }
   }, [])
 
-  // Sync scroll accumulator on manual user scroll
+  // Sync scroll accumulator and pause autoscroll on manual user scroll
   const handleScroll = () => {
-    if (!isAutoScrolling && scrollContainerRef.current) {
+    if (scrollContainerRef.current) {
       accumulatedScrollRef.current = scrollContainerRef.current.scrollTop
+      if (isAutoScrolling) {
+        setIsAutoScrolling(false)
+      }
     }
   }
 
@@ -610,7 +622,7 @@ export const StageView: React.FC<StageViewProps> = ({
 
   return (
     <div
-      className="relative w-full h-full min-h-screen bg-slate-950 text-slate-100 flex flex-col overflow-hidden select-none"
+      className="relative w-full h-full h-screen min-h-0 bg-slate-950 text-slate-100 flex flex-col overflow-hidden select-none"
       onMouseMove={triggerOverlaysShow}
     >
       {/* 1. Minimal Persistent Song Title Badge (When Overlays Auto-Hidden in Performance Mode) */}
@@ -726,7 +738,7 @@ export const StageView: React.FC<StageViewProps> = ({
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
         data-stage-canvas="true"
-        className="flex-1 w-full overflow-y-auto overflow-x-hidden pt-16 pb-32 sm:pb-28 px-3 sm:px-6 md:px-8 max-w-7xl mx-auto focus:outline-none"
+        className="flex-1 w-full min-h-0 overflow-y-auto overflow-x-hidden pt-16 pb-32 sm:pb-28 px-3 sm:px-6 md:px-8 max-w-7xl mx-auto focus:outline-none"
         tabIndex={0}
       >
         {isTwoColumn ? (

@@ -89,10 +89,12 @@ export interface FullscreenController {
 
 export function createFullscreenController(): FullscreenController {
   const supported = isFullscreenApiSupported()
+  let simulatedFullscreen = false
   const listeners: Array<(isFullscreen: boolean) => void> = []
 
   const getCurrentState = (): boolean => {
     if (typeof document === 'undefined') return false
+    if (!supported) return simulatedFullscreen
     return Boolean(
       document.fullscreenElement ||
         (document as VendorDocument).webkitFullscreenElement ||
@@ -125,7 +127,12 @@ export function createFullscreenController(): FullscreenController {
 
     toggle() {
       if (typeof document === 'undefined') return
-      if (!supported) return
+      if (!supported) {
+        // Fallback: distraction-free fullscreen simulated state
+        simulatedFullscreen = !simulatedFullscreen
+        dispatchChange()
+        return
+      }
       try {
         if (getCurrentState()) {
           if (document.exitFullscreen) {
@@ -165,6 +172,19 @@ export function createFullscreenController(): FullscreenController {
     cleanup() {
       if (supported && typeof document !== 'undefined') {
         EVENTS.forEach((evt) => document.removeEventListener(evt, dispatchChange))
+        try {
+          if (getCurrentState()) {
+            if (document.exitFullscreen) {
+              document.exitFullscreen().catch(() => {})
+            } else if ((document as VendorDocument).webkitExitFullscreen) {
+              ;(document as VendorDocument).webkitExitFullscreen?.()
+            }
+          }
+        } catch {
+          // Ignore exit error during cleanup
+        }
+      } else {
+        simulatedFullscreen = false
       }
       listeners.length = 0
     },
@@ -193,18 +213,19 @@ export function createWakeLockController(): WakeLockController {
   let sentinel: WakeLockSentinelLike | null = null
   let visibilityHandler: (() => void) | null = null
   let destroyed = false
+  let enabled = false
 
   let pending: Promise<void> | null = null
   let releaseGeneration = 0
 
   function acquireInternal(): Promise<void> {
-    if (!supported || destroyed || (sentinel && !sentinel.released)) return Promise.resolve()
+    if (!supported || destroyed || !enabled || (sentinel && !sentinel.released)) return Promise.resolve()
     if (pending) return pending
     const generation = releaseGeneration
     pending = (async () => {
       try {
         const acquired = await (navigator as any).wakeLock.request('screen')
-        if (destroyed || generation !== releaseGeneration) {
+        if (destroyed || !enabled || generation !== releaseGeneration) {
           await acquired.release()
         } else {
           sentinel = acquired
@@ -233,7 +254,7 @@ export function createWakeLockController(): WakeLockController {
   function setupVisibilityListener() {
     if (!supported || typeof document === 'undefined') return
     visibilityHandler = () => {
-      if (document.visibilityState === 'visible' && !destroyed) {
+      if (document.visibilityState === 'visible' && !destroyed && enabled) {
         acquireInternal()
       }
     }
@@ -255,14 +276,17 @@ export function createWakeLockController(): WakeLockController {
     },
 
     async acquire() {
+      enabled = true
       await acquireInternal()
     },
 
     async release() {
+      enabled = false
       await releaseInternal()
     },
 
     async cleanup() {
+      enabled = false
       destroyed = true
       teardownVisibilityListener()
       await releaseInternal()

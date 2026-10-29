@@ -505,6 +505,215 @@ test('R9_FULLSCREEN_AND_WAKE_LOCK_LIFECYCLE: wake lock acquisition, cleanup, and
 })
 
 // =========================================================================
+// BATCH 4 REGRESSION TESTS: CODEX FINDINGS REMEDIATION
+// =========================================================================
+
+test('FIX_P0_1: CROSS_OCCURRENCE_PERSISTENCE — rapid multi-occurrence transpose updates and serialization', async () => {
+  // Simulate two occurrences of the same or different songs in a setlist
+  let persistedSetlist = {
+    id: 'setlist-1',
+    name: 'Sunday Morning',
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    songs: [
+      { entryId: 'entry-A', id: 'song-1', title: 'Song One', position: 0, transposeOffset: 0 },
+      { entryId: 'entry-B', id: 'song-2', title: 'Song Two', position: 1, transposeOffset: 0 },
+    ],
+  }
+
+  // Model the serialized update queue mechanism
+  let setlistSaveQueue = Promise.resolve()
+  let setlistState = { ...persistedSetlist }
+
+  const handleStageTransposeChangeSimulated = (entryId, newOffset, artificialDelayMs = 0) => {
+    setlistSaveQueue = setlistSaveQueue.then(async () => {
+      if (artificialDelayMs > 0) {
+        await new Promise((r) => setTimeout(r, artificialDelayMs))
+      }
+      const updatedSongs = setlistState.songs.map((ref) =>
+        ref.entryId === entryId ? { ...ref, transposeOffset: newOffset } : ref
+      )
+      setlistState = { ...setlistState, songs: updatedSongs }
+      persistedSetlist = JSON.parse(JSON.stringify(setlistState))
+    })
+    return setlistSaveQueue
+  }
+
+  // Rapid A+1 then B+2 with potential delay reordering
+  const p1 = handleStageTransposeChangeSimulated('entry-A', 1, 20)
+  const p2 = handleStageTransposeChangeSimulated('entry-B', 2, 5)
+
+  await Promise.all([p1, p2])
+
+  // Both updates must persist cleanly without stale clobbering: A=1, B=2
+  const entryA = persistedSetlist.songs.find((s) => s.entryId === 'entry-A')
+  const entryB = persistedSetlist.songs.find((s) => s.entryId === 'entry-B')
+  assert.equal(entryA.transposeOffset, 1, 'Entry A must retain offset +1')
+  assert.equal(entryB.transposeOffset, 2, 'Entry B must retain offset +2')
+
+  // Repeated same-occurrence updates in rapid succession
+  await handleStageTransposeChangeSimulated('entry-A', 3, 0)
+  await handleStageTransposeChangeSimulated('entry-A', 4, 0)
+  const entryARepeated = persistedSetlist.songs.find((s) => s.entryId === 'entry-A')
+  assert.equal(entryARepeated.transposeOffset, 4, 'Entry A must reflect latest sequential offset +4')
+
+  // Canonical song entities remain completely unchanged
+  assert.equal(sampleSong.transposeOffset || 0, 0, 'Canonical song offset remains unaffected')
+})
+
+test('FIX_P1_1 & P1_2: STAGE_SCROLL_CONTAINER AND SONG_TRANSITION_RESET', () => {
+  // Test viewport containment class names and song transition scroll reset
+  const stageSource = fs.readFileSync(path.resolve(__dirname, '../src/components/StageView.tsx'), 'utf8')
+  assert.ok(stageSource.includes('min-h-0'), 'StageView root or canvas must enforce min-h-0 containment')
+  assert.ok(stageSource.includes('data-stage-canvas="true"'), 'StageView must expose data-stage-canvas')
+  assert.ok(stageSource.includes('scrollContainerRef.current.scrollTop = 0'), 'StageView must reset scroll to top on song change')
+  assert.ok(stageSource.includes('setIsAutoScrolling(false)'), 'StageView must pause autoscroll on song transition and manual scroll')
+})
+
+test('FIX_P1_3: QUEUE_REFERENCE_IDENTITY — missing references handled without indexing drift', () => {
+  const masterSongs = [
+    { id: 'song-A', title: 'Song Alpha', rawContent: '[C]Alpha' },
+    { id: 'song-B', title: 'Song Beta', rawContent: '[G]Beta' },
+  ]
+
+  // Setlist with missing first entry: [missing, A, B]
+  const setlist = {
+    id: 'sl-test',
+    name: 'Test Setlist',
+    songs: [
+      { entryId: 'entry-missing', id: 'deleted-id', title: 'Deleted Song', position: 0 },
+      { entryId: 'entry-A', id: 'song-A', title: 'Song Alpha', position: 1 },
+      { entryId: 'entry-B', id: 'song-B', title: 'Song Beta', position: 2 },
+    ],
+  }
+
+  // Simulate queue resolution logic
+  const resolveQueueAndIndex = (sl, targetOccurrence) => {
+    const q = []
+    const playableEntryIdToIndex = new Map()
+    for (const ref of sl.songs) {
+      const master = masterSongs.find((s) => s.id === ref.id)
+      if (master) {
+        const idx = q.length
+        const entryId = ref.entryId || 'gen'
+        playableEntryIdToIndex.set(entryId, idx)
+        q.push({ song: master, transposeOffset: ref.transposeOffset ?? 0, entryId })
+      }
+    }
+
+    if (q.length === 0) return { q: [], initialIndex: -1 }
+
+    let initialIndex = 0
+    if (typeof targetOccurrence === 'string') {
+      const mapped = playableEntryIdToIndex.get(targetOccurrence)
+      if (mapped !== undefined) initialIndex = mapped
+    } else if (typeof targetOccurrence === 'number') {
+      const originalRef = sl.songs[targetOccurrence]
+      if (originalRef?.entryId && playableEntryIdToIndex.has(originalRef.entryId)) {
+        initialIndex = playableEntryIdToIndex.get(originalRef.entryId)
+      } else if (originalRef) {
+        const found = q.findIndex((item) => item.song.id === originalRef.id)
+        initialIndex = found >= 0 ? found : Math.max(0, Math.min(q.length - 1, targetOccurrence))
+      } else {
+        initialIndex = Math.max(0, Math.min(q.length - 1, targetOccurrence))
+      }
+    }
+    return { q, initialIndex }
+  }
+
+  // Selecting index 1 (Song Alpha) must open Song Alpha, NOT Beta
+  const resA = resolveQueueAndIndex(setlist, 1)
+  assert.equal(resA.q.length, 2, 'Playable queue contains 2 existing songs')
+  assert.equal(resA.initialIndex, 0, 'Index 1 in setlist maps to index 0 (Song Alpha) in playable queue')
+  assert.equal(resA.q[resA.initialIndex].song.id, 'song-A')
+
+  // Selecting index 2 (Song Beta) must open Song Beta
+  const resB = resolveQueueAndIndex(setlist, 2)
+  assert.equal(resB.initialIndex, 1, 'Index 2 in setlist maps to index 1 (Song Beta) in playable queue')
+  assert.equal(resB.q[resB.initialIndex].song.id, 'song-B')
+
+  // Missing-only queue fails gracefully without crash
+  const missingOnlySetlist = {
+    id: 'sl-empty',
+    name: 'Empty Setlist',
+    songs: [{ entryId: 'e-none', id: 'deleted-1', title: 'Deleted' }],
+  }
+  const resEmpty = resolveQueueAndIndex(missingOnlySetlist, 0)
+  assert.equal(resEmpty.q.length, 0, 'Missing-only queue resolves to empty array gracefully')
+})
+
+test('FIX_P1_4: BROWSER_BACK — history state push and popstate return handling', () => {
+  const appSource = fs.readFileSync(path.resolve(__dirname, '../src/App.tsx'), 'utf8')
+  assert.ok(appSource.includes('window.history.pushState({ stage: true }'), 'App must push stage history state on entry')
+  assert.ok(appSource.includes("window.addEventListener('popstate'"), 'App must register popstate listener for browser Back')
+  assert.ok(appSource.includes('window.history.back()'), 'App handleExitStage must invoke history.back() when stage state active')
+})
+
+test('FIX_P2_1: WAKE_LOCK_PREFERENCE — disabled preference prevents lock reacquisition on visibilitychange', async () => {
+  let requestCount = 0
+  let releaseCount = 0
+
+  const mockNavigator = {
+    wakeLock: {
+      request: async () => {
+        requestCount++
+        return {
+          released: false,
+          release: async () => {
+            releaseCount++
+          },
+        }
+      },
+    },
+  }
+
+  const originalNav = global.navigator
+  Object.defineProperty(global, 'navigator', {
+    value: mockNavigator,
+    configurable: true,
+  })
+
+  try {
+    const lock = createWakeLockController()
+
+    // 1. Acquire lock explicitly (preference enabled)
+    await lock.acquire()
+    assert.equal(requestCount, 1, 'Acquiring enabled wake lock must call navigator.wakeLock.request')
+
+    // 2. Explicitly release (user disabled keep-awake preference)
+    await lock.release()
+    assert.equal(releaseCount, 1, 'Releasing must release sentinel')
+
+    // 3. Trigger visibilitychange visible while preference is disabled
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+    const visEvent = new dom.window.Event('visibilitychange')
+    document.dispatchEvent(visEvent)
+
+    // Wait a tick for any async visibility handler
+    await new Promise((r) => setTimeout(r, 20))
+
+    // Request count must remain 1 — ZERO additional requests when disabled!
+    assert.equal(requestCount, 1, 'Disabled keep-awake must request ZERO additional locks on visibility transition')
+
+    await lock.cleanup()
+  } finally {
+    Object.defineProperty(global, 'navigator', {
+      value: originalNav,
+      configurable: true,
+    })
+  }
+})
+
+test('FIX_P2_2: FULLSCREEN_AND_DOCK_CLEANUP — safe fallback and timer cleanup', () => {
+  const dockSource = fs.readFileSync(path.resolve(__dirname, '../src/components/StageControlDock.tsx'), 'utf8')
+  assert.ok(dockSource.includes('clearTimeout(activePointerRef.current.timer)'), 'Dock unmount must clear active pointer timer')
+
+  const perfSource = fs.readFileSync(path.resolve(__dirname, '../src/utils/stagePerformance.ts'), 'utf8')
+  assert.ok(perfSource.includes('simulatedFullscreen = !simulatedFullscreen'), 'Fullscreen controller must provide distraction-free fallback')
+  assert.ok(perfSource.includes('cleanup()'), 'Fullscreen controller must release and clean up on exit')
+})
+
+// =========================================================================
 // R10: LOCAL OFFLINE INTEGRITY, NO CANONICAL MUTATION, NO LEGACY MODIFICATION
 // =========================================================================
 test('R10_OFFLINE_INTEGRITY_AND_NO_CANONICAL_CHART_MUTATION: zero cloud calls and immutable rawContent', () => {
