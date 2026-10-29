@@ -1,5 +1,5 @@
 /**
- * Song text and ChordPro parser for GTAR Revamp
+ * Song text and ChordPro parser for GTAR1
  * Supports ChordPro bracketed inline chords, directives, sections, and 2-line layouts.
  * Ported from ozzzmond/GTAR@45ce8442859b66843f4755733e7f9a66984df51a
  */

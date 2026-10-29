@@ -3,8 +3,8 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 
-const revampDir = path.resolve(__dirname, '..')
-const srcDir = path.join(revampDir, 'src')
+const gtar1Dir = path.resolve(__dirname, '..')
+const srcDir = path.join(gtar1Dir, 'src')
 
 function getAllSourceFiles(dir) {
   let results = []
@@ -23,8 +23,8 @@ function getAllSourceFiles(dir) {
 }
 
 const allSourceFiles = getAllSourceFiles(srcDir).concat([
-  path.join(revampDir, 'index.html'),
-  path.join(revampDir, 'package.json'),
+  path.join(gtar1Dir, 'index.html'),
+  path.join(gtar1Dir, 'package.json'),
 ])
 
 test('NO_GOOGLE_SDK_OR_AUTHGATE: zero Google OAuth, Client ID, or AuthGate references', () => {
@@ -43,7 +43,7 @@ test('NO_GOOGLE_SDK_OR_AUTHGATE: zero Google OAuth, Client ID, or AuthGate refer
       assert.doesNotMatch(
         content,
         pattern,
-        `File ${path.relative(revampDir, file)} must not contain pattern ${pattern}`
+        `File ${path.relative(gtar1Dir, file)} must not contain pattern ${pattern}`
       )
     }
   }
@@ -66,7 +66,7 @@ test('NO_PERSONAL_CLOUD_SYNC: zero personal sync engines in runtime dependency g
       assert.doesNotMatch(
         content,
         pattern,
-        `File ${path.relative(revampDir, file)} must not contain pattern ${pattern}`
+        `File ${path.relative(gtar1Dir, file)} must not contain pattern ${pattern}`
       )
     }
   }
@@ -90,14 +90,14 @@ test('NO_LEGACY_STORAGE_MUTATIONS: zero access to legacy DB names or localStorag
       assert.doesNotMatch(
         content,
         pattern,
-        `File ${path.relative(revampDir, file)} must not access legacy storage key ${pattern}`
+        `File ${path.relative(gtar1Dir, file)} must not access legacy storage key ${pattern}`
       )
     }
   }
 })
 
 test('SEMVER_VERSIONING: version has no v prefix and matches semver', () => {
-  const pkg = JSON.parse(fs.readFileSync(path.join(revampDir, 'package.json'), 'utf8'))
+  const pkg = JSON.parse(fs.readFileSync(path.join(gtar1Dir, 'package.json'), 'utf8'))
   assert.ok(pkg.version, 'package.json must declare version')
   assert.ok(!pkg.version.startsWith('v'), 'Version must not start with "v" prefix')
   assert.match(

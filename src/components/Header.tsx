@@ -1,5 +1,5 @@
 import React from 'react'
-import { GTAR_REVAMP_VERSION } from '../types/gtar'
+import { GTAR1_VERSION } from '../types/gtar'
 
 export type ActiveTab = 'SONGS' | 'SETLISTS' | 'VIEWER' | 'EDITOR'
 
@@ -33,7 +33,7 @@ export const Header: React.FC<HeaderProps> = ({
                 GTAR
               </span>
               <span className="text-[10px] text-slate-400 font-mono ml-2">
-                {GTAR_REVAMP_VERSION}
+                {GTAR1_VERSION}
               </span>
             </div>
           </button>

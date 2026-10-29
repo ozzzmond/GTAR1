@@ -1,5 +1,5 @@
 /**
- * GTAR Revamp — Isolated IndexedDB Local Storage
+ * GTAR1 — Isolated IndexedDB Local Storage
  * Database Namespace: 'gtar_revamp_local_v1'
  * 
  * INVARIANTS:
@@ -53,10 +53,12 @@ export function openRevampDB(): Promise<IDBDatabase> {
     }
 
     request.onerror = () => {
-      reject(request.error || new Error('Failed to open GTAR Revamp IndexedDB'))
+      reject(request.error || new Error('Failed to open GTAR1 IndexedDB'))
     }
   })
 }
+
+export const openGtar1DB = openRevampDB
 
 /**
  * Loads all songs from the isolated IndexedDB namespace.
@@ -270,3 +272,5 @@ export function closeRevampDB(): void {
     dbInstance = null
   }
 }
+
+export const closeGtar1DB = closeRevampDB

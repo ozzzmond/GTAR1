@@ -1,9 +1,10 @@
 /**
- * GTAR Revamp — Local First Core Types
+ * GTAR1 — Local First Core Types
  * Semantic Versioning: 0.1.0-dev (Semver, no 'v' prefix)
  */
 
-export const GTAR_REVAMP_VERSION = '0.1.0-dev'
+export const GTAR1_VERSION = '0.1.0-dev'
+export const GTAR_REVAMP_VERSION = GTAR1_VERSION
 
 export type SongFormat = 'CHORD_PRO' | 'TWO_LINE' | 'PLAIN'
 
@@ -102,7 +103,7 @@ export interface ParsedGtarSong {
 }
 
 export interface GtarBackupMetadata {
-  app: 'GTAR_REVAMP'
+  app: 'GTAR1' | 'GTAR_REVAMP'
   version: string
   exportedAt: string
   songCount: number
@@ -110,7 +111,7 @@ export interface GtarBackupMetadata {
 }
 
 export interface GtarBackupPayload {
-  app: 'GTAR_REVAMP'
+  app: 'GTAR1' | 'GTAR_REVAMP'
   schemaVersion: 1
   version: string
   exportedAt: string

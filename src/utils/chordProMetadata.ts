@@ -1,5 +1,5 @@
 /**
- * ChordPro Directives Parser and Canonical Synchronizer for GTAR Revamp
+ * ChordPro Directives Parser and Canonical Synchronizer for GTAR1
  * Supports 6 canonical directives: title, artist, key, tempo (BPM), time, year.
  * Retains original_key provenance and custom directives cleanly.
  * Ported from ozzzmond/GTAR@45ce8442859b66843f4755733e7f9a66984df51a

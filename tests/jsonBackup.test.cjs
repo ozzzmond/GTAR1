@@ -72,7 +72,7 @@ test('JSON_BACKUP_ROUND_TRIP: full backup creation and parsing round-trips corre
   ]
 
   const payload = createBackupPayload(songs, setlists)
-  assert.equal(payload.app, 'GTAR_REVAMP')
+  assert.equal(payload.app, 'GTAR1')
   assert.equal(payload.schemaVersion, 1)
   assert.equal(payload.songs.length, 2)
   assert.equal(payload.setlists.length, 1)

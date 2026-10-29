@@ -1,11 +1,11 @@
 /**
- * GTAR Revamp — Minimal JSON Export and Import
+ * GTAR1 — Minimal JSON Export and Import
  * Clean round-trip serialization and schema validation.
- * Compatible with GTAR Revamp and import-friendly with legacy GTAR export formats.
+ * Compatible with GTAR1, GTAR Revamp, and import-friendly with legacy GTAR export formats.
  */
 
 import type { SongEntity, WebSetlist, GtarBackupPayload } from '../types/gtar'
-import { GTAR_REVAMP_VERSION } from '../types/gtar'
+import { GTAR1_VERSION } from '../types/gtar'
 import { canonicalSongKey } from './musicalKey'
 import { detectSongKey } from './songParser'
 import { generateUUID } from './uuid'
@@ -22,9 +22,9 @@ export function createBackupPayload(
   setlists: WebSetlist[]
 ): GtarBackupPayload {
   return {
-    app: 'GTAR_REVAMP',
+    app: 'GTAR1',
     schemaVersion: 1,
-    version: GTAR_REVAMP_VERSION,
+    version: GTAR1_VERSION,
     exportedAt: new Date().toISOString(),
     songs: songs.map((s) => ({
       ...s,

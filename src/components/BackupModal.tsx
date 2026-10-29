@@ -40,7 +40,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
     const a = document.createElement('a')
     const dateStr = new Date().toISOString().slice(0, 10)
     a.href = url
-    a.download = `gtar-revamp-backup-${dateStr}.json`
+    a.download = `gtar1-backup-${dateStr}.json`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)

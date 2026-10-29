@@ -1,6 +1,6 @@
-# GTAR Revamp — Local-First Standalone Music Stand
+# GTAR1 — Local-First Standalone Music Stand
 
-GTAR Revamp is a standalone, local-first chord chart and setlist manager built with React, Vite, TypeScript, and Progressive Web App (PWA) offline capabilities.
+GTAR1 is a standalone, local-first chord chart and setlist manager built with React, Vite, TypeScript, and Progressive Web App (PWA) offline capabilities.
 
 ## Architecture & Guarantees
 
@@ -10,7 +10,7 @@ GTAR Revamp is a standalone, local-first chord chart and setlist manager built w
 4. **Isolated Storage**: Operates entirely within the dedicated IndexedDB namespace `gtar_revamp_local_v1`. It never mutates or accesses legacy storage keys or databases (`gtar_db`, `gtar-local-library`, etc.).
 5. **Blank Initial Songbook**: Clean installs start with an empty library. No unwanted or pre-loaded songs.
 6. **Atomic Local Writes**: Song and setlist modifications are committed in atomic IndexedDB transactions with clear failure reporting.
-7. **Minimal JSON Interop**: Clean import and export round-trip supporting both GTAR Revamp and legacy GTAR JSON backups.
+7. **Minimal JSON Interop**: Clean import and export round-trip supporting both GTAR1 and legacy GTAR JSON backups.
 
 ## Provenance
 

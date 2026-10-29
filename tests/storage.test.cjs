@@ -152,10 +152,14 @@ const {
   saveAllSongs,
   saveAllSetlists,
   closeRevampDB,
+  openGtar1DB,
+  closeGtar1DB,
 } = require('../src/utils/storage.ts')
 
 test('STORAGE_ISOLATION_AND_NAMESPACE: uses isolated gtar_revamp_local_v1 database', () => {
-  assert.equal(DB_NAME, 'gtar_revamp_local_v1', 'Must use dedicated revamp DB namespace')
+  assert.equal(DB_NAME, 'gtar_revamp_local_v1', 'Must use dedicated isolated DB namespace')
+  assert.equal(typeof openGtar1DB, 'function')
+  assert.equal(typeof closeGtar1DB, 'function')
   assert.equal(DB_VERSION, 1)
   assert.equal(STORES.SONGS, 'songs')
   assert.equal(STORES.SETLISTS, 'setlists')

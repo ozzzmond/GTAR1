@@ -1,5 +1,5 @@
 /**
- * Musical chord and key transposition utilities for GTAR Revamp
+ * Musical chord and key transposition utilities for GTAR1
  * Preserves authored spellings on zero offset, honors flat keys, and handles -11 to +11 semitones.
  * Ported from ozzzmond/GTAR@45ce8442859b66843f4755733e7f9a66984df51a
  */

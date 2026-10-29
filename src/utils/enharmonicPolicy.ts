@@ -1,5 +1,5 @@
 /**
- * Target-key aware enharmonic spelling policy for GTAR Revamp
+ * Target-key aware enharmonic spelling policy for GTAR1
  * Ported from ozzzmond/GTAR@45ce8442859b66843f4755733e7f9a66984df51a
  */
 
