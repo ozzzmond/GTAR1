@@ -1,4 +1,4 @@
-import { FONT_TARGETS, BUILTIN_FONTS, normalizeFontSettings, validateFontSettings, fontStack, loadFontResources, type FontChoice } from '../utils/customFonts'
+import { FONT_TARGETS, BUILTIN_FONTS, normalizeFontSettings, validateFontSettings, fontStack, type FontChoice } from '../utils/customFonts'
 import React, { useState, useEffect } from 'react'
 import {
   X,
@@ -11,7 +11,7 @@ import {
   Palette,
   AlertCircle,
 } from 'lucide-react'
-import { validateCustomThemeIdentity, CUSTOM_THEME_NAME_MAX_LENGTH, type CustomThemeColors } from '../utils/backupSettings'
+import { validateCustomThemeIdentity, validateBackupSettings, CUSTOM_THEME_NAME_MAX_LENGTH, type CustomThemeColors } from '../utils/backupSettings'
 import {
   DEFAULT_CUSTOM_COLORS,
   normalizeCustomThemeColors,
@@ -60,6 +60,7 @@ export const CustomPaletteEditor: React.FC<CustomPaletteEditorProps> = ({
   const [jsonText, setJsonText] = useState('')
   const [jsonStatus, setJsonStatus] = useState<{ message: string; isError: boolean } | null>(null)
   const [copiedNotification, setCopiedNotification] = useState(false)
+  const [editorError, setEditorError] = useState<string | null>(null)
 
   useEffect(() => {
     if (isOpen) {
@@ -69,12 +70,9 @@ export const CustomPaletteEditor: React.FC<CustomPaletteEditorProps> = ({
       setJsonModalMode(null)
       setJsonStatus(null)
       setCopiedNotification(false)
+      setEditorError(null)
     }
   }, [isOpen, customColors])
-
-  useEffect(() => {
-    if (isOpen) loadFontResources(normalizeFontSettings(stagedColors.fonts))
-  }, [isOpen, stagedColors.fonts])
 
   const contrastChecks = React.useMemo(() => {
     const warnings: string[] = []
@@ -105,8 +103,17 @@ export const CustomPaletteEditor: React.FC<CustomPaletteEditorProps> = ({
   if (!isOpen) return null
 
   const handleSaveAndApply = () => {
-    const errors = [...validateFontSettings(stagedColors.fonts || {}), ...(stagedColors.identity ? validateCustomThemeIdentity(stagedColors.identity) : [])]
-    if (errors.length) { setJsonStatus({ message: errors.join('; '), isError: true }); return }
+    const colorErrors = validateBackupSettings({ customThemeColors: stagedColors })
+    const fontErrors = validateFontSettings(stagedColors.fonts || {})
+    const identityErrors = stagedColors.identity ? validateCustomThemeIdentity(stagedColors.identity) : []
+    const allErrors = [...colorErrors, ...fontErrors, ...identityErrors]
+    if (allErrors.length) {
+      const msg = allErrors.join('; ')
+      setEditorError(msg)
+      setJsonStatus({ message: msg, isError: true })
+      return
+    }
+    setEditorError(null)
     onSaveAndApply(normalizeCustomThemeColors(stagedColors))
     onClose()
   }
@@ -694,24 +701,34 @@ export const CustomPaletteEditor: React.FC<CustomPaletteEditorProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-4 sm:px-6 py-3 border-t border-app-border bg-app-base/80 flex items-center justify-end gap-2.5 shrink-0">
-          <button
-            type="button"
-            data-testid="cancel-palette-editor-btn"
-            onClick={onClose}
-            className="px-4 py-2 rounded-xl border border-app-border bg-app-surface/60 hover:bg-app-surface ui-primary-text text-app-text hover:text-app-heading font-medium text-xs sm:text-sm cursor-pointer transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            data-testid="save-apply-palette-btn"
-            onClick={handleSaveAndApply}
-            className="px-5 py-2 rounded-xl bg-app-button hover:bg-app-button text-app-button-text font-semibold text-xs sm:text-sm cursor-pointer transition-all shadow-md active:scale-95 flex items-center gap-1.5"
-          >
-            <Check className="w-4 h-4 stroke-[3]" />
-            Save & Apply
-          </button>
+        <div className="px-4 sm:px-6 py-3 border-t border-app-border bg-app-base/80 flex flex-col sm:flex-row items-center justify-between gap-2.5 shrink-0">
+          <div className="text-xs text-status-error font-medium flex items-center gap-1.5" role="alert">
+            {editorError && (
+              <>
+                <AlertCircle className="w-4 h-4 shrink-0 text-status-error" />
+                <span data-testid="editor-error-message">{editorError}</span>
+              </>
+            )}
+          </div>
+          <div className="flex items-center gap-2.5 self-end">
+            <button
+              type="button"
+              data-testid="cancel-palette-editor-btn"
+              onClick={onClose}
+              className="px-4 py-2 rounded-xl border border-app-border bg-app-surface/60 hover:bg-app-surface ui-primary-text text-app-text hover:text-app-heading font-medium text-xs sm:text-sm cursor-pointer transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              data-testid="save-apply-palette-btn"
+              onClick={handleSaveAndApply}
+              className="px-5 py-2 rounded-xl bg-app-button hover:bg-app-button text-app-button-text font-semibold text-xs sm:text-sm cursor-pointer transition-all shadow-md active:scale-95 flex items-center gap-1.5"
+            >
+              <Check className="w-4 h-4 stroke-[3]" />
+              Save & Apply
+            </button>
+          </div>
         </div>
       </div>
 

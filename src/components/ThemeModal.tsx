@@ -642,6 +642,7 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
   const [overrides, setOverrides] = useState<FactoryThemeOverrides>({})
   const [pendingRestore, setPendingRestore] = useState<ThemeMode | null>(null)
   const [isCustomPaletteEditorOpen, setIsCustomPaletteEditorOpen] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   // Synchronize internal staged state whenever modal opens or synchronized settings arrive
   useEffect(() => {
@@ -658,6 +659,7 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
       setStagedTheme(currentTheme === 'custom' && customColors?.identity ? customColors.identity.factoryId : currentTheme)
       setStagedCustomColors(normalizeCustomThemeColors(customColors))
       setIsCustomPaletteEditorOpen(false)
+      setSaveError(null)
 
       const handleSettingsChanged = () => {
         const nextSaved = loadFactoryThemeOverrides()
@@ -684,20 +686,46 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
     setStagedCustomColors(standaloneColors)
   }
   // The editor draft may carry identity; committed standalone storage never does.
-  const commitTheme = (mode: ThemeMode, standalone: CustomThemeColors, nextOverrides: FactoryThemeOverrides) => {
+  const commitTheme = (mode: ThemeMode, standalone: CustomThemeColors, nextOverrides: FactoryThemeOverrides): boolean => {
+    // Snapshot previous values for atomic rollback
+    const prevOverrides = localStorage.getItem(SETTINGS_KEYS.factoryThemeOverrides)
+    const prevCustomColors = localStorage.getItem(SETTINGS_KEYS.customThemeColors)
+    const prevMode = localStorage.getItem(SETTINGS_KEYS.themeMode)
+
     try {
       localStorage.setItem(SETTINGS_KEYS.factoryThemeOverrides, JSON.stringify(nextOverrides))
       localStorage.setItem(SETTINGS_KEYS.customThemeColors, JSON.stringify(standalone))
       localStorage.setItem(SETTINGS_KEYS.themeMode, mode)
       applyThemeRuntime(mode, standalone, nextOverrides)
-    } catch (e) {
-      console.error('Failed to commit theme to localStorage', e)
-      return
+    } catch (e: any) {
+      console.error('Failed to commit theme to localStorage, rolling back', e)
+      // ROLLBACK: Restore previous storage values exactly
+      try {
+        if (prevOverrides !== null) localStorage.setItem(SETTINGS_KEYS.factoryThemeOverrides, prevOverrides)
+        else localStorage.removeItem(SETTINGS_KEYS.factoryThemeOverrides)
+
+        if (prevCustomColors !== null) localStorage.setItem(SETTINGS_KEYS.customThemeColors, prevCustomColors)
+        else localStorage.removeItem(SETTINGS_KEYS.customThemeColors)
+
+        if (prevMode !== null) localStorage.setItem(SETTINGS_KEYS.themeMode, prevMode)
+        else localStorage.removeItem(SETTINGS_KEYS.themeMode)
+      } catch { /* Rollback best effort */ }
+
+      // Restore runtime state to previous values
+      const currentOverrides = loadFactoryThemeOverrides()
+      const currentStandalone = loadStandalonePalette(customColors)
+      applyThemeRuntime(currentTheme, currentStandalone, currentOverrides)
+
+      setSaveError(e?.message || 'Storage write failed (e.g. quota exceeded). Changes were rolled back.')
+      return false
     }
+
+    setSaveError(null)
     // Factory callbacks expose the active palette, while App keeps standalone state separate.
     onApplyTheme?.(mode, resolveThemePalette(mode, standalone, nextOverrides))
     if (!onApplyTheme) onSelectTheme?.(mode)
     onClose()
+    return true
   }
 
   const handleSaveAndApply = () => commitTheme(stagedTheme, standaloneColors, overrides)
@@ -705,17 +733,20 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
   const handleCustomPaletteSaveAndApply = (colors: CustomThemeColors) => {
     // Slot association belongs to the launch context, never imported palette metadata.
     const factoryId = stagedCustomColors.identity?.factoryId
+    let success = false
     if (factoryId) {
       const palette = normalizeCustomThemeColors({ ...colors, identity: {
         factoryId, displayName: colors.identity?.displayName || stagedCustomColors.identity!.displayName,
       } })
-      commitTheme(factoryId, standaloneColors, { ...overrides, [factoryId]: palette })
+      success = commitTheme(factoryId, standaloneColors, { ...overrides, [factoryId]: palette })
     } else {
       const standalone = { ...colors }
       delete standalone.identity
-      commitTheme('custom', normalizeCustomThemeColors(standalone), overrides)
+      success = commitTheme('custom', normalizeCustomThemeColors(standalone), overrides)
     }
-    setIsCustomPaletteEditorOpen(false)
+    if (success) {
+      setIsCustomPaletteEditorOpen(false)
+    }
   }
 
   return (
@@ -934,22 +965,29 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
           </div>
 
           {/* Modal Footer */}
-          <div className="px-5 py-3.5 border-t border-app-border bg-app-base/80 flex items-center justify-end gap-2.5">
-            <button
-              type="button"
-              onClick={onClose}
-              className="ui-button px-4 py-2 rounded-xl border border-app-border bg-app-surface/60 hover:bg-app-surface ui-primary-text text-app-text hover:text-app-heading font-medium text-xs sm:text-sm cursor-pointer transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              data-testid="theme-save-apply-btn"
-              onClick={handleSaveAndApply}
-              className="ui-button px-4 py-2 rounded-xl bg-app-button hover:bg-app-button text-app-button-text font-semibold text-xs sm:text-sm cursor-pointer transition-all shadow-md active:scale-95 flex items-center gap-1.5"
-            >
-              Save & Apply
-            </button>
+          <div className="px-5 py-3.5 border-t border-app-border bg-app-base/80 flex flex-col sm:flex-row items-center justify-between gap-2.5">
+            <div className="text-xs text-status-error font-medium flex items-center gap-1.5" role="alert">
+              {saveError && (
+                <span data-testid="theme-save-error">{saveError}</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2.5 self-end">
+              <button
+                type="button"
+                onClick={onClose}
+                className="ui-button px-4 py-2 rounded-xl border border-app-border bg-app-surface/60 hover:bg-app-surface ui-primary-text text-app-text hover:text-app-heading font-medium text-xs sm:text-sm cursor-pointer transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                data-testid="theme-save-apply-btn"
+                onClick={handleSaveAndApply}
+                className="ui-button px-4 py-2 rounded-xl bg-app-button hover:bg-app-button text-app-button-text font-semibold text-xs sm:text-sm cursor-pointer transition-all shadow-md active:scale-95 flex items-center gap-1.5"
+              >
+                Save & Apply
+              </button>
+            </div>
           </div>
         </div>
       </div>

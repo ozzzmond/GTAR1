@@ -261,6 +261,50 @@ body.theme-custom .chord-sheet-container .lyrics {
   color: var(--custom-stage-text, #F1F5F9) !important;
 }
 
+/* Stage View semantic surface and controls */
+body.theme-custom [data-stage-view="true"],
+body.theme-custom .stage-view-root {
+  background-color: var(--custom-stage-bg, #121820) !important;
+  color: var(--custom-stage-text, #F1F5F9) !important;
+}
+
+body.theme-custom [data-stage-view="true"] header[role="banner"] {
+  background-color: var(--custom-chrome-header-bg) !important;
+  border-bottom-color: var(--custom-card-border, var(--custom-stage-border, #2A3644)) !important;
+}
+
+body.theme-custom [data-stage-view="true"] header h1,
+body.theme-custom [data-stage-view="true"] .stage-title-text {
+  color: var(--custom-headerPrimaryText, var(--custom-uiPrimaryText, #F1F5F9)) !important;
+}
+
+body.theme-custom [data-stage-view="true"] .stage-artist-text {
+  color: var(--custom-headerSecondaryText, var(--custom-uiSecondaryText, #CBD5E1)) !important;
+}
+
+body.theme-custom [data-stage-view="true"] .stage-minimal-badge {
+  background-color: var(--custom-dock-bg, var(--custom-stage-surface, #1A222D)) !important;
+  border-color: var(--custom-dock-border, var(--custom-card-border, #2A3644)) !important;
+  color: var(--custom-uiPrimaryText, #F1F5F9) !important;
+}
+
+body.theme-custom [data-stage-view="true"] header button {
+  background-color: var(--custom-control-button-bg, #24303E) !important;
+  color: var(--custom-control-button-text, #F1F5F9) !important;
+  border-color: var(--custom-card-border, #2A3644) !important;
+}
+
+body.theme-custom [data-stage-view="true"] nav[aria-label="Stage transport controls"] {
+  background-color: var(--custom-dock-bg, var(--custom-chrome-toolbar-bg, #1A222D)) !important;
+  border-top-color: var(--custom-dock-border, var(--custom-card-border, #2A3644)) !important;
+}
+
+body.theme-custom [data-stage-view="true"] nav[aria-label="Stage transport controls"] button:not([aria-label*="auto-scroll"]) {
+  background-color: var(--custom-dock-btn-bg, var(--custom-control-button-bg, #121820)) !important;
+  color: var(--custom-dock-btn-icon, var(--custom-control-button-text, #F1F5F9)) !important;
+  border-color: var(--custom-dock-border, var(--custom-card-border, #2A3644)) !important;
+}
+
 /* Custom Chords */
 body.theme-custom .stage-chord-text,
 body.theme-custom .chord-sheet-container .chord {

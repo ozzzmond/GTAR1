@@ -28,8 +28,9 @@ import {
   type CustomThemeColors,
   applyThemeRuntime,
   hydrateThemeSettings,
+  loadFactoryThemeOverrides,
 } from './components/ThemeModal'
-import { SETTINGS_KEYS } from './utils/backupSettings'
+import { SETTINGS_KEYS, SETTINGS_CHANGED, STANDALONE_PALETTE_KEY } from './utils/backupSettings'
 import {
   ExplorerNavigation,
   type ExplorerNavTarget,
@@ -108,10 +109,48 @@ export const App: React.FC = () => {
   // Apply theme runtime on mount and updates
   useEffect(() => {
     try {
-      localStorage.setItem(SETTINGS_KEYS.themeMode, stageTheme)
+      const stored = localStorage.getItem(SETTINGS_KEYS.themeMode)
+      if (stored !== stageTheme) {
+        localStorage.setItem(SETTINGS_KEYS.themeMode, stageTheme)
+      }
     } catch { /* Best-effort persistence */ }
     applyThemeRuntime(stageTheme, customThemeColors)
   }, [stageTheme, customThemeColors])
+
+  // Rehydrate active appearance after settings restore and cross-tab storage events
+  useEffect(() => {
+    const handleRehydrate = () => {
+      const { mode, standalone } = hydrateThemeSettings()
+      const overrides = loadFactoryThemeOverrides()
+      setStageTheme(mode)
+      setCustomThemeColors(standalone)
+      applyThemeRuntime(mode, standalone, overrides)
+    }
+
+    const handleStorage = (e: StorageEvent) => {
+      if (
+        !e.key ||
+        e.key === SETTINGS_KEYS.themeMode ||
+        e.key === SETTINGS_KEYS.customThemeColors ||
+        e.key === SETTINGS_KEYS.factoryThemeOverrides ||
+        e.key === STANDALONE_PALETTE_KEY
+      ) {
+        handleRehydrate()
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener(SETTINGS_CHANGED, handleRehydrate)
+      window.addEventListener('storage', handleStorage)
+    }
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener(SETTINGS_CHANGED, handleRehydrate)
+        window.removeEventListener('storage', handleStorage)
+      }
+    }
+  }, [])
 
   // Initialization State
   const [isLoading, setIsLoading] = useState<boolean>(true)

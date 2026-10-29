@@ -51,17 +51,20 @@ export function fontStack(choice?: FontChoice, target: FontTarget = 'ui'): strin
   return `"${choice.family}", ${fallback}`
 }
 
-// A document owns one resource per source URL. Preview and applied settings share it.
+// A document owns one resource per source URL.
 const resources = new WeakMap<Document, Set<string>>()
 export function loadFontResources(settings: FontSettings, doc: Document = document) {
   let loaded = resources.get(doc)
   if (!loaded) { loaded = new Set(); resources.set(doc, loaded) }
+  const activeKeys = new Set<string>()
+
   for (const choice of Object.values(normalizeFontSettings(settings))) {
     if (!choice || !['google', 'stylesheet', 'webfont'].includes(choice.source)) continue
     const url = choice.source === 'google'
       ? `https://fonts.googleapis.com/css2?family=${encodeURIComponent(choice.family!).replace(/%20/g, '+')}&display=swap`
       : choice.url!
     const key = choice.source === 'webfont' ? `webfont:${choice.family}:${url}` : `stylesheet:${url}`
+    activeKeys.add(key)
     if (loaded.has(key)) continue
     loaded.add(key)
     if (choice.source === 'webfont') {
@@ -77,13 +80,40 @@ export function loadFontResources(settings: FontSettings, doc: Document = docume
       doc.head.appendChild(link)
     }
   }
+
+  // Remove stale font links that are no longer active
+  if (doc.head) {
+    const existingLinks = doc.head.querySelectorAll<HTMLLinkElement>('link[data-gtar-font]')
+    existingLinks.forEach((link) => {
+      const key = link.dataset.gtarFont
+      if (key && !activeKeys.has(key)) {
+        link.remove()
+        loaded?.delete(key)
+      }
+    })
+  }
 }
 
 export function applyFontSettings(raw: unknown, root: HTMLElement) {
   const fonts = normalizeFontSettings(raw)
   loadFontResources(fonts, root.ownerDocument)
-  root.style.setProperty('--custom-font-ui', fontStack(fonts.ui))
-  root.style.setProperty('--custom-font-heading', fontStack(fonts.heading || fonts.ui, 'heading'))
-  if (fonts.stage && fonts.stage.source !== 'system') root.style.setProperty('--custom-font-stage', fontStack(fonts.stage, 'stage'))
-  else root.style.removeProperty('--custom-font-stage')
+  if (fonts.ui && fonts.ui.source !== 'system') {
+    root.style.setProperty('--custom-font-ui', fontStack(fonts.ui))
+  } else {
+    root.style.removeProperty('--custom-font-ui')
+  }
+
+  if (fonts.heading && fonts.heading.source !== 'system') {
+    root.style.setProperty('--custom-font-heading', fontStack(fonts.heading, 'heading'))
+  } else if (fonts.ui && fonts.ui.source !== 'system') {
+    root.style.setProperty('--custom-font-heading', fontStack(fonts.ui, 'heading'))
+  } else {
+    root.style.removeProperty('--custom-font-heading')
+  }
+
+  if (fonts.stage && fonts.stage.source !== 'system') {
+    root.style.setProperty('--custom-font-stage', fontStack(fonts.stage, 'stage'))
+  } else {
+    root.style.removeProperty('--custom-font-stage')
+  }
 }

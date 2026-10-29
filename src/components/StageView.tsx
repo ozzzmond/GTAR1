@@ -962,7 +962,12 @@ export const StageView: React.FC<StageViewProps> = ({
 
   return (
     <div
-      className="relative w-full h-[100dvh] min-h-0 bg-slate-950 text-slate-100 flex flex-col overflow-hidden select-none"
+      data-stage-view="true"
+      className="stage-view-root relative w-full h-[100dvh] min-h-0 flex flex-col overflow-hidden select-none"
+      style={{
+        backgroundColor: 'var(--custom-stage-bg, #020617)',
+        color: 'var(--custom-stage-text, #f1f5f9)',
+      }}
       onMouseMove={triggerOverlaysShow}
       onClick={() => {
         if (!showStageOverlays) {
@@ -977,9 +982,14 @@ export const StageView: React.FC<StageViewProps> = ({
           role="button"
           tabIndex={0}
           aria-label="Reveal stage controls"
-          className="fixed top-2 left-1/2 -translate-x-1/2 z-50 px-4 py-2 min-h-[44px] rounded-full bg-slate-900/90 backdrop-blur-md border border-slate-700/60 shadow-lg cursor-pointer flex items-center gap-2 max-w-[85vw] transition-transform active:scale-95"
+          className="stage-minimal-badge fixed top-2 left-1/2 -translate-x-1/2 z-50 px-4 py-2 min-h-[44px] rounded-full backdrop-blur-md border shadow-lg cursor-pointer flex items-center gap-2 max-w-[85vw] transition-transform active:scale-95"
+          style={{
+            backgroundColor: 'var(--custom-dock-bg, var(--custom-stage-surface, rgba(15, 23, 42, 0.9)))',
+            borderColor: 'var(--custom-dock-border, var(--custom-card-border, rgba(51, 65, 85, 0.6)))',
+            color: 'var(--custom-uiPrimaryText, #f1f5f9)',
+          }}
         >
-          <span className="text-xs sm:text-base md:text-lg font-bold text-slate-100 truncate">
+          <span className="text-xs sm:text-base md:text-lg font-bold truncate" style={{ color: 'var(--custom-uiPrimaryText, #f1f5f9)' }}>
             {song.title || 'Untitled Song'}
           </span>
         </div>
@@ -988,11 +998,15 @@ export const StageView: React.FC<StageViewProps> = ({
       {/* 2. Top Bar (Portrait-First Compact Navigation) */}
       <header
         role="banner"
-        className={`fixed top-0 inset-x-0 z-40 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-3 py-1.5 transition-all duration-300 ${
+        className={`fixed top-0 inset-x-0 z-40 backdrop-blur-md border-b px-3 py-1.5 transition-all duration-300 ${
           showStageOverlays
             ? 'translate-y-0 opacity-100 pointer-events-auto'
             : '-translate-y-full opacity-0 pointer-events-none'
         }`}
+        style={{
+          backgroundColor: 'var(--custom-chrome-header-bg, rgba(15, 23, 42, 0.9))',
+          borderBottomColor: 'var(--custom-card-border, var(--custom-stage-border, #1e293b))',
+        }}
       >
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 overflow-x-hidden">
           {/* Left: Back Button & Song Title */}
@@ -1001,27 +1015,43 @@ export const StageView: React.FC<StageViewProps> = ({
               type="button"
               onClick={onBack}
               aria-label="Exit Stage and return to Music Explorer"
-              className="min-w-[44px] min-h-[44px] w-11 h-11 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors shrink-0 flex items-center justify-center"
+              className="ui-button min-w-[44px] min-h-[44px] w-11 h-11 rounded-xl transition-colors shrink-0 flex items-center justify-center border"
+              style={{
+                backgroundColor: 'var(--custom-control-button-bg, #1e293b)',
+                color: 'var(--custom-control-button-text, #f1f5f9)',
+                borderColor: 'var(--custom-card-border, #334155)',
+              }}
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
 
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5 min-w-0">
-                <h1 className="text-sm sm:text-base font-extrabold text-white truncate">
+                <h1
+                  className="stage-title-text text-sm sm:text-base font-extrabold truncate"
+                  style={{ color: 'var(--custom-headerPrimaryText, var(--custom-uiPrimaryText, #ffffff))' }}
+                >
                   {song.title || 'Untitled Song'}
                 </h1>
                 {(setlistName ? hasQueue : hasQueue && (queue?.length ?? 0) > 1) && (
                   <span
                     data-testid="stage-queue-counter"
-                    className="px-1.5 py-0.5 rounded-full bg-sky-950/80 text-sky-400 border border-sky-800/60 text-[10px] font-mono font-bold shrink-0"
+                    className="px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold shrink-0 border"
+                    style={{
+                      backgroundColor: 'var(--custom-card-selected-bg, rgba(8, 47, 73, 0.8))',
+                      color: 'var(--custom-card-selected-border, #38bdf8)',
+                      borderColor: 'var(--custom-card-selected-border, rgba(7, 89, 133, 0.6))',
+                    }}
                   >
                     {currentQueueIndex + 1}/{queue?.length}
                   </span>
                 )}
               </div>
               {song.artist && (
-                <div className="text-[11px] text-slate-400 truncate">
+                <div
+                  className="stage-artist-text text-[11px] truncate"
+                  style={{ color: 'var(--custom-headerSecondaryText, var(--custom-uiSecondaryText, #94a3b8))' }}
+                >
                   {song.artist}
                 </div>
               )}
@@ -1035,12 +1065,17 @@ export const StageView: React.FC<StageViewProps> = ({
               type="button"
               onClick={() => setIsKeyPickerOpen(true)}
               aria-label={`Key: ${currentKey}. Click to transpose.`}
-              className="min-h-[44px] min-w-[44px] px-2.5 rounded-xl bg-slate-800 hover:bg-slate-750 border border-slate-700 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors shrink-0"
+              className="ui-button min-h-[44px] min-w-[44px] px-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors shrink-0"
+              style={{
+                backgroundColor: 'var(--custom-control-button-bg, #1e293b)',
+                borderColor: 'var(--custom-card-border, #334155)',
+                color: 'var(--custom-control-button-text, #f1f5f9)',
+              }}
             >
-              <span className="text-slate-400">Key:</span>
-              <span className="font-bold text-amber-400">{currentKey}</span>
+              <span style={{ color: 'var(--custom-uiMutedText, #94a3b8)' }}>Key:</span>
+              <span className="font-bold" style={{ color: 'var(--custom-control-accent, #f59e0b)' }}>{currentKey}</span>
               {transposeOffset !== 0 && (
-                <span className="text-[10px] font-mono text-sky-300">
+                <span className="text-[10px] font-mono" style={{ color: 'var(--custom-uiLinkText, #38bdf8)' }}>
                   {transposeOffset > 0 ? `+${transposeOffset}` : transposeOffset}
                 </span>
               )}
@@ -1057,11 +1092,12 @@ export const StageView: React.FC<StageViewProps> = ({
                 } catch {}
               }}
               aria-label="Toggle Chords vs Numbers"
-              className={`hidden sm:inline-flex min-h-[44px] px-3 items-center rounded-xl text-xs font-bold border transition-colors ${
-                notation === 'numbers'
-                  ? 'bg-amber-500 border-amber-400 text-slate-900'
-                  : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750'
-              }`}
+              className="hidden sm:inline-flex min-h-[44px] px-3 items-center rounded-xl text-xs font-bold border transition-colors"
+              style={{
+                backgroundColor: notation === 'numbers' ? 'var(--custom-control-accent, #f59e0b)' : 'var(--custom-control-button-bg, #1e293b)',
+                borderColor: notation === 'numbers' ? 'var(--custom-control-accent, #f59e0b)' : 'var(--custom-card-border, #334155)',
+                color: notation === 'numbers' ? 'var(--custom-action-foreground, #000000)' : 'var(--custom-control-button-text, #f1f5f9)',
+              }}
             >
               {notation === 'numbers' ? 'NNS' : 'Chords'}
             </button>
@@ -1071,7 +1107,12 @@ export const StageView: React.FC<StageViewProps> = ({
               type="button"
               onClick={() => setIsOptionsOpen(true)}
               aria-label="Open Stage Options"
-              className="min-w-[44px] min-h-[44px] w-11 h-11 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white transition-colors flex items-center justify-center shrink-0"
+              className="ui-button min-w-[44px] min-h-[44px] w-11 h-11 rounded-xl border transition-colors flex items-center justify-center shrink-0"
+              style={{
+                backgroundColor: 'var(--custom-control-button-bg, #1e293b)',
+                borderColor: 'var(--custom-card-border, #334155)',
+                color: 'var(--custom-control-button-text, #f1f5f9)',
+              }}
             >
               <Sliders className="w-5 h-5" />
             </button>
@@ -1147,12 +1188,14 @@ export const StageView: React.FC<StageViewProps> = ({
         <nav
           role="region"
           aria-label="Stage transport controls"
-          className={`fixed bottom-0 inset-x-0 z-40 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 px-4 py-2.5 transition-all duration-300 ${
+          className={`fixed bottom-0 inset-x-0 z-40 backdrop-blur-md border-t px-4 py-2.5 transition-all duration-300 ${
             showStageOverlays
               ? 'translate-y-0 opacity-100 pointer-events-auto'
               : 'translate-y-full opacity-0 pointer-events-none'
           }`}
           style={{
+            backgroundColor: 'var(--custom-dock-bg, var(--custom-chrome-toolbar-bg, rgba(15, 23, 42, 0.95)))',
+            borderTopColor: 'var(--custom-dock-border, var(--custom-card-border, #1e293b))',
             paddingBottom: 'max(0.625rem, env(safe-area-inset-bottom, 0.625rem))',
           }}
         >
@@ -1163,11 +1206,16 @@ export const StageView: React.FC<StageViewProps> = ({
               disabled={!canPrevSection}
               onClick={handlePrevSection}
               aria-label="Previous section"
-              className={`p-3 min-w-[44px] min-h-[44px] rounded-2xl flex items-center justify-center transition-all ${
+              className={`p-3 min-w-[44px] min-h-[44px] rounded-2xl flex items-center justify-center transition-all border ${
                 canPrevSection
-                  ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 active:scale-95'
-                  : 'bg-slate-900/40 text-slate-600 cursor-not-allowed pointer-events-none'
+                  ? 'active:scale-95'
+                  : 'opacity-40 cursor-not-allowed pointer-events-none'
               }`}
+              style={{
+                backgroundColor: 'var(--custom-dock-btn-bg, var(--custom-control-button-bg, #1e293b))',
+                color: 'var(--custom-dock-btn-icon, var(--custom-control-button-text, #f1f5f9))',
+                borderColor: 'var(--custom-dock-border, var(--custom-card-border, #334155))',
+              }}
             >
               <ChevronUp className="w-6 h-6 stroke-[2.5]" />
             </button>
@@ -1177,7 +1225,12 @@ export const StageView: React.FC<StageViewProps> = ({
               type="button"
               onClick={() => handleTransposeChange(-1)}
               aria-label="Transpose down one semitone"
-              className="p-3 min-w-[44px] min-h-[44px] rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 active:scale-95 flex items-center justify-center transition-all"
+              className="p-3 min-w-[44px] min-h-[44px] rounded-2xl active:scale-95 flex items-center justify-center transition-all border"
+              style={{
+                backgroundColor: 'var(--custom-dock-btn-bg, var(--custom-control-button-bg, #1e293b))',
+                color: 'var(--custom-dock-btn-icon, var(--custom-control-button-text, #f1f5f9))',
+                borderColor: 'var(--custom-dock-border, var(--custom-card-border, #334155))',
+              }}
             >
               <Minus className="w-5 h-5 stroke-[2.5]" />
             </button>
@@ -1190,11 +1243,12 @@ export const StageView: React.FC<StageViewProps> = ({
                 setIsAutoScrolling((prev) => !prev)
               }}
               aria-label={isAutoScrolling ? 'Pause auto-scroll' : 'Start auto-scroll'}
-              className={`w-14 h-14 rounded-full flex items-center justify-center shadow-2xl transition-all active:scale-90 border-2 ${
-                isAutoScrolling
-                  ? 'bg-red-600 border-red-500 text-white shadow-red-900/50'
-                  : 'bg-sky-600 border-sky-400 text-white shadow-sky-900/50 hover:bg-sky-500'
-              }`}
+              className="w-14 h-14 rounded-full flex items-center justify-center shadow-2xl transition-all active:scale-90 border-2"
+              style={{
+                backgroundColor: isAutoScrolling ? '#dc2626' : 'var(--custom-dock-play-bg, var(--custom-control-accent, #0284c7))',
+                borderColor: isAutoScrolling ? '#ef4444' : 'var(--custom-dock-play-bg, var(--custom-control-accent, #38bdf8))',
+                color: isAutoScrolling ? '#ffffff' : 'var(--custom-dock-play-icon, #000000)',
+              }}
             >
               {isAutoScrolling ? (
                 <Pause className="w-7 h-7 fill-current" />
@@ -1208,7 +1262,12 @@ export const StageView: React.FC<StageViewProps> = ({
               type="button"
               onClick={() => handleTransposeChange(1)}
               aria-label="Transpose up one semitone"
-              className="p-3 min-w-[44px] min-h-[44px] rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 active:scale-95 flex items-center justify-center transition-all"
+              className="p-3 min-w-[44px] min-h-[44px] rounded-2xl active:scale-95 flex items-center justify-center transition-all border"
+              style={{
+                backgroundColor: 'var(--custom-dock-btn-bg, var(--custom-control-button-bg, #1e293b))',
+                color: 'var(--custom-dock-btn-icon, var(--custom-control-button-text, #f1f5f9))',
+                borderColor: 'var(--custom-dock-border, var(--custom-card-border, #334155))',
+              }}
             >
               <Plus className="w-5 h-5 stroke-[2.5]" />
             </button>
@@ -1219,11 +1278,16 @@ export const StageView: React.FC<StageViewProps> = ({
               disabled={!canNextSection}
               onClick={handleNextSection}
               aria-label="Next section"
-              className={`p-3 min-w-[44px] min-h-[44px] rounded-2xl flex items-center justify-center transition-all ${
+              className={`p-3 min-w-[44px] min-h-[44px] rounded-2xl flex items-center justify-center transition-all border ${
                 canNextSection
-                  ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 active:scale-95'
-                  : 'bg-slate-900/40 text-slate-600 cursor-not-allowed pointer-events-none'
+                  ? 'active:scale-95'
+                  : 'opacity-40 cursor-not-allowed pointer-events-none'
               }`}
+              style={{
+                backgroundColor: 'var(--custom-dock-btn-bg, var(--custom-control-button-bg, #1e293b))',
+                color: 'var(--custom-dock-btn-icon, var(--custom-control-button-text, #f1f5f9))',
+                borderColor: 'var(--custom-dock-border, var(--custom-card-border, #334155))',
+              }}
             >
               <ChevronDown className="w-6 h-6 stroke-[2.5]" />
             </button>

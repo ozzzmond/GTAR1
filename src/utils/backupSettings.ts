@@ -618,22 +618,72 @@ export function persistCloudThemeSettings(
 export function readBackupSettings(storage?: Pick<Storage, 'getItem'>): BackupSettings {
   const store = storage || (typeof localStorage !== 'undefined' ? localStorage : null)
   if (!store) return {}
-  const data: Record<string, unknown> = {}
+  const data: BackupSettings = {}
+
+  // 1. Theme Mode
   const theme = store.getItem(SETTINGS_KEYS.themeMode)
-  const colors = store.getItem(SETTINGS_KEYS.customThemeColors)
-  if (theme !== null) data.themeMode = theme
-  if (colors !== null) data.customThemeColors = JSON.parse(colors)
-  const overrides = store.getItem(SETTINGS_KEYS.factoryThemeOverrides)
-  if (overrides !== null) data.factoryThemeOverrides = JSON.parse(overrides)
+  if (theme !== null && (THEME_MODES as readonly string[]).includes(theme)) {
+    data.themeMode = theme as ThemeMode
+  }
+
+  // 2. Custom Theme Colors (isolated from corrupt JSON / invalid color tokens)
+  const rawColors = store.getItem(SETTINGS_KEYS.customThemeColors)
+  if (rawColors !== null) {
+    try {
+      const parsed = JSON.parse(rawColors)
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        const errors = validateBackupSettings({ customThemeColors: parsed })
+        if (errors.length === 0) {
+          data.customThemeColors = parsed as CustomThemeColors
+        } else {
+          console.warn('Isolating corrupt customThemeColors from backup export:', errors)
+        }
+      }
+    } catch {
+      console.warn('Isolating malformed customThemeColors JSON from backup export')
+    }
+  }
+
+  // 3. Factory Theme Overrides (isolated from corrupt JSON / invalid color tokens)
+  const rawOverrides = store.getItem(SETTINGS_KEYS.factoryThemeOverrides)
+  if (rawOverrides !== null) {
+    try {
+      const parsed = JSON.parse(rawOverrides)
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        const errors = validateBackupSettings({ factoryThemeOverrides: parsed })
+        if (errors.length === 0) {
+          data.factoryThemeOverrides = parsed as FactoryThemeOverrides
+        } else {
+          console.warn('Isolating corrupt factoryThemeOverrides from backup export:', errors)
+        }
+      }
+    } catch {
+      console.warn('Isolating malformed factoryThemeOverrides JSON from backup export')
+    }
+  }
+
+  // 4. Stage Settings
   const stage: Record<string, unknown> = {}
   for (const key of ['fontStyle', 'fontSizePx', 'scrollSpeed', 'isTwoColumn'] as const) {
     const value = store.getItem(SETTINGS_KEYS[key])
-    if (value !== null) stage[key] = key === 'fontStyle' ? value : JSON.parse(value)
+    if (value !== null) {
+      try {
+        stage[key] = key === 'fontStyle' ? value : JSON.parse(value)
+      } catch {
+        // ignore malformed scalar setting
+      }
+    }
   }
-  if (Object.keys(stage).length) data.stageSettings = stage
-  const errors = validateBackupSettings(data)
-  if (errors.length) throw new Error(errors.join('\n'))
-  return data as BackupSettings
+  if (Object.keys(stage).length) {
+    const stageErrors = validateBackupSettings({ stageSettings: stage })
+    if (stageErrors.length === 0) {
+      data.stageSettings = stage as BackupSettings['stageSettings']
+    } else {
+      console.warn('Isolating corrupt stageSettings from backup export:', stageErrors)
+    }
+  }
+
+  return data
 }
 
 export function restoreBackupSettings(settings: BackupSettings, storage?: Pick<Storage, 'setItem'>) {

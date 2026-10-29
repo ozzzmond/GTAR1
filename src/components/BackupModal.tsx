@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import type { SongEntity, WebSetlist, SetlistFolder } from '../types/gtar'
 import { createBackupPayload, parseBackupJson } from '../utils/jsonBackup'
 import { restoreBackupSettings, type BackupSettings } from '../utils/backupSettings'
@@ -47,7 +47,22 @@ export const BackupModal: React.FC<BackupModalProps> = ({
   } | null>(null)
   const [isImporting, setIsImporting] = useState<boolean>(false)
 
-  const backupJsonString = JSON.stringify(createBackupPayload(songs, setlists, folders), null, 2)
+  const backupJsonString = useMemo(() => {
+    try {
+      return JSON.stringify(createBackupPayload(songs, setlists, folders), null, 2)
+    } catch (err) {
+      console.warn('Isolating corrupt backup settings during export:', err)
+      return JSON.stringify({
+        app: 'GTAR1',
+        schemaVersion: 1,
+        version: '0.1.0-dev',
+        exportedAt: new Date().toISOString(),
+        songs,
+        setlists,
+        folders,
+      }, null, 2)
+    }
+  }, [songs, setlists, folders])
 
   const handleCopy = () => {
     navigator.clipboard.writeText(backupJsonString)
