@@ -733,3 +733,109 @@ test('R10_OFFLINE_INTEGRITY_AND_NO_CANONICAL_CHART_MUTATION: zero cloud calls an
   assert.ok(!stageSource.includes('gapi'), 'StageView must have zero Google API calls')
   assert.ok(!stageSource.includes('accounts.google.com'), 'StageView must have zero OAuth dependencies')
 })
+
+// =========================================================================
+// CODEX CRITICAL DELTA REMEDIATIONS: P0 & P1 FIXES
+// =========================================================================
+
+test('CODEX_R1: AUTHORITATIVE_STATE_PERSISTENCE_ORDERING — rapid A+1 / B+2 updates preserve both offsets upon readback', async () => {
+  // Authoritative state ref pattern as implemented in App.tsx
+  let authoritativeSetlist = {
+    id: 'setlist-test-1',
+    name: 'Rapid Updates Gig',
+    songs: [
+      { entryId: 'entry-A', id: 'song-1', transposeOffset: 0 },
+      { entryId: 'entry-B', id: 'song-2', transposeOffset: 0 },
+    ],
+  }
+
+  let dbMock = JSON.parse(JSON.stringify(authoritativeSetlist))
+  let saveQueue = Promise.resolve()
+
+  const saveSetlistMock = async (sl) => {
+    // Simulate real IndexedDB async latency
+    await new Promise((r) => setTimeout(r, 10))
+    dbMock = JSON.parse(JSON.stringify(sl))
+  }
+
+  const handleStageTransposeChangeImmediate = (entryId, newOffset) => {
+    // 1. Immediately update authoritative in-memory state
+    const updatedSongs = authoritativeSetlist.songs.map((ref) =>
+      ref.entryId === entryId ? { ...ref, transposeOffset: newOffset } : ref
+    )
+    authoritativeSetlist = { ...authoritativeSetlist, songs: updatedSongs }
+
+    // 2. Queue write of latest authoritative state
+    const toSave = authoritativeSetlist
+    saveQueue = saveQueue.then(() => saveSetlistMock(toSave))
+    return saveQueue
+  }
+
+  // Rapid consecutive calls without waiting for render or DB latency
+  const p1 = handleStageTransposeChangeImmediate('entry-A', 1)
+  const p2 = handleStageTransposeChangeImmediate('entry-B', 2)
+
+  await Promise.all([p1, p2])
+
+  // Fresh readback from simulated DB
+  assert.equal(dbMock.songs.find((s) => s.entryId === 'entry-A').transposeOffset, 1, 'Entry A must be 1')
+  assert.equal(dbMock.songs.find((s) => s.entryId === 'entry-B').transposeOffset, 2, 'Entry B must be 2')
+})
+
+test('CODEX_R3: SAME_SONG_DISTINCT_ENTRY_IDS_TRANSITION_RESET — occurrence entryId resets scroll and RAF', () => {
+  const stageSource = fs.readFileSync(path.resolve(__dirname, '../src/components/StageView.tsx'), 'utf8')
+  assert.ok(
+    stageSource.includes('currentOccurrenceId'),
+    'StageView must compute currentOccurrenceId incorporating occurrence entryId'
+  )
+  assert.ok(
+    stageSource.includes('[currentOccurrenceId]'),
+    'StageView transition reset effect must depend on currentOccurrenceId, not only song.id'
+  )
+})
+
+test('CODEX_R3_NEW: PROGRAMMATIC_SCROLL_DOES_NOT_SELF_PAUSE — distinguishes RAF from manual user input', () => {
+  const stageSource = fs.readFileSync(path.resolve(__dirname, '../src/components/StageView.tsx'), 'utf8')
+  assert.ok(
+    stageSource.includes('isProgrammaticScrollRef'),
+    'StageView must track isProgrammaticScrollRef'
+  )
+  assert.ok(
+    stageSource.includes('isProgrammaticScrollRef.current = true'),
+    'RAF step must mark isProgrammaticScrollRef.current = true before assigning container.scrollTop'
+  )
+  assert.ok(
+    stageSource.includes('if (isProgrammaticScrollRef.current)'),
+    'handleScroll must check isProgrammaticScrollRef and return without self-pausing'
+  )
+})
+
+test('CODEX_R5: EXPLORER_SCROLL_RESTORATION_AND_FORWARD_NAVIGATION — prevents 0-clobber and handles browser forward', () => {
+  const appSource = fs.readFileSync(path.resolve(__dirname, '../src/App.tsx'), 'utf8')
+  assert.ok(
+    appSource.includes('isRestoringScrollRef'),
+    'App.tsx must use isRestoringScrollRef to prevent premature 0-reset of explorerScrollRef'
+  )
+  assert.ok(
+    appSource.includes('if (e.state?.stage)'),
+    'App.tsx popstate handler must check e.state?.stage to transition forward into Stage'
+  )
+})
+
+test('CODEX_R6: WAKE_LOCK_STATUS_DISTINCTION — distinguishes user preference from hardware acquisition', () => {
+  const stageSource = fs.readFileSync(path.resolve(__dirname, '../src/components/StageView.tsx'), 'utf8')
+  assert.ok(
+    stageSource.includes('wakeLockPreference'),
+    'StageView must track wakeLockPreference separately'
+  )
+  assert.ok(
+    stageSource.includes('isWakeLockAcquired'),
+    'StageView must track isWakeLockAcquired separately'
+  )
+
+  const sheetSource = fs.readFileSync(path.resolve(__dirname, '../src/components/StageOptionsSheet.tsx'), 'utf8')
+  assert.ok(
+    sheetSource.includes('Denied / Unavailable'),
+    'StageOptionsSheet must display Denied/Unavailable when preference is ON but hardware lock is not acquired'
+  )
+})

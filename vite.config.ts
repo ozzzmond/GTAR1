@@ -9,9 +9,9 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'robots.txt'],
+      includeAssets: ['favicon.ico', 'favicon.svg', 'apple-touch-icon.png'],
       manifest: {
-        name: 'GTAR — Local First Music Stand',
+        name: 'GTAR - Local First Music Stand',
         short_name: 'GTAR',
         description: 'Standalone local-first ChordPro music stand and setlist manager',
         theme_color: '#0f172a',

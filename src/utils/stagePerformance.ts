@@ -198,13 +198,16 @@ export function createFullscreenController(): FullscreenController {
 export interface WakeLockSentinelLike {
   released: boolean
   release(): Promise<void>
+  addEventListener?(type: string, listener: () => void): void
 }
 
 export interface WakeLockController {
-  acquire(): Promise<void>
+  acquire(): Promise<boolean>
   release(): Promise<void>
   cleanup(): Promise<void>
   readonly isSupported: boolean
+  readonly isAcquired: boolean
+  onChange(callback: (isAcquired: boolean) => void): () => void
 }
 
 export function createWakeLockController(): WakeLockController {
@@ -214,12 +217,23 @@ export function createWakeLockController(): WakeLockController {
   let visibilityHandler: (() => void) | null = null
   let destroyed = false
   let enabled = false
+  const listeners: Array<(isAcquired: boolean) => void> = []
 
-  let pending: Promise<void> | null = null
+  let pending: Promise<boolean> | null = null
   let releaseGeneration = 0
 
-  function acquireInternal(): Promise<void> {
-    if (!supported || destroyed || !enabled || (sentinel && !sentinel.released)) return Promise.resolve()
+  function dispatchChange() {
+    const acquired = Boolean(sentinel && !sentinel.released)
+    listeners.forEach((fn) => {
+      try {
+        fn(acquired)
+      } catch {}
+    })
+  }
+
+  function acquireInternal(): Promise<boolean> {
+    if (!supported || destroyed || !enabled) return Promise.resolve(false)
+    if (sentinel && !sentinel.released) return Promise.resolve(true)
     if (pending) return pending
     const generation = releaseGeneration
     pending = (async () => {
@@ -227,11 +241,26 @@ export function createWakeLockController(): WakeLockController {
         const acquired = await (navigator as any).wakeLock.request('screen')
         if (destroyed || !enabled || generation !== releaseGeneration) {
           await acquired.release()
+          dispatchChange()
+          return false
         } else {
           sentinel = acquired
+          if (typeof acquired.addEventListener === 'function') {
+            acquired.addEventListener('release', () => {
+              if (sentinel === acquired) {
+                sentinel = null
+                dispatchChange()
+              }
+            })
+          }
+          dispatchChange()
+          return true
         }
       } catch {
-        // Page hidden or permission denied
+        // Page hidden, battery saver, or permission denied
+        sentinel = null
+        dispatchChange()
+        return false
       } finally {
         pending = null
       }
@@ -249,13 +278,14 @@ export function createWakeLockController(): WakeLockController {
       }
     }
     sentinel = null
+    dispatchChange()
   }
 
   function setupVisibilityListener() {
     if (!supported || typeof document === 'undefined') return
     visibilityHandler = () => {
       if (document.visibilityState === 'visible' && !destroyed && enabled) {
-        acquireInternal()
+        acquireInternal().catch(() => {})
       }
     }
     document.addEventListener('visibilitychange', visibilityHandler)
@@ -275,9 +305,21 @@ export function createWakeLockController(): WakeLockController {
       return supported
     },
 
-    async acquire() {
+    get isAcquired() {
+      return Boolean(sentinel && !sentinel.released)
+    },
+
+    onChange(callback: (isAcquired: boolean) => void) {
+      listeners.push(callback)
+      return () => {
+        const idx = listeners.indexOf(callback)
+        if (idx !== -1) listeners.splice(idx, 1)
+      }
+    },
+
+    async acquire(): Promise<boolean> {
       enabled = true
-      await acquireInternal()
+      return acquireInternal()
     },
 
     async release() {
@@ -290,6 +332,7 @@ export function createWakeLockController(): WakeLockController {
       destroyed = true
       teardownVisibilityListener()
       await releaseInternal()
+      listeners.length = 0
     },
   }
 }

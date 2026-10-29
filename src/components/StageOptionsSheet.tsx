@@ -52,6 +52,7 @@ export interface StageOptionsSheetProps {
 
   // Wake lock & Fullscreen
   wakeLockActive: boolean
+  wakeLockAcquired?: boolean
   onToggleWakeLock: () => void
   isFullscreen: boolean
   onToggleFullscreen: () => void
@@ -120,6 +121,7 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
   autoHideControls,
   onToggleAutoHideControls,
   wakeLockActive,
+  wakeLockAcquired = false,
   onToggleWakeLock,
   isFullscreen,
   onToggleFullscreen,
@@ -158,7 +160,7 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
       />
 
       {/* Sheet / Modal Container */}
-      <div className="relative w-full sm:max-w-xl max-h-[88vh] bg-slate-900 border border-slate-700 sm:rounded-3xl rounded-t-3xl shadow-2xl z-10 flex flex-col overflow-hidden animate-slide-up sm:animate-scale-in">
+      <div className="relative w-full sm:max-w-xl max-h-[88dvh] bg-slate-900 border border-slate-700 sm:rounded-3xl rounded-t-3xl shadow-2xl z-10 flex flex-col overflow-hidden animate-slide-up sm:animate-scale-in">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800 bg-slate-900/90 sticky top-0 z-10">
           <div className="flex items-center gap-2">
@@ -439,11 +441,33 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
             {/* Wake Lock Controller */}
             <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-800/60 border border-slate-700/60">
               <div className="flex items-center gap-2.5">
-                <Sun className={`w-4 h-4 ${wakeLockActive ? 'text-amber-400' : 'text-slate-400'}`} />
+                <Sun
+                  className={`w-4 h-4 ${
+                    wakeLockActive && wakeLockAcquired
+                      ? 'text-amber-400'
+                      : wakeLockActive && !wakeLockAcquired
+                      ? 'text-red-400'
+                      : 'text-slate-400'
+                  }`}
+                />
                 <div>
-                  <div className="font-semibold text-slate-100">Keep Screen Awake</div>
+                  <div className="font-semibold text-slate-100 flex items-center gap-2">
+                    <span>Keep Screen Awake</span>
+                    {wakeLockActive && !wakeLockAcquired && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-950/70 text-red-400 border border-red-800/60 font-mono">
+                        Denied / Unavailable
+                      </span>
+                    )}
+                    {wakeLockActive && wakeLockAcquired && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-950/70 text-emerald-400 border border-emerald-800/60 font-mono">
+                        Active
+                      </span>
+                    )}
+                  </div>
                   <div className="text-[11px] text-slate-400">
-                    Screen Wake Lock controller (enabled by default)
+                    {wakeLockActive && !wakeLockAcquired
+                      ? 'Permission denied or wake lock unsupported on this device'
+                      : 'Screen Wake Lock controller (enabled by default)'}
                   </div>
                 </div>
               </div>
@@ -453,6 +477,7 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
                 className={`w-11 h-6 rounded-full transition-colors relative p-0.5 ${
                   wakeLockActive ? 'bg-amber-500' : 'bg-slate-700'
                 }`}
+                aria-label={wakeLockActive ? 'Disable wake lock' : 'Enable wake lock'}
               >
                 <div
                   className={`w-5 h-5 rounded-full bg-white transition-transform ${

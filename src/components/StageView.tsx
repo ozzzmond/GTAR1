@@ -113,7 +113,10 @@ export const StageView: React.FC<StageViewProps> = ({
   const [fontSize, setFontSize] = useState<number>(() => {
     try {
       const saved = localStorage.getItem(STAGE_FONT_SIZE_KEY)
-      if (saved) return Number(saved) || 24
+      if (saved) {
+        const val = Number(saved)
+        if (!isNaN(val)) return Math.max(14, Math.min(36, val))
+      }
     } catch {}
     return 24
   })
@@ -187,14 +190,17 @@ export const StageView: React.FC<StageViewProps> = ({
     return false
   })
 
-  // Screen Wake Lock controller: enabled by default
-  const [wakeLockActive, setWakeLockActive] = useState<boolean>(() => {
+  // Screen Wake Lock user preference: enabled by default
+  const [wakeLockPreference, setWakeLockPreference] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem(STAGE_WAKE_LOCK_KEY)
       if (saved !== null) return saved === 'true'
     } catch {}
     return true
   })
+
+  // Screen Wake Lock actual hardware acquisition status
+  const [isWakeLockAcquired, setIsWakeLockAcquired] = useState<boolean>(false)
 
   // Auto-scroll speed: 5–180 px/s, default 35
   const [autoScrollSpeed, setAutoScrollSpeed] = useState<number>(() => {
@@ -230,6 +236,7 @@ export const StageView: React.FC<StageViewProps> = ({
   const accumulatedScrollRef = useRef<number>(0)
   const lastScrollRatioRef = useRef<number | null>(null)
   const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null)
+  const isProgrammaticScrollRef = useRef<boolean>(false)
 
   // Controllers
   const wakeLockControllerRef = useRef<ReturnType<typeof createWakeLockController> | null>(null)
@@ -278,16 +285,24 @@ export const StageView: React.FC<StageViewProps> = ({
     }
   }, [fontSize, chordScale, fontWeight, lineSpacing, fontFamily, notation, isTwoColumn])
 
+  // Occurrence transition identity: combines song.id with entryId or queue index
+  const currentOccurrenceId = queue?.[currentQueueIndex]?.entryId || `${song.id}-${currentQueueIndex}`
+
   // --- Wake Lock Lifecycle ---
   useEffect(() => {
     const controller = createWakeLockController()
     wakeLockControllerRef.current = controller
 
-    if (wakeLockActive) {
+    const unsubscribe = controller.onChange((acquired) => {
+      setIsWakeLockAcquired(acquired)
+    })
+
+    if (wakeLockPreference) {
       controller.acquire().catch(() => {})
     }
 
     return () => {
+      unsubscribe()
       controller.cleanup().catch(() => {})
     }
   }, [])
@@ -295,15 +310,15 @@ export const StageView: React.FC<StageViewProps> = ({
   useEffect(() => {
     const controller = wakeLockControllerRef.current
     if (!controller) return
-    if (wakeLockActive) {
+    if (wakeLockPreference) {
       controller.acquire().catch(() => {})
     } else {
       controller.release().catch(() => {})
     }
     try {
-      localStorage.setItem(STAGE_WAKE_LOCK_KEY, String(wakeLockActive))
+      localStorage.setItem(STAGE_WAKE_LOCK_KEY, String(wakeLockPreference))
     } catch {}
-  }, [wakeLockActive])
+  }, [wakeLockPreference])
 
   // --- Fullscreen Controller Lifecycle ---
   useEffect(() => {
@@ -325,6 +340,7 @@ export const StageView: React.FC<StageViewProps> = ({
   }
 
   // --- Auto-Hide HUD Overlays Logic ---
+  // Target approved 3.5s behavior, ONLY in actual performance mode (autoscrolling or fullscreen)
   const triggerOverlaysShow = useCallback(() => {
     setShowStageOverlays(true)
     if (autoHideTimerRef.current) {
@@ -332,20 +348,18 @@ export const StageView: React.FC<StageViewProps> = ({
       autoHideTimerRef.current = null
     }
 
-    if (autoHideControls) {
+    if (inPerformanceMode && autoHideControls && !isOptionsOpen && !isKeyPickerOpen) {
       autoHideTimerRef.current = setTimeout(() => {
-        // Only hide if options modal and key picker are not open
-        if (!isOptionsOpen && !isKeyPickerOpen) {
-          setShowStageOverlays(false)
-        }
-      }, 4000)
+        setShowStageOverlays(false)
+      }, 3500)
     }
-  }, [autoHideControls, isOptionsOpen, isKeyPickerOpen])
+  }, [inPerformanceMode, autoHideControls, isOptionsOpen, isKeyPickerOpen])
 
   useEffect(() => {
-    if (autoHideControls) {
+    if (inPerformanceMode && autoHideControls) {
       triggerOverlaysShow()
     } else {
+      // Paused / idle mode: controls remain discoverable and visible
       setShowStageOverlays(true)
       if (autoHideTimerRef.current) {
         clearTimeout(autoHideTimerRef.current)
@@ -355,11 +369,12 @@ export const StageView: React.FC<StageViewProps> = ({
     return () => {
       if (autoHideTimerRef.current) {
         clearTimeout(autoHideTimerRef.current)
+        autoHideTimerRef.current = null
       }
     }
-  }, [autoHideControls, triggerOverlaysShow])
+  }, [inPerformanceMode, autoHideControls, triggerOverlaysShow])
 
-  // Pause auto-hide while modals are open
+  // Pause auto-hide while modals/sheets are open; preserve interaction state
   useEffect(() => {
     if (isOptionsOpen || isKeyPickerOpen) {
       setShowStageOverlays(true)
@@ -367,21 +382,21 @@ export const StageView: React.FC<StageViewProps> = ({
         clearTimeout(autoHideTimerRef.current)
         autoHideTimerRef.current = null
       }
-    } else if (autoHideControls) {
+    } else if (inPerformanceMode && autoHideControls) {
       triggerOverlaysShow()
     }
-  }, [isOptionsOpen, isKeyPickerOpen, autoHideControls, triggerOverlaysShow])
+  }, [isOptionsOpen, isKeyPickerOpen, inPerformanceMode, autoHideControls, triggerOverlaysShow])
 
-  // Reset scroll position and cancel any active autoscroll when song changes
+  // Reset scroll position and cancel any active autoscroll when song or occurrence transition occurs
   useEffect(() => {
     setIsAutoScrolling(false)
     accumulatedScrollRef.current = 0
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTop = 0
     }
-  }, [song.id])
+  }, [currentOccurrenceId])
 
-  // --- Auto-Scroll Engine (requestAnimationFrame with elapsed-time accounting) ---
+  // --- Auto-Scroll Engine (requestAnimationFrame with bounded elapsed-time accounting) ---
   useEffect(() => {
     const container = scrollContainerRef.current
     if (!container || !isAutoScrolling) return
@@ -394,10 +409,13 @@ export const StageView: React.FC<StageViewProps> = ({
       if (!lastTime) {
         lastTime = now
       }
-      const deltaMs = now - lastTime
+      const rawDeltaMs = now - lastTime
       lastTime = now
+      // Bound RAF elapsed-time jumps after throttling, background tab sleep, or thread lag
+      const deltaMs = Math.max(0, Math.min(64, rawDeltaMs))
 
       accumulatedScrollRef.current += (autoScrollSpeed * deltaMs) / 1000
+      isProgrammaticScrollRef.current = true
       container.scrollTop = accumulatedScrollRef.current
 
       // Check if reached bottom
@@ -430,15 +448,62 @@ export const StageView: React.FC<StageViewProps> = ({
     }
   }, [])
 
+  // --- Section Navigation Bounds ---
+  const [canPrevSection, setCanPrevSection] = useState<boolean>(false)
+  const [canNextSection, setCanNextSection] = useState<boolean>(false)
+
+  const updateSectionNavBounds = useCallback(() => {
+    const container = scrollContainerRef.current
+    if (!container || sectionHeaders.length === 0) {
+      setCanPrevSection(false)
+      setCanNextSection(false)
+      return
+    }
+
+    const sections = Array.from(container.querySelectorAll<HTMLElement>('[data-stage-section="true"]'))
+    if (sections.length === 0) {
+      setCanPrevSection(false)
+      setCanNextSection(false)
+      return
+    }
+
+    const containerRect = container.getBoundingClientRect()
+    const headerOffset = 60
+    const currentScrollTop = container.scrollTop
+
+    const targets = sections.map((el) => {
+      const elRect = el.getBoundingClientRect()
+      const distanceFromTop = elRect.top - containerRect.top
+      return Math.max(0, currentScrollTop + distanceFromTop - headerOffset)
+    })
+
+    const hasPrev = targets.some((targetTop) => targetTop <= currentScrollTop - 12)
+    const hasNext = targets.some((targetTop) => targetTop > currentScrollTop + 12)
+
+    setCanPrevSection(hasPrev)
+    setCanNextSection(hasNext)
+  }, [sectionHeaders.length])
+
   // Sync scroll accumulator and pause autoscroll on manual user scroll
   const handleScroll = () => {
-    if (scrollContainerRef.current) {
-      accumulatedScrollRef.current = scrollContainerRef.current.scrollTop
-      if (isAutoScrolling) {
-        setIsAutoScrolling(false)
-      }
+    if (!scrollContainerRef.current) return
+    if (isProgrammaticScrollRef.current) {
+      isProgrammaticScrollRef.current = false
+      updateSectionNavBounds()
+      return
     }
+
+    accumulatedScrollRef.current = scrollContainerRef.current.scrollTop
+    if (isAutoScrolling) {
+      setIsAutoScrolling(false)
+    }
+    updateSectionNavBounds()
   }
+
+  // Update section bounds after layout changes or song change
+  useLayoutEffect(() => {
+    updateSectionNavBounds()
+  }, [parsed.lines, fontSize, chordScale, isTwoColumn, updateSectionNavBounds])
 
   // --- Section Navigation ---
   const handlePrevSection = useCallback(() => {
@@ -464,10 +529,8 @@ export const StageView: React.FC<StageViewProps> = ({
       accumulatedScrollRef.current = targetTop
       setIsAutoScrolling(false)
       container.scrollTo({ top: targetTop, behavior: 'smooth' })
-    } else {
-      accumulatedScrollRef.current = 0
-      setIsAutoScrolling(false)
-      container.scrollTo({ top: 0, behavior: 'smooth' })
+      setCanPrevSection(targets.some((t) => t.targetScrollTop <= targetTop - 12))
+      setCanNextSection(targets.some((t) => t.targetScrollTop > targetTop + 12))
     }
   }, [triggerOverlaysShow])
 
@@ -494,6 +557,8 @@ export const StageView: React.FC<StageViewProps> = ({
       accumulatedScrollRef.current = targetTop
       setIsAutoScrolling(false)
       container.scrollTo({ top: targetTop, behavior: 'smooth' })
+      setCanPrevSection(targets.some((t) => t.targetScrollTop <= targetTop - 12))
+      setCanNextSection(targets.some((t) => t.targetScrollTop > targetTop + 12))
     }
   }, [triggerOverlaysShow])
 
@@ -533,17 +598,21 @@ export const StageView: React.FC<StageViewProps> = ({
     }
   }
 
-  // --- Keyboard Shortcuts ---
+  // --- Keyboard Shortcuts (R5 Contract) ---
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if user is inside an input or textarea
-      const targetTag = (e.target as HTMLElement)?.tagName?.toUpperCase()
-      if (
-        targetTag === 'INPUT' ||
-        targetTag === 'TEXTAREA' ||
-        isOptionsOpen ||
-        isKeyPickerOpen
-      ) {
+      // Ignore if user is inside an editable control or modal is open
+      const target = e.target as HTMLElement | null
+      const isEditable = Boolean(
+        target &&
+          typeof target.getAttribute === 'function' &&
+          (target.tagName === 'INPUT' ||
+            target.tagName === 'TEXTAREA' ||
+            target.tagName === 'SELECT' ||
+            Boolean(target.isContentEditable) ||
+            target.getAttribute('contenteditable') === 'true')
+      )
+      if (isEditable || isOptionsOpen || isKeyPickerOpen) {
         return
       }
 
@@ -553,19 +622,38 @@ export const StageView: React.FC<StageViewProps> = ({
           setIsAutoScrolling((prev) => !prev)
           triggerOverlaysShow()
           break
-        case 'ArrowUp':
-        case 'k':
+        case 'PageUp':
           e.preventDefault()
-          handlePrevSection()
+          if (canPrevSection) {
+            handlePrevSection()
+          }
+          break
+        case 'PageDown':
+          e.preventDefault()
+          if (canNextSection) {
+            handleNextSection()
+          }
+          break
+        case 'ArrowUp':
+          e.preventDefault()
+          triggerOverlaysShow()
+          if (scrollContainerRef.current) {
+            scrollContainerRef.current.scrollBy({ top: -80, behavior: 'smooth' })
+            accumulatedScrollRef.current = Math.max(0, scrollContainerRef.current.scrollTop - 80)
+            if (isAutoScrolling) setIsAutoScrolling(false)
+          }
           break
         case 'ArrowDown':
-        case 'j':
           e.preventDefault()
-          handleNextSection()
+          triggerOverlaysShow()
+          if (scrollContainerRef.current) {
+            scrollContainerRef.current.scrollBy({ top: 80, behavior: 'smooth' })
+            accumulatedScrollRef.current = scrollContainerRef.current.scrollTop + 80
+            if (isAutoScrolling) setIsAutoScrolling(false)
+          }
           break
         case 'ArrowLeft':
         case '[':
-        case 'PageUp':
           if (canPrevSong) {
             e.preventDefault()
             handlePrevSong()
@@ -573,7 +661,6 @@ export const StageView: React.FC<StageViewProps> = ({
           break
         case 'ArrowRight':
         case ']':
-        case 'PageDown':
           if (canNextSong) {
             e.preventDefault()
             handleNextSong()
@@ -590,6 +677,7 @@ export const StageView: React.FC<StageViewProps> = ({
           handleTransposeChange(-1)
           break
         case 'f':
+        case 'F':
           e.preventDefault()
           handleToggleFullscreen()
           break
@@ -607,23 +695,28 @@ export const StageView: React.FC<StageViewProps> = ({
   }, [
     canPrevSong,
     canNextSong,
+    canPrevSection,
+    canNextSection,
     isOptionsOpen,
     isKeyPickerOpen,
     handlePrevSection,
     handleNextSection,
+    handlePrevSong,
+    handleNextSong,
     transposeOffset,
     onBack,
     triggerOverlaysShow,
   ])
 
-  // Can Prev / Next section state
-  const canPrevSection = sectionHeaders.length > 0
-  const canNextSection = sectionHeaders.length > 0
-
   return (
     <div
-      className="relative w-full h-full h-screen min-h-0 bg-slate-950 text-slate-100 flex flex-col overflow-hidden select-none"
+      className="relative w-full h-[100dvh] min-h-0 bg-slate-950 text-slate-100 flex flex-col overflow-hidden select-none"
       onMouseMove={triggerOverlaysShow}
+      onClick={() => {
+        if (!showStageOverlays) {
+          triggerOverlaysShow()
+        }
+      }}
     >
       {/* 1. Minimal Persistent Song Title Badge (When Overlays Auto-Hidden in Performance Mode) */}
       {inPerformanceMode && !showStageOverlays && (
@@ -632,9 +725,9 @@ export const StageView: React.FC<StageViewProps> = ({
           role="button"
           tabIndex={0}
           aria-label="Reveal stage controls"
-          className="fixed top-2 left-1/2 -translate-x-1/2 z-50 px-4 py-1.5 rounded-full bg-app-surface/85 backdrop-blur-md border border-slate-700/60 shadow-lg cursor-pointer flex items-center gap-2 max-w-[85vw] transition-transform active:scale-95"
+          className="fixed top-2 left-1/2 -translate-x-1/2 z-50 px-4 py-2 min-h-[44px] rounded-full bg-slate-900/90 backdrop-blur-md border border-slate-700/60 shadow-lg cursor-pointer flex items-center gap-2 max-w-[85vw] transition-transform active:scale-95"
         >
-          <span className="text-xs sm:text-base md:text-lg font-bold text-app-text truncate">
+          <span className="text-xs sm:text-base md:text-lg font-bold text-slate-100 truncate">
             {song.title || 'Untitled Song'}
           </span>
         </div>
@@ -643,31 +736,31 @@ export const StageView: React.FC<StageViewProps> = ({
       {/* 2. Top Bar (Portrait-First Compact Navigation) */}
       <header
         role="banner"
-        className={`fixed top-0 inset-x-0 z-40 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-3 py-2 transition-all duration-300 ${
+        className={`fixed top-0 inset-x-0 z-40 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-3 py-1.5 transition-all duration-300 ${
           showStageOverlays
             ? 'translate-y-0 opacity-100 pointer-events-auto'
             : '-translate-y-full opacity-0 pointer-events-none'
         }`}
       >
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-2">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 overflow-x-hidden">
           {/* Left: Back Button & Song Title */}
-          <div className="flex items-center gap-2.5 min-w-0">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
             <button
               type="button"
               onClick={onBack}
               aria-label="Exit Stage and return to Music Explorer"
-              className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors shrink-0"
+              className="min-w-[44px] min-h-[44px] w-11 h-11 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors shrink-0 flex items-center justify-center"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
 
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 min-w-0">
                 <h1 className="text-sm sm:text-base font-extrabold text-white truncate">
                   {song.title || 'Untitled Song'}
                 </h1>
                 {hasQueue && (
-                  <span className="px-2 py-0.5 rounded-full bg-sky-950/80 text-sky-400 border border-sky-800/60 text-[10px] font-mono font-bold shrink-0">
+                  <span className="px-1.5 py-0.5 rounded-full bg-sky-950/80 text-sky-400 border border-sky-800/60 text-[10px] font-mono font-bold shrink-0">
                     {currentQueueIndex + 1}/{queue?.length}
                   </span>
                 )}
@@ -687,7 +780,7 @@ export const StageView: React.FC<StageViewProps> = ({
               type="button"
               onClick={() => setIsKeyPickerOpen(true)}
               aria-label={`Key: ${currentKey}. Click to transpose.`}
-              className="px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-slate-750 border border-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+              className="min-h-[44px] min-w-[44px] px-2.5 rounded-xl bg-slate-800 hover:bg-slate-750 border border-slate-700 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors shrink-0"
             >
               <span className="text-slate-400">Key:</span>
               <span className="font-bold text-amber-400">{currentKey}</span>
@@ -709,7 +802,7 @@ export const StageView: React.FC<StageViewProps> = ({
                 } catch {}
               }}
               aria-label="Toggle Chords vs Numbers"
-              className={`hidden xs:inline-flex px-2 py-1 rounded-xl text-xs font-bold border transition-colors ${
+              className={`hidden sm:inline-flex min-h-[44px] px-3 items-center rounded-xl text-xs font-bold border transition-colors ${
                 notation === 'numbers'
                   ? 'bg-amber-500 border-amber-400 text-slate-900'
                   : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750'
@@ -723,7 +816,7 @@ export const StageView: React.FC<StageViewProps> = ({
               type="button"
               onClick={() => setIsOptionsOpen(true)}
               aria-label="Open Stage Options"
-              className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white transition-colors"
+              className="min-w-[44px] min-h-[44px] w-11 h-11 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white transition-colors flex items-center justify-center shrink-0"
             >
               <Sliders className="w-5 h-5" />
             </button>
@@ -737,6 +830,11 @@ export const StageView: React.FC<StageViewProps> = ({
         onScroll={handleScroll}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
+        onClick={() => {
+          if (!showStageOverlays) {
+            triggerOverlaysShow()
+          }
+        }}
         data-stage-canvas="true"
         className="flex-1 w-full min-h-0 overflow-y-auto overflow-x-hidden pt-16 pb-32 sm:pb-28 px-3 sm:px-6 md:px-8 max-w-7xl mx-auto focus:outline-none"
         tabIndex={0}
@@ -802,13 +900,13 @@ export const StageView: React.FC<StageViewProps> = ({
             {/* Prev Section Button */}
             <button
               type="button"
-              disabled={!(sectionHeaders.length > 0 && canPrevSection)}
+              disabled={!canPrevSection}
               onClick={handlePrevSection}
               aria-label="Previous section"
-              className={`p-3 rounded-2xl flex items-center justify-center transition-all ${
-                sectionHeaders.length > 0 && canPrevSection
+              className={`p-3 min-w-[44px] min-h-[44px] rounded-2xl flex items-center justify-center transition-all ${
+                canPrevSection
                   ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 active:scale-95'
-                  : 'bg-slate-900/40 text-slate-600 cursor-not-allowed'
+                  : 'bg-slate-900/40 text-slate-600 cursor-not-allowed pointer-events-none'
               }`}
             >
               <ChevronUp className="w-6 h-6 stroke-[2.5]" />
@@ -819,7 +917,7 @@ export const StageView: React.FC<StageViewProps> = ({
               type="button"
               onClick={() => handleTransposeChange(-1)}
               aria-label="Transpose down one semitone"
-              className="p-3 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 active:scale-95 flex items-center justify-center transition-all"
+              className="p-3 min-w-[44px] min-h-[44px] rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 active:scale-95 flex items-center justify-center transition-all"
             >
               <Minus className="w-5 h-5 stroke-[2.5]" />
             </button>
@@ -850,7 +948,7 @@ export const StageView: React.FC<StageViewProps> = ({
               type="button"
               onClick={() => handleTransposeChange(1)}
               aria-label="Transpose up one semitone"
-              className="p-3 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 active:scale-95 flex items-center justify-center transition-all"
+              className="p-3 min-w-[44px] min-h-[44px] rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 active:scale-95 flex items-center justify-center transition-all"
             >
               <Plus className="w-5 h-5 stroke-[2.5]" />
             </button>
@@ -858,13 +956,13 @@ export const StageView: React.FC<StageViewProps> = ({
             {/* Next Section Button */}
             <button
               type="button"
-              disabled={!(sectionHeaders.length > 0 && canNextSection)}
+              disabled={!canNextSection}
               onClick={handleNextSection}
               aria-label="Next section"
-              className={`p-3 rounded-2xl flex items-center justify-center transition-all ${
-                sectionHeaders.length > 0 && canNextSection
+              className={`p-3 min-w-[44px] min-h-[44px] rounded-2xl flex items-center justify-center transition-all ${
+                canNextSection
                   ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 active:scale-95'
-                  : 'bg-slate-900/40 text-slate-600 cursor-not-allowed'
+                  : 'bg-slate-900/40 text-slate-600 cursor-not-allowed pointer-events-none'
               }`}
             >
               <ChevronDown className="w-6 h-6 stroke-[2.5]" />
@@ -884,8 +982,8 @@ export const StageView: React.FC<StageViewProps> = ({
           onOpenStageOptions={() => setIsOptionsOpen(true)}
           onPrevSection={handlePrevSection}
           onNextSection={handleNextSection}
-          canPrevSection={sectionHeaders.length > 0 && canPrevSection}
-          canNextSection={sectionHeaders.length > 0 && canNextSection}
+          canPrevSection={canPrevSection}
+          canNextSection={canNextSection}
           visible={showStageOverlays}
           onUserInteraction={triggerOverlaysShow}
         />
@@ -897,10 +995,11 @@ export const StageView: React.FC<StageViewProps> = ({
         onClose={() => setIsOptionsOpen(false)}
         fontSize={fontSize}
         onFontSizeChange={(size) => {
+          const clamped = Math.max(14, Math.min(36, size))
           captureScrollRatio()
-          setFontSize(size)
+          setFontSize(clamped)
           try {
-            localStorage.setItem(STAGE_FONT_SIZE_KEY, String(size))
+            localStorage.setItem(STAGE_FONT_SIZE_KEY, String(clamped))
           } catch {}
         }}
         chordScale={chordScale}
@@ -972,8 +1071,9 @@ export const StageView: React.FC<StageViewProps> = ({
             localStorage.setItem(STAGE_CONTROLS_AUTO_HIDE_KEY, String(enabled))
           } catch {}
         }}
-        wakeLockActive={wakeLockActive}
-        onToggleWakeLock={() => setWakeLockActive((prev) => !prev)}
+        wakeLockActive={wakeLockPreference}
+        wakeLockAcquired={isWakeLockAcquired}
+        onToggleWakeLock={() => setWakeLockPreference((prev) => !prev)}
         isFullscreen={isFullscreen}
         onToggleFullscreen={handleToggleFullscreen}
         isFullscreenSupported={fullscreenControllerRef.current?.isSupported ?? false}

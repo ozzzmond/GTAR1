@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import type { SongEntity, WebSetlist, SetlistFolder, ActiveSongState } from './types/gtar'
 import {
   loadAllSongs,
@@ -47,6 +47,33 @@ export const App: React.FC = () => {
   const [stageActiveSetlistId, setStageActiveSetlistId] = useState<string | undefined>(undefined)
 
   const isExitingStageRef = useRef<boolean>(false)
+  const explorerMainRef = useRef<HTMLElement>(null)
+  const explorerScrollRef = useRef<number>(0)
+  const isRestoringScrollRef = useRef<boolean>(false)
+
+  const handleExplorerScroll = () => {
+    if (isRestoringScrollRef.current) return
+    if (explorerMainRef.current && activeTab === 'SONGS') {
+      explorerScrollRef.current = explorerMainRef.current.scrollTop
+    }
+  }
+
+  // Restore Explorer scroll when returning to SONGS tab
+  useLayoutEffect(() => {
+    if (activeTab === 'SONGS' && explorerMainRef.current && explorerScrollRef.current > 0) {
+      const target = explorerScrollRef.current
+      isRestoringScrollRef.current = true
+      explorerMainRef.current.scrollTop = target
+      requestAnimationFrame(() => {
+        if (explorerMainRef.current && activeTab === 'SONGS') {
+          explorerMainRef.current.scrollTop = target
+        }
+        setTimeout(() => {
+          isRestoringScrollRef.current = false
+        }, 80)
+      })
+    }
+  }, [activeTab])
 
   // Serialized persistence queue ref for setlist updates
   const setlistsRef = useRef<WebSetlist[]>(setlists)
@@ -103,9 +130,18 @@ export const App: React.FC = () => {
   // Browser History & Popstate integration for Stage Performance
   useEffect(() => {
     const handlePopState = (e: PopStateEvent) => {
-      if (activeTab === 'STAGE') {
-        isExitingStageRef.current = true
-        setActiveTab(stageReturnTab || 'SONGS')
+      if (e.state?.stage) {
+        // Browser Forward navigation back into Stage
+        isExitingStageRef.current = false
+        if (stageQueue.length > 0) {
+          setActiveTab('STAGE')
+        }
+      } else {
+        // Browser Back navigation out of Stage
+        if (activeTab === 'STAGE') {
+          isExitingStageRef.current = true
+          setActiveTab(stageReturnTab || 'SONGS')
+        }
       }
     }
 
@@ -113,7 +149,7 @@ export const App: React.FC = () => {
     return () => {
       window.removeEventListener('popstate', handlePopState)
     }
-  }, [activeTab, stageReturnTab])
+  }, [activeTab, stageReturnTab, stageQueue.length])
 
   // Derived unique tags
   const allTags = useMemo(() => {
@@ -317,6 +353,9 @@ export const App: React.FC = () => {
   }
 
   const handleSelectSong = (song: SongEntity) => {
+    if (explorerMainRef.current && activeTab === 'SONGS') {
+      explorerScrollRef.current = explorerMainRef.current.scrollTop
+    }
     setSelectedSong(song)
     setViewerTransposeOffset(song.transposeOffset || 0)
     setActiveTab('VIEWER')
@@ -359,6 +398,9 @@ export const App: React.FC = () => {
 
   // Stage Performance Handlers
   const handleEnterStageSong = (song: SongEntity, transposeOffset?: number) => {
+    if (explorerMainRef.current && activeTab === 'SONGS') {
+      explorerScrollRef.current = explorerMainRef.current.scrollTop
+    }
     const offset = transposeOffset ?? song.transposeOffset ?? 0
     setSelectedSong(song)
     setViewerTransposeOffset(offset)
@@ -384,6 +426,9 @@ export const App: React.FC = () => {
     setlist: WebSetlist,
     targetOccurrence?: number | string
   ) => {
+    if (explorerMainRef.current && activeTab === 'SONGS') {
+      explorerScrollRef.current = explorerMainRef.current.scrollTop
+    }
     setStageReturnTab(activeTab === 'SETLISTS' ? 'SETLISTS' : 'SONGS')
     setStageSetlistName(setlist.name)
     setStageActiveSetlistId(setlist.id)
@@ -483,24 +528,29 @@ export const App: React.FC = () => {
         const targetSetlistId = stageActiveSetlistId
         const targetEntryId = currentItem.entryId
 
-        // Serialize async persistence to guarantee latest authoritative state
-        setlistSaveQueueRef.current = setlistSaveQueueRef.current
-          .then(async () => {
-            const currentSetlists = setlistsRef.current
-            const sl = currentSetlists.find((s) => s.id === targetSetlistId)
-            if (sl) {
-              const updatedSongs = sl.songs.map((ref) =>
-                ref.entryId === targetEntryId
-                  ? { ...ref, transposeOffset: newOffset }
-                  : ref
-              )
-              const updatedSetlist = { ...sl, songs: updatedSongs }
-              await handleSaveSetlist(updatedSetlist)
-            }
-          })
-          .catch(() => {
-            // Guard chain continuity on failure
-          })
+        // Immediately and synchronously update authoritative in-memory state
+        const currentSetlists = setlistsRef.current
+        const sl = currentSetlists.find((s) => s.id === targetSetlistId)
+        if (sl) {
+          const updatedSongs = sl.songs.map((ref) =>
+            ref.entryId === targetEntryId
+              ? { ...ref, transposeOffset: newOffset }
+              : ref
+          )
+          const updatedSetlist: WebSetlist = { ...sl, songs: updatedSongs, updatedAt: Date.now() }
+          const nextSetlists = currentSetlists.map((s) => (s.id === targetSetlistId ? updatedSetlist : s))
+
+          // Synchronous update of ref and React state
+          setlistsRef.current = nextSetlists
+          setSetlists(nextSetlists)
+
+          // Serialize async persistence to IndexedDB
+          setlistSaveQueueRef.current = setlistSaveQueueRef.current
+            .then(async () => {
+              await saveSetlist(updatedSetlist)
+            })
+            .catch(() => {})
+        }
       }
     }
   }
@@ -619,7 +669,12 @@ export const App: React.FC = () => {
         )}
 
         {/* Workspace Canvas */}
-        <main className="flex-1 flex flex-col min-w-0 overflow-y-auto">
+        <main
+          ref={explorerMainRef}
+          onScroll={handleExplorerScroll}
+          data-explorer-canvas="true"
+          className="flex-1 flex flex-col min-w-0 overflow-y-auto"
+        >
           {activeTab === 'SONGS' && (
             <SongbookHomeView
               songs={songs}

@@ -91,7 +91,7 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="w-8 h-8 rounded-lg bg-sky-600 flex items-center justify-center font-black text-white text-base shadow-sm group-hover:bg-sky-500 transition-colors">
               G
             </div>
-            <div className="hidden xs:block">
+            <div className="hidden sm:block">
               <span className="text-base font-extrabold text-white tracking-tight group-hover:text-sky-300 transition-colors">
                 GTAR
               </span>
