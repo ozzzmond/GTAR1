@@ -1,14 +1,18 @@
 import React, { useState, useEffect } from 'react'
-import type { SongEntity, WebSetlist } from './types/gtar'
+import type { SongEntity, WebSetlist, SetlistFolder } from './types/gtar'
 import {
   loadAllSongs,
   loadAllSetlists,
+  loadAllFolders,
   saveSong,
   deleteSong,
   saveSetlist,
   deleteSetlist,
+  saveFolder,
+  deleteFolder,
   saveAllSongs,
   saveAllSetlists,
+  saveAllFolders,
 } from './utils/storage'
 import { Header, type ActiveTab } from './components/Header'
 import { SongbookHomeView } from './components/SongbookHomeView'
@@ -20,8 +24,10 @@ import { BackupModal } from './components/BackupModal'
 export const App: React.FC = () => {
   const [songs, setSongs] = useState<SongEntity[]>([])
   const [setlists, setSetlists] = useState<WebSetlist[]>([])
+  const [folders, setFolders] = useState<SetlistFolder[]>([])
   const [activeTab, setActiveTab] = useState<ActiveTab>('SONGS')
   const [selectedSong, setSelectedSong] = useState<SongEntity | null>(null)
+  const [viewerTransposeOffset, setViewerTransposeOffset] = useState<number>(0)
   const [editingSong, setEditingSong] = useState<Partial<SongEntity> | null>(null)
   const [isBackupOpen, setIsBackupOpen] = useState<boolean>(false)
   const [isLoading, setIsLoading] = useState<boolean>(true)
@@ -33,13 +39,15 @@ export const App: React.FC = () => {
 
     async function initStorage() {
       try {
-        const [loadedSongs, loadedSetlists] = await Promise.all([
+        const [loadedSongs, loadedSetlists, loadedFolders] = await Promise.all([
           loadAllSongs(),
           loadAllSetlists(),
+          loadAllFolders(),
         ])
         if (isMounted) {
           setSongs(loadedSongs)
           setSetlists(loadedSetlists)
+          setFolders(loadedFolders)
           setIsLoading(false)
         }
       } catch (err: any) {
@@ -69,24 +77,29 @@ export const App: React.FC = () => {
       return [song, ...prev]
     })
     setSelectedSong(song)
+    setViewerTransposeOffset(song.transposeOffset || 0)
     setActiveTab('VIEWER')
     setEditingSong(null)
   }
 
+  const handleBulkUpdateSongs = async (updatedSongs: SongEntity[]) => {
+    await saveAllSongs(updatedSongs)
+    setSongs((prev) => {
+      const updateMap = new Map(updatedSongs.map((s) => [s.id, s]))
+      return prev.map((s) => updateMap.get(s.id) || s)
+    })
+  }
+
   const handleDeleteSong = async (id: string) => {
+    // Delete master canonical song; shortcuts in setlists handle missing source explicitly
     await deleteSong(id)
     setSongs((prev) => prev.filter((s) => s.id !== id))
-    // Also remove from any setlists
-    const updatedSetlists = setlists.map((sl) => ({
-      ...sl,
-      songs: sl.songs.filter((ref) => ref.id !== id),
-    }))
-    setSetlists(updatedSetlists)
-    await saveAllSetlists(updatedSetlists)
 
-    setSelectedSong(null)
+    if (selectedSong?.id === id) {
+      setSelectedSong(null)
+      setActiveTab('SONGS')
+    }
     setEditingSong(null)
-    setActiveTab('SONGS')
   }
 
   // Setlist handlers
@@ -108,19 +121,42 @@ export const App: React.FC = () => {
     setSetlists((prev) => prev.filter((s) => s.id !== id))
   }
 
+  // Folder handlers
+  const handleSaveFolder = async (folder: SetlistFolder) => {
+    await saveFolder(folder)
+    setFolders((prev) => {
+      const idx = prev.findIndex((f) => f.id === folder.id)
+      if (idx >= 0) {
+        const next = [...prev]
+        next[idx] = folder
+        return next
+      }
+      return [...prev, folder]
+    })
+  }
+
+  const handleDeleteFolder = async (id: string) => {
+    await deleteFolder(id)
+    setFolders((prev) => prev.filter((f) => f.id !== id))
+  }
+
   // JSON Import handler
   const handleImport = async (
     importedSongs: SongEntity[],
-    importedSetlists: WebSetlist[]
+    importedSetlists: WebSetlist[],
+    importedFolders: SetlistFolder[]
   ) => {
     await saveAllSongs(importedSongs)
     await saveAllSetlists(importedSetlists)
+    await saveAllFolders(importedFolders)
     setSongs(importedSongs)
     setSetlists(importedSetlists)
+    setFolders(importedFolders)
   }
 
   const handleSelectSong = (song: SongEntity) => {
     setSelectedSong(song)
+    setViewerTransposeOffset(song.transposeOffset || 0)
     setActiveTab('VIEWER')
   }
 
@@ -134,10 +170,11 @@ export const App: React.FC = () => {
     setActiveTab('EDITOR')
   }
 
-  const handlePlaySetlistSong = (songId: string) => {
+  const handlePlaySetlistSong = (songId: string, transposeOffset?: number) => {
     const s = songs.find((item) => item.id === songId)
     if (s) {
       setSelectedSong(s)
+      setViewerTransposeOffset(transposeOffset ?? s.transposeOffset ?? 0)
       setActiveTab('VIEWER')
     }
   }
@@ -178,12 +215,16 @@ export const App: React.FC = () => {
             onEditSong={handleEditSong}
             onNewSong={handleNewSong}
             onOpenBackup={() => setIsBackupOpen(true)}
+            onBulkUpdateSongs={handleBulkUpdateSongs}
           />
         )}
 
         {activeTab === 'VIEWER' && selectedSong && (
           <SongViewer
-            song={selectedSong}
+            song={{
+              ...selectedSong,
+              transposeOffset: viewerTransposeOffset,
+            }}
             onEdit={handleEditSong}
             onBack={() => setActiveTab('SONGS')}
           />
@@ -208,9 +249,12 @@ export const App: React.FC = () => {
         {activeTab === 'SETLISTS' && (
           <SetlistManager
             setlists={setlists}
+            folders={folders}
             allSongs={songs}
             onSaveSetlist={handleSaveSetlist}
             onDeleteSetlist={handleDeleteSetlist}
+            onSaveFolder={handleSaveFolder}
+            onDeleteFolder={handleDeleteFolder}
             onPlaySong={handlePlaySetlistSong}
           />
         )}
@@ -220,6 +264,7 @@ export const App: React.FC = () => {
         <BackupModal
           songs={songs}
           setlists={setlists}
+          folders={folders}
           onImport={handleImport}
           onClose={() => setIsBackupOpen(false)}
         />

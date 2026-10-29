@@ -160,9 +160,10 @@ test('STORAGE_ISOLATION_AND_NAMESPACE: uses isolated gtar_revamp_local_v1 databa
   assert.equal(DB_NAME, 'gtar_revamp_local_v1', 'Must use dedicated isolated DB namespace')
   assert.equal(typeof openGtar1DB, 'function')
   assert.equal(typeof closeGtar1DB, 'function')
-  assert.equal(DB_VERSION, 1)
+  assert.equal(DB_VERSION, 2)
   assert.equal(STORES.SONGS, 'songs')
   assert.equal(STORES.SETLISTS, 'setlists')
+  assert.equal(STORES.FOLDERS, 'folders')
 })
 
 test('BLANK_INITIAL_SONGBOOK: clean installation loads 0 songs and 0 setlists', async () => {

@@ -305,7 +305,7 @@ export function parseGtarSong(rawText: string, transposeOffset = 0): ParsedGtarS
   let bpm = ''
   let time = ''
   let year = ''
-  let tags = ''
+  let tags: string[] = []
 
   const parsedLines: SongLine[] = []
   let chordProCount = 0
@@ -385,7 +385,7 @@ export function parseGtarSong(rawText: string, transposeOffset = 0): ParsedGtarS
         case 'tags':
         case 'tag':
         case 'genre':
-          tags = value
+          tags = value ? value.split(/[,;\n]/).map((t) => t.trim().toLowerCase()).filter(Boolean) : []
           break
         case 'c':
         case 'comment':

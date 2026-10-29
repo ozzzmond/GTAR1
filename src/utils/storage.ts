@@ -7,16 +7,20 @@
  * - NO automatic account data migration
  * - Atomic local writes with transaction error handling
  * - Clean failure reporting for UI error states
- * - Blank initial songbook and setlist library on clean install
+ * - Blank initial songbook, setlist library, and folder tree on clean install
+ * - Forward-only schema migration preserving existing records and stable IDs
  */
 
-import type { SongEntity, WebSetlist } from '../types/gtar'
+import type { SongEntity, WebSetlist, SetlistFolder } from '../types/gtar'
+import { normalizeTags } from './tags'
+import { generateUUID } from './uuid'
 
 export const DB_NAME = 'gtar_revamp_local_v1'
-export const DB_VERSION = 1
+export const DB_VERSION = 2
 export const STORES = {
   SONGS: 'songs',
   SETLISTS: 'setlists',
+  FOLDERS: 'folders',
 } as const
 
 let dbInstance: IDBDatabase | null = null
@@ -36,11 +40,83 @@ export function openRevampDB(): Promise<IDBDatabase> {
 
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result
+      const oldVersion = event.oldVersion
+
+      // Version 1 stores: songs, setlists
       if (!db.objectStoreNames.contains(STORES.SONGS)) {
         db.createObjectStore(STORES.SONGS, { keyPath: 'id' })
       }
       if (!db.objectStoreNames.contains(STORES.SETLISTS)) {
         db.createObjectStore(STORES.SETLISTS, { keyPath: 'id' })
+      }
+
+      // Version 2 addition: folders store
+      if (!db.objectStoreNames.contains(STORES.FOLDERS)) {
+        db.createObjectStore(STORES.FOLDERS, { keyPath: 'id' })
+      }
+
+      // Schema migration: if upgrading from v1 or earlier, ensure data normalization
+      // IndexedDB upgrade transaction automatically has access to existing object stores
+      const tx = (event.target as IDBOpenDBRequest).transaction
+      if (tx && oldVersion < 2) {
+        // Upgrade existing songs: ensure tags array exists
+        try {
+          const songStore = tx.objectStore(STORES.SONGS)
+          const getAllSongsReq = songStore.getAll()
+          getAllSongsReq.onsuccess = () => {
+            const songs = getAllSongsReq.result as SongEntity[] | undefined
+            if (Array.isArray(songs)) {
+              for (const s of songs) {
+                let modified = false
+                if (!Array.isArray(s.tags)) {
+                  s.tags = normalizeTags(s.tags)
+                  modified = true
+                }
+                if (modified) {
+                  songStore.put(s)
+                }
+              }
+            }
+          }
+        } catch (_) {
+          // Ignore if store not available yet in mock/synthetic runs
+        }
+
+        // Upgrade existing setlists: ensure folderId and entryId on song references
+        try {
+          const setlistStore = tx.objectStore(STORES.SETLISTS)
+          const getAllSetlistsReq = setlistStore.getAll()
+          getAllSetlistsReq.onsuccess = () => {
+            const setlists = getAllSetlistsReq.result as WebSetlist[] | undefined
+            if (Array.isArray(setlists)) {
+              for (const sl of setlists) {
+                let modified = false
+                if (sl.folderId === undefined) {
+                  sl.folderId = null
+                  modified = true
+                }
+                if (Array.isArray(sl.songs)) {
+                  for (let i = 0; i < sl.songs.length; i++) {
+                    const ref = sl.songs[i]
+                    if (!ref.entryId) {
+                      ref.entryId = generateUUID()
+                      modified = true
+                    }
+                    if (typeof ref.position !== 'number') {
+                      ref.position = i
+                      modified = true
+                    }
+                  }
+                }
+                if (modified) {
+                  setlistStore.put(sl)
+                }
+              }
+            }
+          }
+        } catch (_) {
+          // Ignore if store not available yet
+        }
       }
     }
 
@@ -62,7 +138,7 @@ export const openGtar1DB = openRevampDB
 
 /**
  * Loads all songs from the isolated IndexedDB namespace.
- * Returns an empty array on fresh installation (blank initial songbook).
+ * Normalizes tags field so it's always string[].
  */
 export async function loadAllSongs(): Promise<SongEntity[]> {
   const db = await openRevampDB()
@@ -73,7 +149,12 @@ export async function loadAllSongs(): Promise<SongEntity[]> {
       const request = store.getAll()
 
       request.onsuccess = () => {
-        resolve(request.result || [])
+        const rawSongs = (request.result || []) as SongEntity[]
+        const normalized = rawSongs.map((s) => ({
+          ...s,
+          tags: normalizeTags(s.tags),
+        }))
+        resolve(normalized)
       }
 
       request.onerror = () => {
@@ -87,6 +168,7 @@ export async function loadAllSongs(): Promise<SongEntity[]> {
 
 /**
  * Loads all setlists from the isolated IndexedDB namespace.
+ * Ensures each song reference has an entryId and folderId defaults to null if unfiled.
  */
 export async function loadAllSetlists(): Promise<WebSetlist[]> {
   const db = await openRevampDB()
@@ -97,7 +179,19 @@ export async function loadAllSetlists(): Promise<WebSetlist[]> {
       const request = store.getAll()
 
       request.onsuccess = () => {
-        resolve(request.result || [])
+        const rawList = (request.result || []) as WebSetlist[]
+        const normalized = rawList.map((sl) => ({
+          ...sl,
+          folderId: sl.folderId ?? null,
+          songs: Array.isArray(sl.songs)
+            ? sl.songs.map((ref, idx) => ({
+                ...ref,
+                entryId: ref.entryId || generateUUID(),
+                position: typeof ref.position === 'number' ? ref.position : idx,
+              }))
+            : [],
+        }))
+        resolve(normalized)
       }
 
       request.onerror = () => {
@@ -110,8 +204,35 @@ export async function loadAllSetlists(): Promise<WebSetlist[]> {
 }
 
 /**
+ * Loads all setlist folders from the isolated IndexedDB namespace.
+ */
+export async function loadAllFolders(): Promise<SetlistFolder[]> {
+  const db = await openRevampDB()
+  return new Promise((resolve, reject) => {
+    try {
+      if (!db.objectStoreNames.contains(STORES.FOLDERS)) {
+        resolve([])
+        return
+      }
+      const tx = db.transaction(STORES.FOLDERS, 'readonly')
+      const store = tx.objectStore(STORES.FOLDERS)
+      const request = store.getAll()
+
+      request.onsuccess = () => {
+        resolve(request.result || [])
+      }
+
+      request.onerror = () => {
+        reject(request.error || new Error('Failed to load folders from storage'))
+      }
+    } catch (err) {
+      reject(err)
+    }
+  })
+}
+
+/**
  * Atomically saves a single song to local storage.
- * Reports save failures cleanly if transaction aborts.
  */
 export async function saveSong(song: SongEntity): Promise<void> {
   const db = await openRevampDB()
@@ -119,7 +240,11 @@ export async function saveSong(song: SongEntity): Promise<void> {
     try {
       const tx = db.transaction(STORES.SONGS, 'readwrite')
       const store = tx.objectStore(STORES.SONGS)
-      const request = store.put(song)
+      const toSave: SongEntity = {
+        ...song,
+        tags: normalizeTags(song.tags),
+      }
+      const request = store.put(toSave)
 
       tx.oncomplete = () => {
         resolve()
@@ -144,6 +269,7 @@ export async function saveSong(song: SongEntity): Promise<void> {
 
 /**
  * Deletes a song by ID from local storage.
+ * Does not mutate setlists here; setlists retain references or handle them explicitly.
  */
 export async function deleteSong(id: string): Promise<void> {
   const db = await openRevampDB()
@@ -175,7 +301,16 @@ export async function saveSetlist(setlist: WebSetlist): Promise<void> {
     try {
       const tx = db.transaction(STORES.SETLISTS, 'readwrite')
       const store = tx.objectStore(STORES.SETLISTS)
-      store.put(setlist)
+      const toSave: WebSetlist = {
+        ...setlist,
+        folderId: setlist.folderId ?? null,
+        songs: setlist.songs.map((ref, idx) => ({
+          ...ref,
+          entryId: ref.entryId || generateUUID(),
+          position: typeof ref.position === 'number' ? ref.position : idx,
+        })),
+      }
+      store.put(toSave)
 
       tx.oncomplete = () => {
         resolve()
@@ -215,6 +350,54 @@ export async function deleteSetlist(id: string): Promise<void> {
 }
 
 /**
+ * Atomically saves a single setlist folder.
+ */
+export async function saveFolder(folder: SetlistFolder): Promise<void> {
+  const db = await openRevampDB()
+  return new Promise((resolve, reject) => {
+    try {
+      const tx = db.transaction(STORES.FOLDERS, 'readwrite')
+      const store = tx.objectStore(STORES.FOLDERS)
+      store.put(folder)
+
+      tx.oncomplete = () => {
+        resolve()
+      }
+
+      tx.onerror = () => {
+        reject(tx.error || new Error(`Failed to save folder ${folder.id}`))
+      }
+    } catch (err) {
+      reject(err)
+    }
+  })
+}
+
+/**
+ * Deletes a setlist folder by ID.
+ */
+export async function deleteFolder(id: string): Promise<void> {
+  const db = await openRevampDB()
+  return new Promise((resolve, reject) => {
+    try {
+      const tx = db.transaction(STORES.FOLDERS, 'readwrite')
+      const store = tx.objectStore(STORES.FOLDERS)
+      store.delete(id)
+
+      tx.oncomplete = () => {
+        resolve()
+      }
+
+      tx.onerror = () => {
+        reject(tx.error || new Error(`Failed to delete folder ${id}`))
+      }
+    } catch (err) {
+      reject(err)
+    }
+  })
+}
+
+/**
  * Saves multiple songs in a single atomic transaction.
  */
 export async function saveAllSongs(songs: SongEntity[]): Promise<void> {
@@ -224,7 +407,10 @@ export async function saveAllSongs(songs: SongEntity[]): Promise<void> {
       const tx = db.transaction(STORES.SONGS, 'readwrite')
       const store = tx.objectStore(STORES.SONGS)
       for (const song of songs) {
-        store.put(song)
+        store.put({
+          ...song,
+          tags: normalizeTags(song.tags),
+        })
       }
 
       tx.oncomplete = () => {
@@ -250,7 +436,15 @@ export async function saveAllSetlists(setlists: WebSetlist[]): Promise<void> {
       const tx = db.transaction(STORES.SETLISTS, 'readwrite')
       const store = tx.objectStore(STORES.SETLISTS)
       for (const setlist of setlists) {
-        store.put(setlist)
+        store.put({
+          ...setlist,
+          folderId: setlist.folderId ?? null,
+          songs: setlist.songs.map((ref, idx) => ({
+            ...ref,
+            entryId: ref.entryId || generateUUID(),
+            position: typeof ref.position === 'number' ? ref.position : idx,
+          })),
+        })
       }
 
       tx.oncomplete = () => {
@@ -259,6 +453,32 @@ export async function saveAllSetlists(setlists: WebSetlist[]): Promise<void> {
 
       tx.onerror = () => {
         reject(tx.error || new Error('Failed to bulk save setlists'))
+      }
+    } catch (err) {
+      reject(err)
+    }
+  })
+}
+
+/**
+ * Saves multiple folders in a single atomic transaction.
+ */
+export async function saveAllFolders(folders: SetlistFolder[]): Promise<void> {
+  const db = await openRevampDB()
+  return new Promise((resolve, reject) => {
+    try {
+      const tx = db.transaction(STORES.FOLDERS, 'readwrite')
+      const store = tx.objectStore(STORES.FOLDERS)
+      for (const folder of folders) {
+        store.put(folder)
+      }
+
+      tx.oncomplete = () => {
+        resolve()
+      }
+
+      tx.onerror = () => {
+        reject(tx.error || new Error('Failed to bulk save folders'))
       }
     } catch (err) {
       reject(err)

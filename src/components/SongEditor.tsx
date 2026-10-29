@@ -3,10 +3,10 @@ import type { SongEntity } from '../types/gtar'
 import {
   parseChordProDirectives,
   syncCanonicalDirectives,
-  formatCanonicalTempo,
 } from '../utils/chordProMetadata'
 import { canonicalSongKey } from '../utils/musicalKey'
 import { generateUUID } from '../utils/uuid'
+import { normalizeTags } from '../utils/tags'
 
 export interface SongEditorProps {
   initialSong?: Partial<SongEntity>
@@ -29,6 +29,9 @@ export const SongEditor: React.FC<SongEditorProps> = ({
   const [bpm, setBpm] = useState<string>(initialSong?.bpm || '')
   const [time, setTime] = useState<string>(initialSong?.time || '')
   const [year, setYear] = useState<string>(initialSong?.year || '')
+  const [tagsInput, setTagsInput] = useState<string>(
+    initialSong?.tags ? initialSong.tags.join(', ') : ''
+  )
   const [rawContent, setRawContent] = useState<string>(
     initialSong?.rawContent || '{title: }\n{artist: }\n{key: }\n\n[C]Amazing grace! How [F]sweet the [C]sound'
   )
@@ -99,200 +102,211 @@ export const SongEditor: React.FC<SongEditorProps> = ({
     setSaveStatus('SAVING')
     setErrorMessage(null)
 
-    const finalTitle = title.trim() || 'Untitled Song'
-    const finalContent = syncCanonicalDirectives(rawContent, {
-      title: finalTitle,
-      artist: artist.trim(),
-      key: canonicalSongKey(key),
-      originalKey: originalKey ? canonicalSongKey(originalKey) : undefined,
-      bpm: bpm.trim(),
-      time: time.trim(),
-      year: year.trim(),
-    })
+    const songTitle = title.trim() || 'Untitled Song'
+    const songKey = canonicalSongKey(key)
+    const normalizedTags = normalizeTags(tagsInput)
 
-    const songEntity: SongEntity = {
+    const songToSave: SongEntity = {
       id,
-      title: finalTitle,
-      artist: artist.trim() || undefined,
-      key: key ? canonicalSongKey(key) : undefined,
+      title: songTitle,
+      artist: artist.trim(),
+      key: songKey,
       originalKey: originalKey ? canonicalSongKey(originalKey) : undefined,
       bpm: bpm.trim() || undefined,
       time: time.trim() || undefined,
       year: year.trim() || undefined,
-      rawContent: finalContent,
-      format: 'CHORD_PRO',
+      tags: normalizedTags,
+      rawContent,
+      format: initialSong?.format || 'CHORD_PRO',
       createdAt: initialSong?.createdAt || Date.now(),
       updatedAt: Date.now(),
-      transposeOffset: initialSong?.transposeOffset || 0,
-      isFavorite: initialSong?.isFavorite || false,
     }
 
     try {
-      await onSave(songEntity)
+      await onSave(songToSave)
       setSaveStatus('SAVED')
-      setTimeout(() => setSaveStatus('IDLE'), 2500)
     } catch (err: any) {
       setSaveStatus('ERROR')
-      setErrorMessage(err?.message || 'Failed to save song to local storage')
-    }
-  }
-
-  const handleDelete = async () => {
-    if (!initialSong?.id || !onDelete) return
-    if (!confirm(`Are you sure you want to delete "${title || 'Untitled Song'}"?`)) return
-
-    try {
-      await onDelete(initialSong.id)
-    } catch (err: any) {
-      setSaveStatus('ERROR')
-      setErrorMessage(err?.message || 'Failed to delete song')
+      setErrorMessage(err?.message || 'Failed to save song')
     }
   }
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-6">
       <form onSubmit={handleSave} className="space-y-6">
-        {/* Header Actions */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-700">
-          <div className="flex items-center gap-2">
+        {/* Top Action Bar */}
+        <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+          <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={onCancel}
-              className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors text-sm font-medium"
+              className="px-3 py-1.5 text-xs text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors"
             >
-              Cancel
+              ← Back
             </button>
-            <h2 className="text-xl font-bold text-white ml-2">
+            <h2 className="text-lg font-bold text-white">
               {initialSong?.id ? 'Edit Song' : 'New Song'}
             </h2>
           </div>
 
           <div className="flex items-center gap-3">
-            {initialSong?.id && onDelete && (
+            {onDelete && (
               <button
                 type="button"
-                onClick={handleDelete}
-                className="px-3 py-1.5 rounded-lg bg-red-950/60 hover:bg-red-900 border border-red-800/80 text-red-200 text-sm font-medium transition-colors"
+                onClick={() => {
+                  if (confirm(`Delete song "${title}"?`)) {
+                    onDelete(id)
+                  }
+                }}
+                className="px-3 py-1.5 text-xs text-red-300 hover:text-red-200 bg-red-950/40 hover:bg-red-950 border border-red-900/60 rounded-lg transition-colors"
               >
-                Delete
+                Delete Song
               </button>
             )}
 
             <button
               type="submit"
               disabled={saveStatus === 'SAVING'}
-              className="px-5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 text-white font-semibold text-sm transition-colors shadow-md flex items-center gap-2"
+              className="px-5 py-2 text-xs font-semibold text-white bg-sky-600 hover:bg-sky-500 rounded-xl transition-colors shadow disabled:opacity-50"
             >
-              {saveStatus === 'SAVING' ? 'Saving...' : saveStatus === 'SAVED' ? '✓ Saved!' : 'Save Song'}
+              {saveStatus === 'SAVING' ? 'Saving...' : 'Save Song'}
             </button>
           </div>
         </div>
 
         {/* Error notification */}
-        {saveStatus === 'ERROR' && errorMessage && (
-          <div className="p-3 rounded-lg bg-red-950/80 border border-red-700 text-red-200 text-sm">
-            <strong>Save Error:</strong> {errorMessage}
+        {errorMessage && (
+          <div className="p-3 bg-red-950/80 border border-red-800 rounded-xl text-xs text-red-200">
+            {errorMessage}
           </div>
         )}
 
-        {/* Metadata Fields Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 bg-slate-850 p-4 rounded-xl border border-slate-800">
-          <div className="sm:col-span-2">
-            <label className="block text-xs font-semibold text-slate-400 mb-1">Title *</label>
+        {/* Canonical Directives Inputs */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-850 p-4 rounded-xl border border-slate-800">
+          <div>
+            <label className="block text-xs font-semibold text-slate-400 mb-1">
+              Title
+            </label>
             <input
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               onBlur={handleMetadataBlur}
               placeholder="e.g. Amazing Grace"
-              required
-              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 text-sm"
+              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-sky-500"
             />
           </div>
 
-          <div className="sm:col-span-2">
-            <label className="block text-xs font-semibold text-slate-400 mb-1">Artist / Author</label>
+          <div>
+            <label className="block text-xs font-semibold text-slate-400 mb-1">
+              Artist
+            </label>
             <input
               type="text"
               value={artist}
               onChange={(e) => setArtist(e.target.value)}
               onBlur={handleMetadataBlur}
               placeholder="e.g. John Newton"
-              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 text-sm"
+              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-sky-500"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-400 mb-1">Chart Key</label>
+            <label className="block text-xs font-semibold text-slate-400 mb-1">
+              Key
+            </label>
             <input
               type="text"
               value={key}
               onChange={(e) => setKey(e.target.value)}
               onBlur={handleMetadataBlur}
-              placeholder="e.g. C, Eb, F#m"
-              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 text-sm"
+              placeholder="e.g. G, C, Eb, F#m"
+              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-sky-500 font-mono"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-400 mb-1">Original Key</label>
+            <label className="block text-xs font-semibold text-slate-400 mb-1">
+              Original Key (Optional)
+            </label>
             <input
               type="text"
               value={originalKey}
               onChange={(e) => setOriginalKey(e.target.value)}
               onBlur={handleMetadataBlur}
-              placeholder="e.g. G"
-              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 text-sm"
+              placeholder="e.g. Bb, Dm"
+              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-sky-500 font-mono"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-400 mb-1">Tempo (BPM)</label>
+            <label className="block text-xs font-semibold text-slate-400 mb-1">
+              Tempo / BPM
+            </label>
             <input
               type="text"
               value={bpm}
               onChange={(e) => setBpm(e.target.value)}
               onBlur={handleMetadataBlur}
               placeholder="e.g. 120"
-              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 text-sm"
+              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-sky-500"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-400 mb-1">Time Signature</label>
+            <label className="block text-xs font-semibold text-slate-400 mb-1">
+              Time Signature
+            </label>
             <input
               type="text"
               value={time}
               onChange={(e) => setTime(e.target.value)}
               onBlur={handleMetadataBlur}
-              placeholder="e.g. 4/4 or 3/4"
-              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 text-sm"
+              placeholder="e.g. 4/4, 3/4"
+              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-sky-500"
             />
+          </div>
+
+          <div className="md:col-span-3">
+            <label className="block text-xs font-semibold text-slate-400 mb-1">
+              Tags (comma-separated, case-normalized)
+            </label>
+            <input
+              type="text"
+              value={tagsInput}
+              onChange={(e) => setTagsInput(e.target.value)}
+              placeholder="e.g. worship, acoustic, communion, opener"
+              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-sky-500"
+            />
+            <p className="text-[11px] text-slate-500 mt-1">
+              Assign tags to organize your songbook without duplicating chart bodies.
+            </p>
           </div>
         </div>
 
-        {/* Textarea Toolbar */}
-        <div className="flex items-center justify-between text-xs text-slate-400">
-          <span className="font-semibold text-slate-300">ChordPro Chart Content</span>
-          <button
-            type="button"
-            onClick={handleInsertBrackets}
-            aria-label="Wrap selection or insert brackets []"
-            className="px-3 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sky-400 font-mono font-bold rounded flex items-center gap-1 transition-colors"
-          >
-            [ ] Chord Brackets
-          </button>
-        </div>
+        {/* ChordPro Chart Body Editor */}
+        <div className="bg-slate-850 p-4 rounded-xl border border-slate-800">
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-xs font-semibold text-slate-400">
+              ChordPro Chart Content
+            </label>
+            <button
+              type="button"
+              onClick={handleInsertBrackets}
+              className="px-2.5 py-1 text-xs bg-slate-800 hover:bg-slate-750 text-sky-400 border border-slate-700 rounded font-mono transition-colors"
+            >
+              [ Chord ]
+            </button>
+          </div>
 
-        {/* Editor Area */}
-        <textarea
-          ref={textareaRef}
-          value={rawContent}
-          onChange={handleContentChange}
-          rows={18}
-          className="w-full bg-slate-950 font-mono text-sm text-slate-100 p-4 rounded-xl border border-slate-800 focus:outline-none focus:border-sky-500 leading-relaxed resize-y"
-          placeholder="[C]Enter ChordPro lyrics and chords here..."
-        />
+          <textarea
+            ref={textareaRef}
+            rows={18}
+            value={rawContent}
+            onChange={handleContentChange}
+            className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-slate-200 font-mono text-sm leading-relaxed focus:outline-none focus:border-sky-500 resize-y"
+          />
+        </div>
       </form>
     </div>
   )

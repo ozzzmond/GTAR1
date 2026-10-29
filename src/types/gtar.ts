@@ -19,6 +19,7 @@ export interface SongEntity {
   bpm?: string
   time?: string
   year?: string
+  tags?: string[]
   rawContent: string
   format: SongFormat
   isFavorite?: boolean
@@ -27,17 +28,32 @@ export interface SongEntity {
   updatedAt: number
 }
 
+export interface SetlistFolder {
+  id: string
+  name: string
+  parentId: string | null
+  createdAt: number
+  updatedAt: number
+}
+
 export interface WebSetlistSongRef {
+  /** Stable entry ID for this occurrence within the setlist */
+  entryId?: string
+  /** Canonical song ID */
   id: string
   title: string
   artist?: string
   key?: string
   position: number
+  /** Per-entry performance transpose offset */
+  transposeOffset?: number
 }
 
 export interface WebSetlist {
   id: string
   name: string
+  /** Optional folder ID; null or undefined represents unfiled */
+  folderId?: string | null
   createdAt: number
   updatedAt: number
   songs: WebSetlistSongRef[]
@@ -97,7 +113,7 @@ export interface ParsedGtarSong {
   bpm?: string
   time?: string
   year?: string
-  tags?: string
+  tags?: string[]
   format: SongFormat
   lines: SongLine[]
 }
@@ -108,6 +124,7 @@ export interface GtarBackupMetadata {
   exportedAt: string
   songCount: number
   setlistCount: number
+  folderCount?: number
 }
 
 export interface GtarBackupPayload {
@@ -117,4 +134,5 @@ export interface GtarBackupPayload {
   exportedAt: string
   songs: SongEntity[]
   setlists: WebSetlist[]
+  folders?: SetlistFolder[]
 }
