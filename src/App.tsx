@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import type { SongEntity, WebSetlist, SetlistFolder } from './types/gtar'
 import {
   loadAllSongs,
@@ -20,6 +20,13 @@ import { SongViewer } from './components/SongViewer'
 import { SongEditor } from './components/SongEditor'
 import { SetlistManager } from './components/SetlistManager'
 import { BackupModal } from './components/BackupModal'
+import { LocalProfileModal } from './components/LocalProfileModal'
+import {
+  ExplorerNavigation,
+  type ExplorerNavTarget,
+} from './components/ExplorerNavigation'
+import { loadLocalProfile, type LocalUserProfile } from './utils/localProfile'
+import { generateUUID } from './utils/uuid'
 
 export const App: React.FC = () => {
   const [songs, setSongs] = useState<SongEntity[]>([])
@@ -29,11 +36,25 @@ export const App: React.FC = () => {
   const [selectedSong, setSelectedSong] = useState<SongEntity | null>(null)
   const [viewerTransposeOffset, setViewerTransposeOffset] = useState<number>(0)
   const [editingSong, setEditingSong] = useState<Partial<SongEntity> | null>(null)
+  const [activeSetlistManagerId, setActiveSetlistManagerId] = useState<string | undefined>(undefined)
+
+  // Navigation & Explorer State
+  const [currentNavTarget, setCurrentNavTarget] = useState<ExplorerNavTarget>({
+    type: 'ALL_SONGS',
+  })
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+
+  // Modals
   const [isBackupOpen, setIsBackupOpen] = useState<boolean>(false)
+  const [isProfileOpen, setIsProfileOpen] = useState<boolean>(false)
+  const [userProfile, setUserProfile] = useState<LocalUserProfile>(loadLocalProfile)
+
+  // Initialization State
   const [isLoading, setIsLoading] = useState<boolean>(true)
   const [loadError, setLoadError] = useState<string | null>(null)
 
-  // Initial load from isolated IndexedDB (blank initial songbook if clean)
+  // Initial load from isolated IndexedDB
   useEffect(() => {
     let isMounted = true
 
@@ -64,6 +85,43 @@ export const App: React.FC = () => {
     }
   }, [])
 
+  // Derived unique tags
+  const allTags = useMemo(() => {
+    const tagSet = new Set<string>()
+    for (const s of songs) {
+      if (Array.isArray(s.tags)) {
+        for (const t of s.tags) {
+          tagSet.add(t)
+        }
+      }
+    }
+    return Array.from(tagSet).sort()
+  }, [songs])
+
+  // Derive Search Scope label for Header
+  const searchScopeLabel = useMemo(() => {
+    switch (currentNavTarget.type) {
+      case 'ALL_SONGS':
+        return 'All Songs'
+      case 'TAG':
+        return `#${currentNavTarget.tag}`
+      case 'ALL_SETLISTS':
+        return 'All Setlists'
+      case 'UNFILED_SETLISTS':
+        return 'Unfiled Setlists'
+      case 'FOLDER': {
+        const f = folders.find((item) => item.id === currentNavTarget.folderId)
+        return f ? `Folder "${f.name}"` : 'Folder'
+      }
+      case 'SETLIST': {
+        const sl = setlists.find((item) => item.id === currentNavTarget.setlistId)
+        return sl ? `"${sl.name}"` : 'Setlist'
+      }
+      default:
+        return 'All Songs'
+    }
+  }, [currentNavTarget, folders, setlists])
+
   // Song handlers
   const handleSaveSong = async (song: SongEntity) => {
     await saveSong(song)
@@ -91,7 +149,6 @@ export const App: React.FC = () => {
   }
 
   const handleDeleteSong = async (id: string) => {
-    // Delete master canonical song; shortcuts in setlists handle missing source explicitly
     await deleteSong(id)
     setSongs((prev) => prev.filter((s) => s.id !== id))
 
@@ -100,6 +157,18 @@ export const App: React.FC = () => {
       setActiveTab('SONGS')
     }
     setEditingSong(null)
+  }
+
+  const handleBulkDeleteSongs = async (ids: string[]) => {
+    const idSet = new Set(ids)
+    for (const id of ids) {
+      await deleteSong(id)
+    }
+    setSongs((prev) => prev.filter((s) => !idSet.has(s.id)))
+    if (selectedSong && idSet.has(selectedSong.id)) {
+      setSelectedSong(null)
+      setActiveTab('SONGS')
+    }
   }
 
   // Setlist handlers
@@ -119,6 +188,9 @@ export const App: React.FC = () => {
   const handleDeleteSetlist = async (id: string) => {
     await deleteSetlist(id)
     setSetlists((prev) => prev.filter((s) => s.id !== id))
+    if (currentNavTarget.type === 'SETLIST' && currentNavTarget.setlistId === id) {
+      setCurrentNavTarget({ type: 'ALL_SETLISTS' })
+    }
   }
 
   // Folder handlers
@@ -138,6 +210,13 @@ export const App: React.FC = () => {
   const handleDeleteFolder = async (id: string) => {
     await deleteFolder(id)
     setFolders((prev) => prev.filter((f) => f.id !== id))
+    // Cleanly unfile setlists belonging to deleted folder in memory
+    setSetlists((prev) =>
+      prev.map((sl) => (sl.folderId === id ? { ...sl, folderId: null } : sl))
+    )
+    if (currentNavTarget.type === 'FOLDER' && currentNavTarget.folderId === id) {
+      setCurrentNavTarget({ type: 'ALL_SETLISTS' })
+    }
   }
 
   // JSON Import handler
@@ -170,12 +249,40 @@ export const App: React.FC = () => {
     setActiveTab('EDITOR')
   }
 
+  const handleNewSetlist = () => {
+    const newSetlist: WebSetlist = {
+      id: generateUUID(),
+      name: 'New Setlist',
+      folderId:
+        currentNavTarget.type === 'FOLDER' ? currentNavTarget.folderId : null,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      songs: [],
+    }
+    handleSaveSetlist(newSetlist).then(() => {
+      setActiveSetlistManagerId(newSetlist.id)
+      setActiveTab('SETLISTS')
+    })
+  }
+
   const handlePlaySetlistSong = (songId: string, transposeOffset?: number) => {
     const s = songs.find((item) => item.id === songId)
     if (s) {
       setSelectedSong(s)
       setViewerTransposeOffset(transposeOffset ?? s.transposeOffset ?? 0)
       setActiveTab('VIEWER')
+    }
+  }
+
+  const handleOpenSetlistManager = (setlistId?: string) => {
+    setActiveSetlistManagerId(setlistId)
+    setActiveTab('SETLISTS')
+  }
+
+  const handleSelectNavTarget = (target: ExplorerNavTarget) => {
+    setCurrentNavTarget(target)
+    if (activeTab !== 'SONGS') {
+      setActiveTab('SONGS')
     }
   }
 
@@ -205,61 +312,135 @@ export const App: React.FC = () => {
         setActiveTab={setActiveTab}
         onNewSong={handleNewSong}
         onOpenBackup={() => setIsBackupOpen(true)}
+        onOpenProfile={() => setIsProfileOpen(true)}
+        userProfile={userProfile}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        onToggleMobileDrawer={() => setIsMobileDrawerOpen(!isMobileDrawerOpen)}
+        isMobileDrawerOpen={isMobileDrawerOpen}
+        searchScopeLabel={searchScopeLabel}
       />
 
-      <main className="flex-1 pb-16">
-        {activeTab === 'SONGS' && (
-          <SongbookHomeView
+      <div className="flex-1 flex overflow-hidden">
+        {/* Desktop Sidebar: Music Explorer Navigation */}
+        <aside className="hidden md:block w-64 lg:w-72 shrink-0">
+          <ExplorerNavigation
+            currentSelection={currentNavTarget}
+            onSelectTarget={handleSelectNavTarget}
             songs={songs}
-            onSelectSong={handleSelectSong}
-            onEditSong={handleEditSong}
-            onNewSong={handleNewSong}
-            onOpenBackup={() => setIsBackupOpen(true)}
-            onBulkUpdateSongs={handleBulkUpdateSongs}
-          />
-        )}
-
-        {activeTab === 'VIEWER' && selectedSong && (
-          <SongViewer
-            song={{
-              ...selectedSong,
-              transposeOffset: viewerTransposeOffset,
-            }}
-            onEdit={handleEditSong}
-            onBack={() => setActiveTab('SONGS')}
-          />
-        )}
-
-        {activeTab === 'EDITOR' && (
-          <SongEditor
-            initialSong={editingSong || undefined}
-            onSave={handleSaveSong}
-            onDelete={editingSong?.id ? handleDeleteSong : undefined}
-            onCancel={() => {
-              if (selectedSong) {
-                setActiveTab('VIEWER')
-              } else {
-                setActiveTab('SONGS')
-              }
-              setEditingSong(null)
-            }}
-          />
-        )}
-
-        {activeTab === 'SETLISTS' && (
-          <SetlistManager
             setlists={setlists}
             folders={folders}
-            allSongs={songs}
-            onSaveSetlist={handleSaveSetlist}
-            onDeleteSetlist={handleDeleteSetlist}
+            allTags={allTags}
             onSaveFolder={handleSaveFolder}
             onDeleteFolder={handleDeleteFolder}
-            onPlaySong={handlePlaySetlistSong}
+            onNewSong={handleNewSong}
+            onNewSetlist={handleNewSetlist}
+            onSelectSetlist={(slId) => handleSelectNavTarget({ type: 'SETLIST', setlistId: slId })}
           />
-        )}
-      </main>
+        </aside>
 
+        {/* Mobile Drawer */}
+        {isMobileDrawerOpen && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Mobile Navigation Drawer"
+            className="md:hidden fixed inset-0 z-50 flex"
+          >
+            {/* Backdrop */}
+            <div
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+              onClick={() => setIsMobileDrawerOpen(false)}
+            />
+            {/* Drawer Content */}
+            <div className="relative w-72 max-w-[80vw] h-full bg-slate-900 z-10 shadow-2xl flex flex-col">
+              <ExplorerNavigation
+                currentSelection={currentNavTarget}
+                onSelectTarget={handleSelectNavTarget}
+                songs={songs}
+                setlists={setlists}
+                folders={folders}
+                allTags={allTags}
+                onSaveFolder={handleSaveFolder}
+                onDeleteFolder={handleDeleteFolder}
+                onNewSong={handleNewSong}
+                onNewSetlist={handleNewSetlist}
+                onSelectSetlist={(slId) => handleSelectNavTarget({ type: 'SETLIST', setlistId: slId })}
+                onCloseMobileDrawer={() => setIsMobileDrawerOpen(false)}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Workspace Canvas */}
+        <main className="flex-1 flex flex-col min-w-0 overflow-y-auto">
+          {activeTab === 'SONGS' && (
+            <SongbookHomeView
+              songs={songs}
+              setlists={setlists}
+              folders={folders}
+              currentNavTarget={currentNavTarget}
+              onSelectNavTarget={handleSelectNavTarget}
+              onSelectSong={handleSelectSong}
+              onEditSong={handleEditSong}
+              onNewSong={handleNewSong}
+              onDeleteSong={handleDeleteSong}
+              onSaveSong={handleSaveSong}
+              onBulkUpdateSongs={handleBulkUpdateSongs}
+              onBulkDeleteSongs={handleBulkDeleteSongs}
+              onSaveSetlist={handleSaveSetlist}
+              onDeleteSetlist={handleDeleteSetlist}
+              onPlaySetlistSong={handlePlaySetlistSong}
+              onOpenSetlistManager={handleOpenSetlistManager}
+              searchQuery={searchQuery}
+              onClearSearch={() => setSearchQuery('')}
+            />
+          )}
+
+          {activeTab === 'VIEWER' && selectedSong && (
+            <SongViewer
+              song={{
+                ...selectedSong,
+                transposeOffset: viewerTransposeOffset,
+              }}
+              onEdit={handleEditSong}
+              onBack={() => setActiveTab('SONGS')}
+            />
+          )}
+
+          {activeTab === 'EDITOR' && (
+            <SongEditor
+              initialSong={editingSong || undefined}
+              onSave={handleSaveSong}
+              onDelete={editingSong?.id ? handleDeleteSong : undefined}
+              onCancel={() => {
+                if (selectedSong) {
+                  setActiveTab('VIEWER')
+                } else {
+                  setActiveTab('SONGS')
+                }
+                setEditingSong(null)
+              }}
+            />
+          )}
+
+          {activeTab === 'SETLISTS' && (
+            <SetlistManager
+              setlists={setlists}
+              folders={folders}
+              allSongs={songs}
+              initialSelectedSetlistId={activeSetlistManagerId}
+              onSaveSetlist={handleSaveSetlist}
+              onDeleteSetlist={handleDeleteSetlist}
+              onSaveFolder={handleSaveFolder}
+              onDeleteFolder={handleDeleteFolder}
+              onPlaySong={handlePlaySetlistSong}
+            />
+          )}
+        </main>
+      </div>
+
+      {/* Backup Modal */}
       {isBackupOpen && (
         <BackupModal
           songs={songs}
@@ -267,6 +448,15 @@ export const App: React.FC = () => {
           folders={folders}
           onImport={handleImport}
           onClose={() => setIsBackupOpen(false)}
+        />
+      )}
+
+      {/* Local Profile Modal */}
+      {isProfileOpen && (
+        <LocalProfileModal
+          profile={userProfile}
+          onSaveProfile={(updated) => setUserProfile(updated)}
+          onClose={() => setIsProfileOpen(false)}
         />
       )}
     </div>

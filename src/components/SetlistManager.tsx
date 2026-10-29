@@ -7,6 +7,7 @@ export interface SetlistManagerProps {
   setlists: WebSetlist[]
   folders: SetlistFolder[]
   allSongs: SongEntity[]
+  initialSelectedSetlistId?: string
   onSaveSetlist: (setlist: WebSetlist) => Promise<void>
   onDeleteSetlist: (id: string) => Promise<void>
   onSaveFolder: (folder: SetlistFolder) => Promise<void>
@@ -18,6 +19,7 @@ export const SetlistManager: React.FC<SetlistManagerProps> = ({
   setlists,
   folders,
   allSongs,
+  initialSelectedSetlistId,
   onSaveSetlist,
   onDeleteSetlist,
   onSaveFolder,
@@ -25,7 +27,7 @@ export const SetlistManager: React.FC<SetlistManagerProps> = ({
   onPlaySong,
 }) => {
   const [selectedSetlistId, setSelectedSetlistId] = useState<string | null>(
-    setlists[0]?.id || null
+    initialSelectedSetlistId || setlists[0]?.id || null
   )
   const [selectedFolderFilter, setSelectedFolderFilter] = useState<string | 'ALL' | 'UNFILED'>('ALL')
   const [isCreatingSetlist, setIsCreatingSetlist] = useState<boolean>(false)
