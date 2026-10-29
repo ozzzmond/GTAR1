@@ -11,6 +11,7 @@ import {
   User,
   Music,
   ListMusic,
+  Palette,
 } from 'lucide-react'
 
 export type ActiveTab = 'SONGS' | 'SETLISTS' | 'VIEWER' | 'EDITOR' | 'STAGE'
@@ -21,6 +22,7 @@ export interface HeaderProps {
   onNewSong: () => void
   onOpenBackup: () => void
   onOpenProfile: () => void
+  onOpenTheme?: () => void
   userProfile: LocalUserProfile
   searchQuery: string
   onSearchChange: (query: string) => void
@@ -35,6 +37,7 @@ export const Header: React.FC<HeaderProps> = ({
   onNewSong,
   onOpenBackup,
   onOpenProfile,
+  onOpenTheme,
   userProfile,
   searchQuery,
   onSearchChange,
@@ -255,6 +258,21 @@ export const Header: React.FC<HeaderProps> = ({
                     <Database className="w-3.5 h-3.5 text-sky-400" />
                     <span>Backup &amp; Restore</span>
                   </button>
+
+                  {onOpenTheme && (
+                    <button
+                      type="button"
+                      data-testid="header-theme-settings-btn"
+                      onClick={() => {
+                        setShowAvatarMenu(false)
+                        onOpenTheme()
+                      }}
+                      className="w-full px-3 py-2 rounded-xl text-left hover:bg-slate-700/70 text-slate-200 flex items-center gap-2 transition-colors font-medium"
+                    >
+                      <Palette className="w-3.5 h-3.5 text-sky-400" />
+                      <span>Stage &amp; Color Theme</span>
+                    </button>
+                  )}
                 </div>
 
                 <div className="pt-1 border-t border-slate-700/60 px-3 py-1.5 text-[10px] text-slate-400">

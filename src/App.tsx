@@ -23,6 +23,15 @@ import { StageView, type StageQueueItem } from './components/StageView'
 import { BackupModal } from './components/BackupModal'
 import { LocalProfileModal } from './components/LocalProfileModal'
 import {
+  ThemeModal,
+  type ThemeMode,
+  type CustomThemeColors,
+  applyThemeRuntime,
+  hydrateThemeSettings,
+  loadFactoryThemeOverrides,
+} from './components/ThemeModal'
+import { SETTINGS_KEYS, SETTINGS_CHANGED, STANDALONE_PALETTE_KEY } from './utils/backupSettings'
+import {
   ExplorerNavigation,
   type ExplorerNavTarget,
 } from './components/ExplorerNavigation'
@@ -90,7 +99,53 @@ export const App: React.FC = () => {
   // Modals
   const [isBackupOpen, setIsBackupOpen] = useState<boolean>(false)
   const [isProfileOpen, setIsProfileOpen] = useState<boolean>(false)
+  const [isThemeOpen, setIsThemeOpen] = useState<boolean>(false)
   const [userProfile, setUserProfile] = useState<LocalUserProfile>(loadLocalProfile)
+
+  // Stage Color Theme (persisted in localStorage)
+  const [stageTheme, setStageTheme] = useState<ThemeMode>(() => hydrateThemeSettings().mode)
+  const [customThemeColors, setCustomThemeColors] = useState<CustomThemeColors>(() => hydrateThemeSettings().standalone)
+
+  // Apply theme runtime on mount and updates
+  useEffect(() => {
+    applyThemeRuntime(stageTheme, customThemeColors)
+  }, [stageTheme, customThemeColors])
+
+  // Rehydrate active appearance after settings restore and cross-tab storage events
+  useEffect(() => {
+    const handleRehydrate = () => {
+      const { mode, standalone } = hydrateThemeSettings()
+      const overrides = loadFactoryThemeOverrides()
+      setStageTheme(mode)
+      setCustomThemeColors(standalone)
+      applyThemeRuntime(mode, standalone, overrides)
+    }
+
+    const handleStorage = (e: StorageEvent) => {
+      if (
+        !e.key ||
+        e.key === SETTINGS_KEYS.appearance ||
+        e.key === SETTINGS_KEYS.themeMode ||
+        e.key === SETTINGS_KEYS.customThemeColors ||
+        e.key === SETTINGS_KEYS.factoryThemeOverrides ||
+        e.key === STANDALONE_PALETTE_KEY
+      ) {
+        handleRehydrate()
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener(SETTINGS_CHANGED, handleRehydrate)
+      window.addEventListener('storage', handleStorage)
+    }
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener(SETTINGS_CHANGED, handleRehydrate)
+        window.removeEventListener('storage', handleStorage)
+      }
+    }
+  }, [])
 
   // Initialization State
   const [isLoading, setIsLoading] = useState<boolean>(true)
@@ -637,6 +692,7 @@ export const App: React.FC = () => {
         onNewSong={handleNewSong}
         onOpenBackup={() => setIsBackupOpen(true)}
         onOpenProfile={() => setIsProfileOpen(true)}
+        onOpenTheme={() => setIsThemeOpen(true)}
         userProfile={userProfile}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
@@ -812,6 +868,21 @@ export const App: React.FC = () => {
           onClose={() => setIsProfileOpen(false)}
         />
       )}
+
+      {/* Stage Color Theme Modal */}
+      <ThemeModal
+        isOpen={isThemeOpen}
+        onClose={() => setIsThemeOpen(false)}
+        currentTheme={stageTheme}
+        customColors={customThemeColors}
+        onApplyTheme={(theme, colors) => {
+          setStageTheme(theme)
+          if (theme === 'custom' && colors) {
+            setCustomThemeColors(colors)
+          }
+        }}
+        onSelectTheme={(theme) => setStageTheme(theme)}
+      />
     </div>
   )
 }

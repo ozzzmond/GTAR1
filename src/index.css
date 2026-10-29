@@ -1,66 +1,594 @@
 @import "tailwindcss";
 
-:root {
-  color-scheme: dark;
-  --custom-stage-bg: #020617;
-  --custom-stage-surface: #0f172a;
-  --custom-stage-border: #334155;
-  --custom-stage-text: #f8fafc;
-  --custom-stage-chord: #f59e0b;
-  --custom-stage-section: #a78bfa;
-  --custom-stage-tab: #38bdf8;
-
+@theme inline {
+  /* Reserved status roles retain meaning; only their text contrast adapts. */
+  --color-status-error: light-dark(#B91C1C, #FCA5A5);
+  --color-status-success: light-dark(#166534, #86EFAC);
+  --color-status-warning: light-dark(#92400E, #FBBF24);
+  --color-status-info: light-dark(#075985, #7DD3FC);
   --color-app-base: var(--custom-stage-bg);
   --color-app-surface: var(--custom-stage-surface);
-  --color-app-border: var(--custom-stage-border);
-  --color-app-text: var(--custom-stage-text);
-  --color-app-heading: #ffffff;
-  --color-app-accent: #38bdf8;
-  --color-app-muted: #94a3b8;
+  --color-app-border: var(--custom-card-border);
+  --color-app-text: var(--custom-uiPrimaryText);
+  --color-app-lyric: var(--custom-stage-text);
+  --color-app-heading: var(--custom-uiSectionText);
+  --color-app-muted: var(--custom-uiMutedText);
+  --color-app-action: var(--custom-actionColor);
+  --color-app-accent: var(--custom-control-accent);
+  --color-app-section: var(--custom-sectionIconColor);
+  --color-app-link: var(--custom-uiLinkText);
+  --color-app-button: var(--custom-control-button-bg);
+  --color-app-button-text: var(--custom-control-button-text);
+  --color-app-on-action: var(--custom-action-foreground);
+  --color-app-selected: var(--custom-card-selected-bg);
+  --color-app-selected-border: var(--custom-card-selected-border);
+  --color-app-song: var(--custom-card-song-bg);
+  --color-app-setlist: var(--custom-card-setlist-bg);
+  --color-app-header: var(--custom-chrome-header-bg);
+  --color-app-toolbar: var(--custom-chrome-toolbar-bg);
+  --color-app-filter: var(--custom-chrome-filter-bg);
+
+
+  --font-stage-mono: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --font-stage-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-stage-serif: "Georgia", "Cambria", "Times New Roman", Times, serif;
+}
+
+:root {
+  color-scheme: dark;
 }
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  background-color: #0f172a;
-  color: #f8fafc;
+  padding: 0;
+  background-color: var(--custom-stage-bg);
+  color: var(--custom-uiPrimaryText);
+  font-family: var(--font-stage-sans);
+  min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
 }
 
-.text-app-text { color: var(--color-app-text, #f8fafc); }
-.text-app-heading { color: var(--color-app-heading, #ffffff); }
-.text-app-accent { color: var(--color-app-accent, #38bdf8); }
-.text-app-muted { color: var(--color-app-muted, #94a3b8); }
-.bg-app-base { background-color: var(--color-app-base, #020617); }
-.bg-app-surface { background-color: var(--color-app-surface, #0f172a); }
-.border-app-border { border-color: var(--color-app-border, #334155); }
-
-.stage-mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-}
-.stage-sans {
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-}
-.stage-serif {
-  font-family: Georgia, Cambria, "Times New Roman", Times, serif;
-}
-
-/* Custom dark scrollbar */
+/* Custom scrollbars matching Solarized Stage Dark */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #0f172a;
+  background: var(--custom-stage-bg);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: var(--custom-card-border);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: var(--custom-actionColor);
 }
+
+/* Hide scrollbar for clean horizontal action bars */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Keyframe shake animation for login wall */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-8px); }
+  40%, 80% { transform: translateX(8px); }
+}
+
+.animate-shake {
+  animation: shake 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+/* High contrast stage typography */
+.stage-mono {
+  font-family: var(--font-stage-mono);
+  letter-spacing: -0.01em;
+}
+
+.stage-sans {
+  font-family: var(--font-stage-sans);
+}
+
+.stage-serif {
+  font-family: var(--font-stage-serif);
+}
+
+/* ChordPro formatted preview styles */
+.chord-sheet-container {
+  font-family: var(--font-stage-mono);
+  line-height: 1.4;
+  white-space: pre;
+}
+
+.chord-sheet-container .paragraph {
+  margin-bottom: 1.25rem;
+}
+
+.chord-sheet-container .comment {
+  color: var(--custom-stage-section);
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: 0.04em;
+  padding: 14px 0 8px;
+  margin: 0;
+  display: block;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow-anchor: none;
+  break-after: avoid;
+}
+
+.chord-sheet-container .chord {
+  color: var(--custom-stage-chord);
+  font-weight: 700;
+}
+
+.chord-sheet-container .lyrics {
+  color: var(--custom-stage-text);
+}
+
+/* All selected themes use the semantic runtime variables below. */
+
+/* Header sync spin indicator with prefers-reduced-motion respect */
+@keyframes spin-sync {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.header-sync-spin {
+  animation: spin-sync 1s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .header-sync-spin {
+    animation: none !important;
+    transform: none !important;
+  }
+}
+
+/* ========================================================================== */
+/* Shared Semantic Theme Runtime (factory presets and Custom Palette V2)     */
+/* ========================================================================== */
+body.theme-custom {
+  background-color: var(--custom-stage-bg, #121820) !important;
+  color: var(--custom-uiPrimaryText, #F1F5F9) !important;
+  font-family: var(--custom-font-ui, var(--font-stage-sans));
+}
+
+/* Explicit chrome roles avoid recoloring menus nested under the header. */
+body.theme-custom header { background-color: var(--custom-chrome-header-bg) !important; }
+/* 2. APP CHROME: Search Bar & Search Border */
+body.theme-custom .pill-search {
+  background-color: var(--custom-chrome-search-bg, var(--custom-stage-bg, #121820)) !important;
+  border-color: var(--custom-chrome-search-border, var(--custom-stage-border, #2A3644)) !important;
+}
+body.theme-custom .pill-search input {
+  color: var(--custom-control-input-text, #F1F5F9) !important;
+}
+body.theme-custom .pill-search input::placeholder {
+  color: var(--custom-chrome-icon, #94A3B8) !important;
+  opacity: 0.7;
+}
+
+/* 4. APP CHROME: Action Icons & Toolbar Icons */
+body.theme-custom .toolbar-icon-btn,
+body.theme-custom header .toolbar-icon-btn {
+  color: var(--custom-chrome-icon, #94A3B8) !important;
+}
+body.theme-custom .toolbar-icon-btn:hover,
+body.theme-custom .toolbar-icon-btn:focus-visible {
+  color: var(--custom-control-accent, #F59E0B) !important;
+}
+body.theme-custom .toolbar-icon-btn.active {
+  color: var(--custom-control-accent, #F59E0B) !important;
+}
+body.theme-custom .toolbar-icon-btn .active-dot {
+  background-color: var(--custom-control-accent, #F59E0B) !important;
+}
+
+/* Explicit card surfaces; selected states have their own paired tokens. */
+body.theme-custom .ui-song-card { background-color: var(--custom-card-song-bg) !important; }
+body.theme-custom .ui-setlist-card { background-color: var(--custom-card-setlist-bg) !important; }
+body.theme-custom .ui-selection-card {
+  background-color: var(--custom-card-selected-bg) !important;
+  border-color: var(--custom-card-selected-border) !important;
+  --tw-ring-color: var(--custom-card-selected-border);
+}
+/* 7. CONTROLS: Buttons */
+body.theme-custom .ui-button {
+  background-color: var(--custom-control-button-bg, #24303E) !important;
+  color: var(--custom-control-button-text, #F1F5F9) !important;
+}
+body.theme-custom .view-toggle-btn.active {
+  background-color: var(--custom-control-accent, #F59E0B) !important;
+  border-color: var(--custom-control-accent, #F59E0B) !important;
+  color: var(--custom-control-button-text, #000000) !important;
+}
+
+/* 8. CONTROLS: Inputs & Selects Dropdowns */
+body.theme-custom select,
+body.theme-custom input:not([type="checkbox"]):not([type="color"]):not(.pill-search input),
+body.theme-custom textarea {
+  background-color: var(--custom-control-input-bg, var(--custom-stage-bg, #121820)) !important;
+  color: var(--custom-control-input-text, var(--custom-stage-text, #F1F5F9)) !important;
+  border-color: var(--custom-control-input-border, var(--custom-stage-border, #2A3644)) !important;
+}
+
+/* 9. CONTROLS: Accent & Focus State */
+body.theme-custom input:focus,
+body.theme-custom select:focus,
+body.theme-custom textarea:focus {
+  border-color: var(--custom-control-accent, #F59E0B) !important;
+}
+
+/* 10. STAGE FLOATING CONTROLS: Dock & Buttons */
+body.theme-custom [data-stage-dock="true"] {
+  background-color: var(--custom-dock-bg, rgba(26, 34, 45, 0.95)) !important;
+  border-color: var(--custom-dock-border, #2A3644) !important;
+}
+
+body.theme-custom [data-stage-dock="true"] button[aria-label="Jump to previous section"],
+body.theme-custom [data-stage-dock="true"] button[aria-label="Jump to next section"] {
+  background-color: var(--custom-dock-btn-bg, #121820) !important;
+  color: var(--custom-dock-btn-icon, #F1F5F9) !important;
+  border-color: var(--custom-dock-border, #2A3644) !important;
+}
+
+body.theme-custom [data-stage-dock="true"] button[aria-label*="autoscroll"] {
+  background-color: var(--custom-dock-play-bg, #F59E0B) !important;
+  color: var(--custom-dock-play-icon, #000000) !important;
+  border-color: var(--custom-dock-play-bg, #F59E0B) !important;
+}
+
+body.theme-custom [data-stage-dock="true"] button:disabled {
+  opacity: 0.35 !important;
+  cursor: not-allowed !important;
+}
+
+/* Custom Lyrics & Text */
+body.theme-custom .stage-lyric-text,
+body.theme-custom .chord-sheet-container .lyrics {
+  color: var(--custom-stage-text, #F1F5F9) !important;
+}
+
+/* Stage View semantic surface and controls */
+body.theme-custom [data-stage-view="true"],
+body.theme-custom .stage-view-root {
+  background-color: var(--custom-stage-bg, #121820) !important;
+  color: var(--custom-stage-text, #F1F5F9) !important;
+}
+
+body.theme-custom [data-stage-view="true"] header[role="banner"] {
+  background-color: var(--custom-chrome-header-bg) !important;
+  border-bottom-color: var(--custom-card-border, var(--custom-stage-border, #2A3644)) !important;
+}
+
+body.theme-custom [data-stage-view="true"] header h1,
+body.theme-custom [data-stage-view="true"] .stage-title-text {
+  color: var(--custom-headerPrimaryText, var(--custom-uiPrimaryText, #F1F5F9)) !important;
+}
+
+body.theme-custom [data-stage-view="true"] .stage-artist-text {
+  color: var(--custom-headerSecondaryText, var(--custom-uiSecondaryText, #CBD5E1)) !important;
+}
+
+body.theme-custom [data-stage-view="true"] .stage-minimal-badge {
+  background-color: var(--custom-dock-bg, var(--custom-stage-surface, #1A222D)) !important;
+  border-color: var(--custom-dock-border, var(--custom-card-border, #2A3644)) !important;
+  color: var(--custom-uiPrimaryText, #F1F5F9) !important;
+}
+
+body.theme-custom [data-stage-view="true"] header button {
+  background-color: var(--custom-control-button-bg, #24303E) !important;
+  color: var(--custom-control-button-text, #F1F5F9) !important;
+  border-color: var(--custom-card-border, #2A3644) !important;
+}
+
+body.theme-custom [data-stage-view="true"] nav[aria-label="Stage transport controls"] {
+  background-color: var(--custom-dock-bg, var(--custom-chrome-toolbar-bg, #1A222D)) !important;
+  border-top-color: var(--custom-dock-border, var(--custom-card-border, #2A3644)) !important;
+}
+
+body.theme-custom [data-stage-view="true"] nav[aria-label="Stage transport controls"] button:not([aria-label*="auto-scroll"]) {
+  background-color: var(--custom-dock-btn-bg, var(--custom-control-button-bg, #121820)) !important;
+  color: var(--custom-dock-btn-icon, var(--custom-control-button-text, #F1F5F9)) !important;
+  border-color: var(--custom-dock-border, var(--custom-card-border, #2A3644)) !important;
+}
+
+/* Custom Chords */
+body.theme-custom .stage-chord-text,
+body.theme-custom .chord-sheet-container .chord {
+  color: var(--custom-stage-chord, #F59E0B) !important;
+}
+
+/* Custom Section Headers */
+body.theme-custom .stage-section-header,
+body.theme-custom .chord-sheet-container .comment {
+  color: var(--custom-stage-section, #A78BFA) !important;
+}
+
+/* ========================================================================== */
+/* Header Toolbar: Icon Tooltips, Active Dot, Avatar Popover                  */
+/* ========================================================================== */
+
+/* Scale-in dropdown/popover animation */
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.92) translateY(-4px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.animate-scale-in {
+  animation: scale-in 0.15s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* DEV.5a: the whole action group is one intrinsic-width box centered by auto inline margins.
+   When it overflows, auto margins resolve to 0 so the first action (Back) stays reachable. */
+.main-toolbar-content {
+  width: max-content;
+  max-width: none;
+  margin-inline: auto;
+}
+
+/* Toolbar icon tooltip */
+.toolbar-icon-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0;
+  margin: 0;
+  box-sizing: border-box;
+  border-radius: 10px;
+  transition: background-color 0.15s, color 0.15s;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: var(--custom-uiMutedText);
+  line-height: 1;
+  flex-shrink: 0;
+}
+.toolbar-icon-btn svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+  margin: auto;
+  flex-shrink: 0;
+}
+.toolbar-icon-btn:hover,
+.toolbar-icon-btn:focus-visible {
+  background-color: color-mix(in srgb, var(--custom-control-button-bg) 80%, transparent);
+  color: var(--custom-uiSectionText);
+}
+.toolbar-icon-btn.active {
+  color: var(--custom-actionColor);
+}
+
+/* Cyan dot under active icon */
+.toolbar-icon-btn .active-dot {
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: var(--custom-actionColor);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.toolbar-icon-btn.active .active-dot {
+  opacity: 1;
+}
+
+/* Mounted only while visible, outside the horizontal toolbar scroller. */
+.toolbar-tooltip {
+  position: fixed;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--custom-stage-bg);
+  border: 1px solid var(--custom-card-border);
+  color: var(--custom-uiPrimaryText);
+  font-size: 10px;
+  font-weight: 600;
+  width: max-content;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  z-index: 60;
+}
+
+/* Avatar auth-status dot */
+.avatar-wrapper {
+  position: relative;
+  cursor: pointer;
+}
+.avatar-wrapper .auth-dot {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--custom-chrome-header-bg);
+  z-index: 2;
+}
+.auth-dot.synced    { background-color: #10B981; }
+.auth-dot.syncing   { background-color: #F59E0B; }
+.auth-dot.error     { background-color: #EF4444; }
+
+/* Admin pending approval notification badge */
+.avatar-wrapper .pending-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 9999px;
+  background-color: #DC322F;
+  color: #FFFFFF;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  border: 1.5px solid var(--custom-stage-bg);
+  z-index: 3;
+  pointer-events: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+/* Avatar popover */
+.avatar-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 260px;
+  background: var(--custom-stage-surface);
+  border: 1px solid var(--custom-card-border);
+  border-radius: 16px;
+  padding: 12px;
+  z-index: 60;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+}
+
+/* Pill search bar */
+.pill-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--custom-stage-bg);
+  border: 1px solid var(--custom-card-border);
+  border-radius: 999px;
+  padding: 6px 14px;
+  transition: border-color 0.15s;
+}
+.pill-search:focus-within {
+  border-color: var(--custom-actionColor);
+}
+.pill-search input {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--custom-uiSectionText);
+  font-size: 13px;
+  flex: 1;
+  min-width: 0;
+}
+.pill-search input::placeholder {
+  color: color-mix(in srgb, var(--custom-uiMutedText) 70%, transparent);
+}
+.pill-search .kbd-hint {
+  font-size: 10px;
+  font-family: var(--font-stage-mono);
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--custom-actionColor) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--custom-actionColor) 30%, transparent);
+  color: var(--custom-actionColor);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* View toggle (grid/list) */
+.view-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--custom-card-border);
+  background: var(--custom-stage-bg);
+  color: var(--custom-uiMutedText);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.view-toggle-btn:hover {
+  border-color: var(--custom-actionColor);
+  color: var(--custom-actionColor);
+}
+.view-toggle-btn.active {
+  background: var(--custom-actionColor);
+  border-color: var(--custom-actionColor);
+  color: var(--custom-stage-bg);
+}
+
+
+/* Semantic app typography; factory presets keep their original utilities. */
+/* Explicit top-header roles avoid recoloring body/popover text or health indicators. */
+body.theme-custom .header-primary-text { color: var(--custom-headerPrimaryText, #F1F5F9) !important; }
+body.theme-custom .header-secondary-text { color: var(--custom-headerSecondaryText, #CBD5E1) !important; }
+body.theme-custom .header-neutral-icon { color: var(--custom-headerIconColor, #94A3B8) !important; }
+body.theme-custom .ui-primary-text { color: var(--custom-uiPrimaryText, #F1F5F9) !important; }
+body.theme-custom .ui-secondary-text { color: var(--custom-uiSecondaryText, #CBD5E1) !important; }
+body.theme-custom .ui-section-text { color: var(--custom-uiSectionText, #F1F5F9) !important; }
+body.theme-custom .ui-muted-text { color: var(--custom-uiMutedText, #94A3B8) !important; }
+body.theme-custom .ui-link-text { color: var(--custom-uiLinkText, #38BDF8) !important; }
+body.theme-custom :is(.ui-primary-text, .ui-secondary-text, .ui-muted-text, .ui-link-text) {
+  font-family: var(--custom-font-ui, var(--font-stage-sans));
+}
+body.theme-custom :is(h1, h2, h3, .ui-section-text) {
+  font-family: var(--custom-font-heading, var(--custom-font-ui, var(--font-stage-sans)));
+}
+body.theme-custom .stage-mono { font-family: var(--custom-font-stage, var(--font-stage-mono)); }
+body.theme-custom .stage-sans { font-family: var(--custom-font-stage, var(--font-stage-sans)); }
+body.theme-custom .stage-serif { font-family: var(--custom-font-stage, var(--font-stage-serif)); }
+
+body.theme-custom header .font-mono {
+  font-family: var(--custom-font-ui, var(--font-stage-sans));
+}
+body.theme-custom .group:hover .ui-primary-text[class*="group-hover:text"] {
+  color: var(--custom-uiLinkText, #38BDF8) !important;
+}
+
+/* DEV.3g: explicit roles leave destructive, auth, health and environment colors intact. */
+body.theme-custom .ui-action-text { color: var(--custom-actionColor, #2AA198) !important; }
+body.theme-custom .ui-section-icon { color: var(--custom-sectionIconColor, #2AA198) !important; }
+body.theme-custom .ui-selection-card {
+  border-color: var(--custom-card-selected-border) !important;
+  --tw-ring-color: var(--custom-card-selected-border);
+}
+body.theme-custom .ui-selection-indicator {
+  background-color: var(--custom-selectionColor, #2AA198) !important;
+  border-color: var(--custom-selectionColor, #2AA198) !important;
+  /* Paired legible foreground is derived when the selection token changes. */
+  color: var(--custom-selection-foreground, #000000) !important;
+}
+body.theme-custom .ui-action-text[class~="border-app-action"] {
+  border-color: var(--custom-actionColor, #2AA198) !important;
+}
+body.theme-custom .ui-action-text:hover:not(.ui-selection-indicator) {
+  color: var(--custom-control-button-text) !important;
+  background-color: var(--custom-control-button-bg, #24303E) !important;
+}
+body.theme-custom :is(.theme-studio, .songbook-ui, .setlist-ui) :is(button, input, select, textarea, label, .font-mono) {
+  font-family: var(--custom-font-ui, var(--font-stage-sans));
+}
+body.theme-custom .theme-studio .ui-primary-text { color: var(--custom-uiPrimaryText, #F1F5F9) !important; }
+body.theme-custom .theme-studio .ui-muted-text { color: var(--custom-uiMutedText, #94A3B8) !important; }
+body.theme-custom .theme-studio .ui-section-text { color: var(--custom-uiSectionText, #F1F5F9) !important; }
+body.theme-custom .theme-studio .ui-button {
+  background-color: var(--custom-control-button-bg, #24303E) !important;
+  color: var(--custom-control-button-text, #F1F5F9) !important;
+  border-color: var(--custom-control-input-border, #2A3644) !important;
+}
+body.theme-custom .theme-studio .ui-button :is(span, svg) { color: inherit !important; }
+
+/* Shared states use the same palette in native controls and portal content. */
+body.theme-custom :is(input, textarea)::placeholder { color: var(--custom-uiMutedText); opacity: .7; }
+body.theme-custom :is(input[type="checkbox"], input[type="range"]) { accent-color: var(--custom-control-accent); }
+body.theme-custom :is(button, a, input, select, textarea):focus-visible { outline: 2px solid var(--custom-control-accent); outline-offset: 2px; }
+body.theme-custom :is(button, input, select, textarea):disabled { opacity: .45; }
+body.theme-custom ::selection { background-color: var(--custom-selectionColor); color: var(--custom-selection-foreground); }

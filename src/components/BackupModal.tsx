@@ -1,6 +1,7 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import type { SongEntity, WebSetlist, SetlistFolder } from '../types/gtar'
 import { createBackupPayload, parseBackupJson } from '../utils/jsonBackup'
+import { restoreBackupSettings, type BackupSettings } from '../utils/backupSettings'
 import {
   Download,
   Upload,
@@ -41,11 +42,27 @@ export const BackupModal: React.FC<BackupModalProps> = ({
     songs: SongEntity[]
     setlists: WebSetlist[]
     folders: SetlistFolder[]
+    themeSettings?: BackupSettings
     error?: string
   } | null>(null)
   const [isImporting, setIsImporting] = useState<boolean>(false)
 
-  const backupJsonString = JSON.stringify(createBackupPayload(songs, setlists, folders), null, 2)
+  const backupJsonString = useMemo(() => {
+    try {
+      return JSON.stringify(createBackupPayload(songs, setlists, folders), null, 2)
+    } catch (err) {
+      console.warn('Isolating corrupt backup settings during export:', err)
+      return JSON.stringify({
+        app: 'GTAR1',
+        schemaVersion: 1,
+        version: '0.1.0-dev',
+        exportedAt: new Date().toISOString(),
+        songs,
+        setlists,
+        folders,
+      }, null, 2)
+    }
+  }, [songs, setlists, folders])
 
   const handleCopy = () => {
     navigator.clipboard.writeText(backupJsonString)
@@ -87,6 +104,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
         songs: result.songs,
         setlists: result.setlists,
         folders: result.folders || [],
+        themeSettings: result.themeSettings,
       })
     } else {
       setImportPreview({
@@ -104,6 +122,13 @@ export const BackupModal: React.FC<BackupModalProps> = ({
 
     setIsImporting(true)
     try {
+      if (importPreview.themeSettings) {
+        try {
+          restoreBackupSettings(importPreview.themeSettings)
+        } catch (themeErr) {
+          console.warn('Could not restore theme settings from backup', themeErr)
+        }
+      }
       await onImport(importPreview.songs, importPreview.setlists, importPreview.folders)
       alert(
         `Successfully restored ${importPreview.songs.length} canonical songs, ${importPreview.setlists.length} setlists, and ${importPreview.folders.length} folders!`
