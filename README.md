@@ -63,3 +63,19 @@ npm run build
 # 5. Preview production build locally
 npm run preview
 ```
+
+### Continuous integration
+
+`.github/workflows/ci.yml` validates PRs targeting `dev` or `main`, pushes to
+`dev`, and manual runs. It uses Node.js 24.20.0 and `npm ci`, builds the
+TypeScript/production PWA, installs Chromium, then runs `npm test`. The build
+must precede tests because the browser suite serves `dist/`. Firefox keeps its
+existing optional skip behavior; Chromium and test assertions are mandatory.
+
+The read-only workflow has no deployment credentials or deployment steps.
+Native Actions logs provide detailed evidence; a compact `ci-verification`
+artifact records the tested commit and step results with seven-day retention.
+For PRs, the tested SHA is GitHub's merge commit; the receipt also records the
+head SHA. Receipt availability depends on a real run completing the upload.
+Branch protection and required checks are managed separately; this workflow
+does not configure or enforce repository merge rules.
