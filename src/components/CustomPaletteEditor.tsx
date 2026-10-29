@@ -1,5 +1,5 @@
 import { FONT_TARGETS, BUILTIN_FONTS, normalizeFontSettings, validateFontSettings, fontStack, type FontChoice } from '../utils/customFonts'
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   X,
   Sliders,
@@ -43,7 +43,8 @@ export interface CustomPaletteEditorProps {
   isOpen: boolean
   onClose: () => void
   customColors?: CustomThemeColors
-  onSaveAndApply: (colors: CustomThemeColors) => void
+  onSaveAndApply: (colors: CustomThemeColors) => boolean | void | Promise<boolean | void>
+  externalError?: string | null
 }
 
 export const CustomPaletteEditor: React.FC<CustomPaletteEditorProps> = ({
@@ -51,6 +52,7 @@ export const CustomPaletteEditor: React.FC<CustomPaletteEditorProps> = ({
   onClose,
   customColors,
   onSaveAndApply,
+  externalError,
 }) => {
   const [stagedColors, setStagedColors] = useState<CustomThemeColors>(() =>
     normalizeCustomThemeColors(customColors)
@@ -61,18 +63,26 @@ export const CustomPaletteEditor: React.FC<CustomPaletteEditorProps> = ({
   const [jsonStatus, setJsonStatus] = useState<{ message: string; isError: boolean } | null>(null)
   const [copiedNotification, setCopiedNotification] = useState(false)
   const [editorError, setEditorError] = useState<string | null>(null)
+  const prevIsOpenRef = useRef(false)
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !prevIsOpenRef.current) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- Opening the editor creates a fresh draft from the externally controlled palette.
       setStagedColors(normalizeCustomThemeColors(customColors))
       setActiveGroup('stage')
       setJsonModalMode(null)
       setJsonStatus(null)
       setCopiedNotification(false)
-      setEditorError(null)
+      setEditorError(externalError || null)
     }
-  }, [isOpen, customColors])
+    prevIsOpenRef.current = isOpen
+  }, [isOpen, customColors, externalError])
+
+  useEffect(() => {
+    if (externalError) {
+      setEditorError(externalError)
+    }
+  }, [externalError])
 
   const contrastChecks = React.useMemo(() => {
     const warnings: string[] = []
@@ -102,10 +112,14 @@ export const CustomPaletteEditor: React.FC<CustomPaletteEditorProps> = ({
 
   if (!isOpen) return null
 
-  const handleSaveAndApply = () => {
-    const colorErrors = validateBackupSettings({ customThemeColors: stagedColors })
-    const fontErrors = validateFontSettings(stagedColors.fonts || {})
-    const identityErrors = stagedColors.identity ? validateCustomThemeIdentity(stagedColors.identity) : []
+  const handleSaveAndApply = async () => {
+    const cleanColors: CustomThemeColors = { ...stagedColors }
+    if (!cleanColors.identity) {
+      delete cleanColors.identity
+    }
+    const colorErrors = validateBackupSettings({ customThemeColors: cleanColors })
+    const fontErrors = validateFontSettings(cleanColors.fonts || {})
+    const identityErrors = cleanColors.identity ? validateCustomThemeIdentity(cleanColors.identity) : []
     const allErrors = [...colorErrors, ...fontErrors, ...identityErrors]
     if (allErrors.length) {
       const msg = allErrors.join('; ')
@@ -114,8 +128,16 @@ export const CustomPaletteEditor: React.FC<CustomPaletteEditorProps> = ({
       return
     }
     setEditorError(null)
-    onSaveAndApply(normalizeCustomThemeColors(stagedColors))
-    onClose()
+    try {
+      const result = await onSaveAndApply(normalizeCustomThemeColors(cleanColors))
+      if (result === false) {
+        setEditorError(externalError || 'Storage write failed (e.g. quota exceeded). Changes were rolled back.')
+        return
+      }
+      onClose()
+    } catch (err: any) {
+      setEditorError(err?.message || 'Storage write failed (e.g. quota exceeded). Changes were rolled back.')
+    }
   }
 
   const handleResetDefaults = () => {
@@ -164,7 +186,13 @@ export const CustomPaletteEditor: React.FC<CustomPaletteEditorProps> = ({
       return
     }
     // Apply imported values to the editor preview only (stagedColors), not persistent yet
-    setStagedColors({ ...result.colors, identity: stagedColors.identity ? { ...stagedColors.identity } : undefined })
+    const nextColors = { ...result.colors }
+    if (stagedColors.identity) {
+      nextColors.identity = { ...stagedColors.identity }
+    } else {
+      delete nextColors.identity
+    }
+    setStagedColors(nextColors)
     setJsonStatus({ message: 'Palette successfully imported into editor preview!', isError: false })
     setTimeout(() => {
       setJsonModalMode(null)

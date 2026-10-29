@@ -1,6 +1,6 @@
 import { normalizeFontSettings, applyFontSettings } from '../utils/customFonts'
 import { SETTINGS_KEYS, SETTINGS_CHANGED, validateBackupSettings, THEME_MODES, type FactoryThemeOverrides } from '../utils/backupSettings'
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   X,
   Check,
@@ -643,6 +643,7 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
   const [pendingRestore, setPendingRestore] = useState<ThemeMode | null>(null)
   const [isCustomPaletteEditorOpen, setIsCustomPaletteEditorOpen] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const lastCommitErrorRef = useRef<string | null>(null)
 
   // Synchronize internal staged state whenever modal opens or synchronized settings arrive
   useEffect(() => {
@@ -659,6 +660,7 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
       setStagedTheme(currentTheme === 'custom' && customColors?.identity ? customColors.identity.factoryId : currentTheme)
       setStagedCustomColors(normalizeCustomThemeColors(customColors))
       setIsCustomPaletteEditorOpen(false)
+      lastCommitErrorRef.current = null
       setSaveError(null)
 
       const handleSettingsChanged = () => {
@@ -692,6 +694,11 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
     const prevCustomColors = localStorage.getItem(SETTINGS_KEYS.customThemeColors)
     const prevMode = localStorage.getItem(SETTINGS_KEYS.themeMode)
 
+    // Snapshot in-memory runtime appearance before commit attempt
+    const inMemoryTheme = currentTheme
+    const inMemoryOverrides = { ...overrides }
+    const inMemoryStandalone = { ...standaloneColors }
+
     try {
       localStorage.setItem(SETTINGS_KEYS.factoryThemeOverrides, JSON.stringify(nextOverrides))
       localStorage.setItem(SETTINGS_KEYS.customThemeColors, JSON.stringify(standalone))
@@ -699,6 +706,7 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
       applyThemeRuntime(mode, standalone, nextOverrides)
     } catch (e: any) {
       console.error('Failed to commit theme to localStorage, rolling back', e)
+      let rollbackSucceeded = true
       // ROLLBACK: Restore previous storage values exactly
       try {
         if (prevOverrides !== null) localStorage.setItem(SETTINGS_KEYS.factoryThemeOverrides, prevOverrides)
@@ -709,17 +717,25 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
 
         if (prevMode !== null) localStorage.setItem(SETTINGS_KEYS.themeMode, prevMode)
         else localStorage.removeItem(SETTINGS_KEYS.themeMode)
-      } catch { /* Rollback best effort */ }
+      } catch (rollbackErr) {
+        rollbackSucceeded = false
+        console.error('Storage rollback failed', rollbackErr)
+      }
 
-      // Restore runtime state to previous values
-      const currentOverrides = loadFactoryThemeOverrides()
-      const currentStandalone = loadStandalonePalette(customColors)
-      applyThemeRuntime(currentTheme, currentStandalone, currentOverrides)
+      // DO NOT reload from partially written / corrupted localStorage!
+      // Restore runtime state strictly from previous in-memory values:
+      applyThemeRuntime(inMemoryTheme, inMemoryStandalone, inMemoryOverrides)
 
-      setSaveError(e?.message || 'Storage write failed (e.g. quota exceeded). Changes were rolled back.')
+      const errorMsg = rollbackSucceeded
+        ? (e?.message || 'Storage write failed (e.g. quota exceeded). Changes were rolled back.')
+        : `Storage write failed and rollback could not be completed. Your active appearance was kept safe in memory, but local storage recovery is incomplete (${e?.message || 'quota exceeded'}).`
+
+      lastCommitErrorRef.current = errorMsg
+      setSaveError(errorMsg)
       return false
     }
 
+    lastCommitErrorRef.current = null
     setSaveError(null)
     // Factory callbacks expose the active palette, while App keeps standalone state separate.
     onApplyTheme?.(mode, resolveThemePalette(mode, standalone, nextOverrides))
@@ -730,7 +746,7 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
 
   const handleSaveAndApply = () => commitTheme(stagedTheme, standaloneColors, overrides)
 
-  const handleCustomPaletteSaveAndApply = (colors: CustomThemeColors) => {
+  const handleCustomPaletteSaveAndApply = (colors: CustomThemeColors): boolean => {
     // Slot association belongs to the launch context, never imported palette metadata.
     const factoryId = stagedCustomColors.identity?.factoryId
     let success = false
@@ -746,7 +762,9 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
     }
     if (success) {
       setIsCustomPaletteEditorOpen(false)
+      return true
     }
+    throw new Error(lastCommitErrorRef.current || saveError || 'Storage write failed (e.g. quota exceeded). Changes were rolled back.')
   }
 
   return (
@@ -998,6 +1016,7 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
         onClose={() => setIsCustomPaletteEditorOpen(false)}
         customColors={stagedCustomColors}
         onSaveAndApply={handleCustomPaletteSaveAndApply}
+        externalError={saveError}
       />
     </>
   )

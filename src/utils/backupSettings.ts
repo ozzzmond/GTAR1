@@ -299,7 +299,9 @@ export function validateBackupSettings(data: Record<string, unknown>): string[] 
       }
       for (const [field, color] of Object.entries(colors)) {
         if (field === 'identity') {
-          errors.push(...validateCustomThemeIdentity(color))
+          if (color !== undefined) {
+            errors.push(...validateCustomThemeIdentity(color))
+          }
         } else if (field === 'fonts') {
           errors.push(...validateFontSettings(color))
         } else if (!allowedFields.has(field)) {
