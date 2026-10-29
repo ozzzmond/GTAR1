@@ -21,11 +21,13 @@ import {
   type StageLineSpacing,
 } from './SongLineRenderer'
 import { StageControlDock } from './StageControlDock'
+import { StageToolsModal } from './StageToolsModal'
 import { StageOptionsSheet } from './StageOptionsSheet'
 import { KeyPickerModal } from './KeyPickerModal'
 import {
   ArrowLeft,
   Sliders,
+  Gauge,
   Play,
   Pause,
   ChevronUp,
@@ -308,6 +310,7 @@ export const StageView: React.FC<StageViewProps> = ({
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false)
 
   // Modals & Sheets
+  const [isToolsOpen, setIsToolsOpen] = useState(false)
   const [isOptionsOpen, setIsOptionsOpen] = useState<boolean>(false)
   const [isKeyPickerOpen, setIsKeyPickerOpen] = useState<boolean>(false)
 
@@ -511,12 +514,12 @@ export const StageView: React.FC<StageViewProps> = ({
       autoHideTimerRef.current = null
     }
 
-    if (inPerformanceMode && autoHideControls && !isOptionsOpen && !isKeyPickerOpen) {
+    if (inPerformanceMode && autoHideControls && !isOptionsOpen && !isKeyPickerOpen && !isToolsOpen) {
       autoHideTimerRef.current = setTimeout(() => {
         setShowStageOverlays(false)
       }, 3500)
     }
-  }, [inPerformanceMode, autoHideControls, isOptionsOpen, isKeyPickerOpen])
+  }, [inPerformanceMode, autoHideControls, isOptionsOpen, isKeyPickerOpen, isToolsOpen])
 
   useEffect(() => {
     if (inPerformanceMode && autoHideControls) {
@@ -539,7 +542,7 @@ export const StageView: React.FC<StageViewProps> = ({
 
   // Pause auto-hide while modals/sheets are open; preserve interaction state
   useEffect(() => {
-    if (isOptionsOpen || isKeyPickerOpen) {
+    if (isOptionsOpen || isKeyPickerOpen || isToolsOpen) {
       setShowStageOverlays(true)
       if (autoHideTimerRef.current) {
         clearTimeout(autoHideTimerRef.current)
@@ -548,7 +551,7 @@ export const StageView: React.FC<StageViewProps> = ({
     } else if (inPerformanceMode && autoHideControls) {
       triggerOverlaysShow()
     }
-  }, [isOptionsOpen, isKeyPickerOpen, inPerformanceMode, autoHideControls, triggerOverlaysShow])
+  }, [isOptionsOpen, isKeyPickerOpen, isToolsOpen, inPerformanceMode, autoHideControls, triggerOverlaysShow])
 
   // Keep synchronous ref aligned with auto-scrolling state
   useEffect(() => {
@@ -845,7 +848,7 @@ export const StageView: React.FC<StageViewProps> = ({
             Boolean(target.isContentEditable) ||
             target.getAttribute('contenteditable') === 'true')
       )
-      if (isEditable || isOptionsOpen || isKeyPickerOpen) {
+      if (isEditable || isOptionsOpen || isKeyPickerOpen || isToolsOpen) {
         return
       }
 
@@ -951,6 +954,7 @@ export const StageView: React.FC<StageViewProps> = ({
     canNextSection,
     isOptionsOpen,
     isKeyPickerOpen,
+    isToolsOpen,
     handlePrevSection,
     handleNextSection,
     handlePrevSong,
@@ -1100,6 +1104,15 @@ export const StageView: React.FC<StageViewProps> = ({
               }}
             >
               {notation === 'numbers' ? 'NNS' : 'Chords'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsToolsOpen(true)}
+              aria-label="Open Stage Tools"
+              className="ui-button min-w-[44px] min-h-[44px] w-11 h-11 rounded-xl bg-app-button hover:brightness-110 border border-app-border text-app-button-text flex items-center justify-center shrink-0"
+            >
+              <Gauge className="w-5 h-5" />
             </button>
 
             {/* Options Button */}
@@ -1407,6 +1420,10 @@ export const StageView: React.FC<StageViewProps> = ({
         onSelectQueueIndex={onSelectQueueIndex}
         setlistName={setlistName}
       />
+
+      {isToolsOpen && (
+        <StageToolsModal onClose={() => setIsToolsOpen(false)} initialBpm={Number.parseFloat(String(song.bpm || ''))} />
+      )}
 
       {/* 7. Key Picker Modal for Transposition */}
       <KeyPickerModal
