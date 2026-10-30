@@ -6,6 +6,8 @@
 export const GTAR1_VERSION = '0.1.0-dev'
 export const GTAR_REVAMP_VERSION = GTAR1_VERSION
 
+export type { ChordVoicing, VoicingProvenance } from '../utils/chordDictionary'
+
 export type SongFormat = 'CHORD_PRO' | 'TWO_LINE' | 'PLAIN'
 
 export interface SongEntity {
