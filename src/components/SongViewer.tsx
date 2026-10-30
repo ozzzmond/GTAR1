@@ -3,6 +3,8 @@ import type { SongEntity } from '../types/gtar'
 import { parseGtarSong } from '../utils/songParser'
 import { SongLineRenderer } from './SongLineRenderer'
 import { KeyPickerModal } from './KeyPickerModal'
+import { FretboardDiagramModal } from './FretboardDiagramModal'
+import { getChordVoicing } from '../utils/chordDictionary'
 import { transposeContext } from '../utils/songKeySemantics'
 import { Play } from 'lucide-react'
 import {
@@ -23,6 +25,7 @@ export const SongViewer: React.FC<SongViewerProps> = ({ song, onEdit, onBack, on
   const [transposeOffset, setTransposeOffset] = useState<number>(song.transposeOffset || 0)
   const [fontSize, setFontSize] = useState<number>(18)
   const [isKeyPickerOpen, setIsKeyPickerOpen] = useState(false)
+  const [selectedChord, setSelectedChord] = useState<string | null>(null)
   const [notation, setNotation] = useState<StageNotationMode>(() => {
     try {
       const stored = localStorage.getItem(NOTATION_STORAGE_KEY)

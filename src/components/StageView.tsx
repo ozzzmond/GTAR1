@@ -24,6 +24,9 @@ import { StageControlDock } from './StageControlDock'
 import { StageToolsModal } from './StageToolsModal'
 import { StageOptionsSheet } from './StageOptionsSheet'
 import { KeyPickerModal } from './KeyPickerModal'
+import { ChordQuickPreview, type ChordQuickPreviewAnchor } from './ChordQuickPreview'
+import { FretboardDiagramModal } from './FretboardDiagramModal'
+import { getChordVoicing, type ChordVoicing } from '../utils/chordDictionary'
 import {
   ArrowLeft,
   Sliders,
@@ -313,6 +316,11 @@ export const StageView: React.FC<StageViewProps> = ({
   const [isToolsOpen, setIsToolsOpen] = useState(false)
   const [isOptionsOpen, setIsOptionsOpen] = useState<boolean>(false)
   const [isKeyPickerOpen, setIsKeyPickerOpen] = useState<boolean>(false)
+  const [selectedVoicing, setSelectedVoicing] = useState<ChordVoicing | null>(null)
+  const [selectedChordName, setSelectedChordName] = useState<string | null>(null)
+  const [previewAnchor, setPreviewAnchor] = useState<ChordQuickPreviewAnchor | null>(null)
+  const [previewVoicing, setPreviewVoicing] = useState<ChordVoicing | null>(null)
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Overlays / HUD visibility & auto-hide
   const [showStageOverlays, setShowStageOverlays] = useState<boolean>(true)
