@@ -36,7 +36,9 @@ async function restore(page, state) {
   await page.reload()
 }
 async function tab(page, expected) {
-  await page.waitForFunction(expected=>history.state?.gtarNavigation?.tab===expected,expected)
+  // Persisted history survives reload before IndexedDB hydration and effect setup.
+  // Require a navigation write from this document before acting on restored state.
+  await page.waitForFunction(expected=>window.testNavigationReady?.tab===expected && history.state?.gtarNavigation?.tab===expected,expected)
 }
 async function reader(page) {
   await page.getByRole('button',{name:'Edit Song',exact:true}).waitFor()
@@ -67,6 +69,16 @@ test('Issue 46: real browser reload, history, hydrated references, responsive an
     browser=await chromium.launch({headless:true})
     for (const viewport of [{width:1440,height:900},{width:390,height:844}]) {
       const context=await browser.newContext({viewport,isMobile:viewport.width<500,hasTouch:viewport.width<500})
+      await context.addInitScript(() => {
+        for (const method of ['pushState', 'replaceState']) {
+          const original = history[method].bind(history)
+          history[method] = (...args) => {
+            const result = original(...args)
+            window.testNavigationReady = history.state?.gtarNavigation
+            return result
+          }
+        }
+      })
       const page=await context.newPage()
       const errors=[]; page.on('pageerror',err=>errors.push(err.message))
       await page.goto(url)
@@ -131,8 +143,10 @@ test('Issue 46: real browser reload, history, hydrated references, responsive an
       await page.waitForFunction(()=>history.state.gtarNavigation.setlistId==='reload-other')
       await page.reload();await tab(page,'SETLISTS')
       assert.equal((await page.evaluate(()=>history.state.gtarNavigation)).setlistId,'reload-other')
+      await page.getByRole('heading',{name:'Second Gig',exact:true}).waitFor()
       await page.goBack()
       await page.waitForFunction(()=>history.state.gtarNavigation.setlistId==='reload-gig')
+      await page.getByRole('heading',{name:'Restoration Gig',exact:true}).waitFor()
       // Fresh direct entry starts Songbook; this session-state strategy intentionally adds no URL routes.
       const direct=await context.newPage();await direct.goto(url);await tab(direct,'SONGS');await direct.goto(url+'#%malformed-route');await tab(direct,'SONGS');await direct.close()
       for (const state of [{version:1,tab:'VIEWER',songId:'deleted'}, {version:1,tab:'EDITOR',songId:'deleted'}, {version:1,tab:'STAGE',setlistId:'missing',stage:{songId:'reload-one',index:0,returnTab:'SONGS'}}, {version:99,tab:'EDITOR'}, 'malformed', {stage:true}]) {
