@@ -86,11 +86,15 @@ export function validateBackupInput(input: any): { songs: any[]; setlists: any[]
     requireValid(occurrences <= MAX_RECORDS, 'Too many setlist occurrences')
     if (sl.folderId != null) { sl.folderId = identity(sl.folderId); requireValid(folderIDs.has(sl.folderId), 'Missing setlist folder') }
     const entries = new Set<string>()
+    let prevPos = -1
     sl.songs.forEach((ref: any, i: number) => {
       fields(ref); ref.id = identity(ref.id)
       requireValid(songIDs.has(ref.id), 'Missing referenced song')
       requireValid(typeof ref.title === 'string' && !!ref.title.trim(), 'Missing reference title')
-      if ('position' in ref) requireValid(ref.position === i, 'Setlist order/position mismatch')
+      if ('position' in ref) {
+        requireValid(ref.position >= 0 && ref.position > prevPos, 'Setlist order/position mismatch')
+        prevPos = ref.position
+      }
       // Deterministic legacy occurrence identity makes repeated imports idempotent.
       ref.entryId ??= `legacy-entry:${sl.id}:${i}`
       requireValid(!!ref.entryId.trim() && !entries.has(ref.entryId), 'Duplicate or invalid setlist entry ID')
