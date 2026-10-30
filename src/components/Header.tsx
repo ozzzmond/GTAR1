@@ -13,6 +13,7 @@ import {
   ListMusic,
   Palette,
   Globe,
+  Terminal,
 } from 'lucide-react'
 
 export type ActiveTab = 'SONGS' | 'SETLISTS' | 'VIEWER' | 'EDITOR' | 'STAGE'
@@ -214,6 +215,7 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               type="button"
               onClick={() => setShowAvatarMenu(!showAvatarMenu)}
+              data-debug-logs-opener
               aria-label={`Musician Profile: ${userProfile.displayName}`}
               className="w-8 h-8 rounded-full border-2 border-app-border hover:border-app-action transition-colors overflow-hidden flex items-center justify-center bg-app-surface focus:outline-none"
             >
@@ -247,6 +249,12 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
 
                 <div className="py-1">
+                  {import.meta.env.GTAR1_DEV_DIAGNOSTICS && <button type="button"
+                    onClick={() => { setShowAvatarMenu(false); window.dispatchEvent(new Event('gtar1:debug-logs')) }}
+                    className="w-full min-h-[44px] px-3 py-2 rounded-xl text-left hover:bg-app-base text-app-text flex items-center gap-2 font-medium">
+                    <Terminal className="w-3.5 h-3.5 text-app-action" /><span>Debug Logs</span>
+                  </button>}
+
                   <button
                     type="button"
                     onClick={() => {
@@ -303,7 +311,7 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
 
                 <div className="pt-1 border-t border-app-border px-3 py-1.5 text-[10px] text-app-muted">
-                  GTAR1 Standalone Core • Zero Cloud Sync
+                  GTAR1 Standalone Core â€¢ Zero Cloud Sync
                 </div>
               </div>
             )}
