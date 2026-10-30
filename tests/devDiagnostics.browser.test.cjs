@@ -34,6 +34,16 @@ test('DEV mobile browser: manual export, offline, reload, bounded log, storage d
     const downloads = []
     page.on('download', download => downloads.push(download))
     await page.goto(`http://127.0.0.1:${address.port}`)
+    for (const [target, source] of Object.entries({
+      'pwa-192x192.png': 'pwa-192.png', 'pwa-512x512.png': 'pwa-512.png',
+      'apple-touch-icon.png': 'apple-touch-icon-180.png', 'favicon.ico': 'favicon.ico',
+      'favicon.png': 'favicon-32x32.png', 'favicon-16x16.png': 'favicon-16x16.png',
+      'favicon-32x32.png': 'favicon-32x32.png', 'favicon-48x48.png': 'favicon-48x48.png',
+    })) {
+      const response = await context.request.get(`http://127.0.0.1:${address.port}/${target}?dev-icon-check`)
+      assert.equal(response.status(), 200)
+      assert.ok((await response.body()).equals(fs.readFileSync(path.resolve(__dirname, '../public/mascots/bebegirl2-yellow-dev', source))), `DEV server preserves yellow ${target}`)
+    }
     const opener = page.getByRole('button', { name: 'DEV diagnostics', exact: true })
     await opener.click()
     const entries = page.getByRole('list', { name: 'Diagnostic entries' }).getByRole('listitem')

@@ -55,6 +55,14 @@ jobs:
         id: tests
         run: npm test
 
+      - name: Build and verify PROD mascot precache and offline reload
+        id: prod_pwa
+        env:
+          GTAR_ENV: production
+        run: |
+          npm run build
+          node --test tests/mascotPwaIcons.test.cjs tests/navigationRestoration.browser.test.cjs tests/devDiagnostics.browser.test.cjs
+
       - name: Write compact verification receipt
         if: ${{ always() }}
         env:
@@ -68,6 +76,7 @@ jobs:
           RECEIPT_BROWSER: ${{ steps.browser.outcome }}
           RECEIPT_TESTS: ${{ steps.tests.outcome }}
           RECEIPT_BUILD: ${{ steps.build.outcome }}
+          RECEIPT_PROD_PWA: ${{ steps.prod_pwa.outcome }}
           RECEIPT_STATUS: ${{ job.status }}
         run: |
           node --input-type=commonjs <<'NODE'
@@ -79,7 +88,8 @@ jobs:
             ['Head commit SHA', 'HEAD_SHA'], ['Trigger', 'TRIGGER'],
             ['Node version', 'NODE'], ['Dependency install', 'DEPENDENCIES'],
             ['Chromium install', 'BROWSER'], ['Test result', 'TESTS'],
-            ['Build result', 'BUILD'], ['Overall verification status', 'STATUS'],
+            ['DEV build result', 'BUILD'], ['PROD PWA regression', 'PROD_PWA'],
+            ['Overall verification status', 'STATUS'],
           ];
           const summary = '# CI verification\n\n' + fields.map(([label, key]) =>
             `${label}: ${process.env[`RECEIPT_${key}`] || 'unavailable'}`

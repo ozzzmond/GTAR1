@@ -21,30 +21,37 @@ export default defineConfig(({ mode }) => {
     ? 'mascots/bebeboy-red-prod'
     : 'mascots/bebegirl2-yellow-dev'
 
+  const mascotFiles: Record<string, string> = {
+    'pwa-192x192.png': `${mascotPublicSubdir}/pwa-192.png`,
+    'pwa-512x512.png': `${mascotPublicSubdir}/pwa-512.png`,
+    'apple-touch-icon.png': `${mascotPublicSubdir}/apple-touch-icon-180.png`,
+    'favicon-16x16.png': `${mascotPublicSubdir}/favicon-16x16.png`,
+    'favicon-32x32.png': `${mascotPublicSubdir}/favicon-32x32.png`,
+    'favicon-48x48.png': `${mascotPublicSubdir}/favicon-48x48.png`,
+    'favicon.png': `${mascotPublicSubdir}/favicon-32x32.png`,
+    'favicon.ico': `${mascotPublicSubdir}/favicon.ico`,
+  }
+
   const mascotPlugin = (): Plugin => ({
     name: 'gtar1-mascot-icons',
+    configureServer(server) {
+      // Root icons have one owner; serve the same source files without public copies.
+      server.middlewares.use((req, res, next) => {
+        const targetName = new URL(req.url || '/', 'http://localhost').pathname.slice(1)
+        if (!Object.hasOwn(mascotFiles, targetName)) return next()
+        const sourceRelPath = mascotFiles[targetName]
+        res.setHeader('Content-Type', targetName.endsWith('.ico') ? 'image/x-icon' : 'image/png')
+        res.end(fs.readFileSync(path.resolve(projectRoot, 'public', sourceRelPath)))
+      })
+    },
     generateBundle() {
-      // In build output, emit the resolved environment mascot assets to root icon paths in dist/
-      const mascotFiles: Record<string, string> = {
-        'pwa-192x192.png': `${mascotPublicSubdir}/pwa-192.png`,
-        'pwa-512x512.png': `${mascotPublicSubdir}/pwa-512.png`,
-        'apple-touch-icon.png': `${mascotPublicSubdir}/apple-touch-icon-180.png`,
-        'favicon-16x16.png': `${mascotPublicSubdir}/favicon-16x16.png`,
-        'favicon-32x32.png': `${mascotPublicSubdir}/favicon-32x32.png`,
-        'favicon-48x48.png': `${mascotPublicSubdir}/favicon-48x48.png`,
-        'favicon.png': `${mascotPublicSubdir}/favicon-32x32.png`,
-        'favicon.ico': `${mascotPublicSubdir}/favicon.ico`,
-      }
-
       for (const [targetName, sourceRelPath] of Object.entries(mascotFiles)) {
         const fullSourcePath = path.resolve(projectRoot, 'public', sourceRelPath)
-        if (fs.existsSync(fullSourcePath)) {
-          this.emitFile({
-            type: 'asset',
-            fileName: targetName,
-            source: fs.readFileSync(fullSourcePath),
-          })
-        }
+        this.emitFile({
+          type: 'asset',
+          fileName: targetName,
+          source: fs.readFileSync(fullSourcePath),
+        })
       }
     },
   })
@@ -63,16 +70,9 @@ export default defineConfig(({ mode }) => {
       mascotPlugin(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: [
-          'favicon.ico',
-          'favicon-16x16.png',
-          'favicon-32x32.png',
-          'favicon-48x48.png',
-          'favicon.svg',
-          'favicon.png',
-          'apple-touch-icon.png',
-          'avatars/default-avatar.png',
-        ],
+        // Workbox hashes final output only. Public-file hashes can be stale when
+        // an environment-specific icon is generated at the same URL.
+        includeManifestIcons: false,
         manifest: {
           name: isProd ? 'GTAR — Local First Music Stand' : 'GTAR (Dev) — Local First Music Stand',
           short_name: isProd ? 'GTAR' : 'GTAR (Dev)',

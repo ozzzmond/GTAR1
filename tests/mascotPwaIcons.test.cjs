@@ -34,11 +34,6 @@ test('MASCOT_ASSETS_PRESENCE_AND_MAPPING: approved assets for dev, prod, and def
   const greenSource = fs.readFileSync(path.join(projectRoot, 'public/mascots/bebegirl1-green-default-avatar/pwa-192.png'))
   const greenPublic = fs.readFileSync(greenAvatar)
   assert.ok(greenSource.equals(greenPublic), 'default-avatar.png matches approved green Bebegirl1 pwa-192 asset exactly')
-
-  // Check DEV root icon matches yellow
-  const rootPwa192 = fs.readFileSync(path.join(projectRoot, 'public/pwa-192x192.png'))
-  const yellowSource192 = fs.readFileSync(yellowPwa192)
-  assert.ok(rootPwa192.equals(yellowSource192), 'Root DEV pwa-192x192.png matches yellow Bebegirl2 asset')
 })
 
 // 2. Avatar fallback behavior
@@ -167,19 +162,6 @@ test('FAVICON_VARIANTS_PRESENCE_AND_ICO_VALIDATION: valid 16/32/48 PNGs and mult
     assert.ok(sizes.includes('32x32'), `${env.name} ICO includes 32x32`)
     assert.ok(sizes.includes('48x48'), `${env.name} ICO includes 48x48`)
   }
-
-  // Root DEV favicons in public/ match yellow Bebegirl2
-  const root16 = fs.readFileSync(path.join(projectRoot, 'public/favicon-16x16.png'))
-  const yellow16 = fs.readFileSync(path.join(projectRoot, 'public/mascots/bebegirl2-yellow-dev/favicon-16x16.png'))
-  assert.ok(root16.equals(yellow16), 'Root public/favicon-16x16.png matches yellow Bebegirl2')
-
-  const root32 = fs.readFileSync(path.join(projectRoot, 'public/favicon-32x32.png'))
-  const yellow32 = fs.readFileSync(path.join(projectRoot, 'public/mascots/bebegirl2-yellow-dev/favicon-32x32.png'))
-  assert.ok(root32.equals(yellow32), 'Root public/favicon-32x32.png matches yellow Bebegirl2')
-
-  const rootIco = fs.readFileSync(path.join(projectRoot, 'public/favicon.ico'))
-  const yellowIco = fs.readFileSync(path.join(projectRoot, 'public/mascots/bebegirl2-yellow-dev/favicon.ico'))
-  assert.ok(rootIco.equals(yellowIco), 'Root public/favicon.ico matches yellow Bebegirl2')
 })
 
 // 6. index.html browser tab favicon references
@@ -195,4 +177,40 @@ test('INDEX_HTML_FAVICON_REFERENCES: accurate browser-tab icon links and no lega
   assert.match(html, /<link rel="icon" type="image\/png" sizes="32x32" href="\/favicon-32x32\.png" \/>/, 'index.html includes 32x32 favicon')
   assert.match(html, /<link rel="icon" type="image\/png" sizes="16x16" href="\/favicon-16x16\.png" \/>/, 'index.html includes 16x16 favicon')
   assert.match(html, /<link rel="icon" href="\/favicon\.ico"/, 'index.html includes /favicon.ico fallback')
+})
+
+// Validate the generated artifact, including revisions for the bytes Workbox will fetch.
+test('ISSUE_52_PRECACHE_GUARD: unique URLs, final-output hashes and all environment icons', () => {
+  const vm = require('node:vm')
+  const crypto = require('node:crypto')
+  const dist = path.join(projectRoot, 'dist')
+  const sw = fs.readFileSync(path.join(dist, 'sw.js'), 'utf8')
+  const match = sw.match(/precacheAndRoute\(\[([\s\S]*?)\],/)
+  assert.ok(match, 'Built service worker contains a precache list; build before tests')
+  const entries = vm.runInNewContext('[' + match[1] + ']', {}, { timeout: 1000 })
+  assert.equal(new Set(entries.map(entry => entry.url)).size, entries.length, 'Each precache URL has exactly one owner')
+  for (const entry of entries) {
+    if (entry.revision !== null) {
+      const bytes = fs.readFileSync(path.join(dist, entry.url))
+      assert.equal(entry.revision, crypto.createHash('md5').update(bytes).digest('hex'), `Final output revision: ${entry.url}`)
+    }
+  }
+  const manifest = JSON.parse(fs.readFileSync(path.join(dist, 'manifest.webmanifest'), 'utf8'))
+  const environment = manifest.short_name === 'GTAR' ? 'bebeboy-red-prod' : 'bebegirl2-yellow-dev'
+  const icons = {
+    'pwa-192x192.png': 'pwa-192.png',
+    'pwa-512x512.png': 'pwa-512.png',
+    'apple-touch-icon.png': 'apple-touch-icon-180.png',
+    'favicon-16x16.png': 'favicon-16x16.png',
+    'favicon-32x32.png': 'favicon-32x32.png',
+    'favicon-48x48.png': 'favicon-48x48.png',
+    'favicon.png': 'favicon-32x32.png',
+    'favicon.ico': 'favicon.ico',
+  }
+  for (const [target, source] of Object.entries(icons)) {
+    assert.equal(fs.existsSync(path.join(projectRoot, 'public', target)), false, `${target} must not have a second public owner`)
+    assert.ok(entries.some(entry => entry.url === target), `${target} is precached`)
+    assert.ok(fs.readFileSync(path.join(dist, target)).equals(fs.readFileSync(path.join(projectRoot, 'public/mascots', environment, source))), `${target} matches ${environment}`)
+  }
+  for (const icon of manifest.icons) assert.ok(Object.hasOwn(icons, icon.src), 'Manifest uses generated icons')
 })

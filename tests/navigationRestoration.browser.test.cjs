@@ -36,7 +36,9 @@ async function restore(page, state) {
   await page.reload()
 }
 async function tab(page, expected) {
-  await page.waitForFunction(expected=>history.state?.gtarNavigation?.tab===expected,expected)
+  // Persisted history survives reload before IndexedDB hydration and effect setup.
+  // Require a navigation write from this document before acting on restored state.
+  await page.waitForFunction(expected=>window.testNavigationReady?.tab===expected && history.state?.gtarNavigation?.tab===expected,expected)
 }
 async function reader(page) {
   await page.getByRole('button',{name:'Edit Song',exact:true}).waitFor()
@@ -67,6 +69,16 @@ test('Issue 46: real browser reload, history, hydrated references, responsive an
     browser=await chromium.launch({headless:true})
     for (const viewport of [{width:1440,height:900},{width:390,height:844}]) {
       const context=await browser.newContext({viewport,isMobile:viewport.width<500,hasTouch:viewport.width<500})
+      await context.addInitScript(() => {
+        for (const method of ['pushState', 'replaceState']) {
+          const original = history[method].bind(history)
+          history[method] = (...args) => {
+            const result = original(...args)
+            window.testNavigationReady = history.state?.gtarNavigation
+            return result
+          }
+        }
+      })
       const page=await context.newPage()
       const errors=[]; page.on('pageerror',err=>errors.push(err.message))
       await page.goto(url)
@@ -131,8 +143,10 @@ test('Issue 46: real browser reload, history, hydrated references, responsive an
       await page.waitForFunction(()=>history.state.gtarNavigation.setlistId==='reload-other')
       await page.reload();await tab(page,'SETLISTS')
       assert.equal((await page.evaluate(()=>history.state.gtarNavigation)).setlistId,'reload-other')
+      await page.getByRole('heading',{name:'Second Gig',exact:true}).waitFor()
       await page.goBack()
       await page.waitForFunction(()=>history.state.gtarNavigation.setlistId==='reload-gig')
+      await page.getByRole('heading',{name:'Restoration Gig',exact:true}).waitFor()
       // Fresh direct entry starts Songbook; this session-state strategy intentionally adds no URL routes.
       const direct=await context.newPage();await direct.goto(url);await tab(direct,'SONGS');await direct.goto(url+'#%malformed-route');await tab(direct,'SONGS');await direct.close()
       for (const state of [{version:1,tab:'VIEWER',songId:'deleted'}, {version:1,tab:'EDITOR',songId:'deleted'}, {version:1,tab:'STAGE',setlistId:'missing',stage:{songId:'reload-one',index:0,returnTab:'SONGS'}}, {version:99,tab:'EDITOR'}, 'malformed', {stage:true}]) {
@@ -140,15 +154,39 @@ test('Issue 46: real browser reload, history, hydrated references, responsive an
       }
       // Cached PWA shell must really reload with the network disabled, on both viewports.
       await page.evaluate(async()=>{await navigator.serviceWorker.ready; if(!navigator.serviceWorker.controller) await new Promise(resolve=>navigator.serviceWorker.addEventListener('controllerchange',resolve,{once:true}))})
-      for (const view of ['VIEWER','EDITOR','STAGE']) {
-        await restore(page,{version:1,tab:view,songId:'reload-one',...(view==='STAGE'?{stage:{songId:'reload-one',index:0,returnTab:'SONGS'}}:{})})
+      const installed = await page.evaluate(async () => ({
+        state: (await navigator.serviceWorker.ready).active.state,
+        scope: (await navigator.serviceWorker.ready).scope,
+        cached: (await Promise.all((await caches.keys()).map(async key =>
+          (await (await caches.open(key)).keys()).map(request => new URL(request.url).pathname)
+        ))).flat(),
+      }))
+      assert.equal(installed.state, 'activated', 'Service worker installs and activates')
+      assert.equal(installed.scope, url, 'Worker controls the app root')
+      for (const file of ['index.html', 'manifest.webmanifest', 'pwa-192x192.png', 'pwa-512x512.png', 'apple-touch-icon.png', 'favicon.ico', 'favicon.png', 'favicon-16x16.png', 'favicon-32x32.png', 'favicon-48x48.png']) {
+        assert.ok(installed.cached.includes('/' + file), `${file} successfully cached`)
+      }
+      for (const view of ['VIEWER','EDITOR','STAGE','SETLISTS']) {
+        await restore(page,{version:1,tab:view,songId:'reload-one',...(view==='STAGE'?{setlistId:'reload-gig',nav:{type:'SETLIST',setlistId:'reload-gig'},stage:{songId:'reload-one',entryId:'occurrence-b',index:1,returnTab:'SONGS'}}:view==='SETLISTS'?{setlistId:'reload-gig'}:{})})
         await tab(page,view)
         await context.setOffline(true)
         await page.reload()
-        if(view==='STAGE') await stage(page); else if(view==='EDITOR') await editor(page); else await reader(page)
+        if(view==='STAGE') {
+          await stage(page)
+          assert.equal((await page.getByTestId('stage-queue-counter').textContent()).trim(),'2/3')
+        } else if(view==='EDITOR') await editor(page)
+        else if(view==='SETLISTS') {
+          await tab(page,'SETLISTS')
+          assert.equal((await page.evaluate(()=>history.state.gtarNavigation)).setlistId,'reload-gig')
+          await page.getByText('Restoration Gig',{exact:true}).last().waitFor()
+        } else await reader(page)
+        const logo = await page.evaluate(async () => Array.from(new Uint8Array(await (await fetch('/pwa-192x192.png')).arrayBuffer())))
+        assert.ok(Buffer.from(logo).equals(fs.readFileSync(path.join(__dirname,'../dist/pwa-192x192.png'))), 'Offline install/header icon matches emitted branding')
         await context.setOffline(false)
       }
       assert.deepEqual(await records(page),before,'Offline reload and fallbacks preserve canonical records byte-for-byte')
+      await restore(page,{version:1,tab:'STAGE',songId:'reload-one',stage:{songId:'reload-one',index:0,returnTab:'SONGS'}})
+      await stage(page)
       // A song deleted after the history entry was recorded must never be recreated by restoration.
       await page.evaluate(async()=>{
         const db=await new Promise(resolve=>{const q=indexedDB.open('gtar_revamp_local_v1');q.onsuccess=()=>resolve(q.result)})
