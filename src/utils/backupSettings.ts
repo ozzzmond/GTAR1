@@ -737,6 +737,16 @@ function applyCloudThemePaletteToDocument(mode: ThemeMode, colors: CustomThemeCo
   root.style.setProperty('--custom-stage-text', colors.textHex)
   root.style.setProperty('--custom-stage-chord', colors.chordHex)
   root.style.setProperty('--custom-stage-section', colors.sectionHex)
+
+  const selection = colors.selectionColor || '#2AA198'
+  const channels = [1, 3, 5].map(offset => parseInt(selection.slice(offset, offset + 2), 16) / 255).map(value => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4)
+  const luminance = channels[0] * .2126 + channels[1] * .7152 + channels[2] * .0722
+  root.style.setProperty('--custom-selection-foreground', luminance > .179 ? '#000000' : '#FFFFFF')
+
+  const action = colors.actionColor || '#2AA198'
+  const actionChannels = [1, 3, 5].map(offset => parseInt(action.slice(offset, offset + 2), 16) / 255).map(value => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4)
+  const actionLuminance = actionChannels[0] * .2126 + actionChannels[1] * .7152 + actionChannels[2] * .0722
+  root.style.setProperty('--custom-action-foreground', actionLuminance > .179 ? '#000000' : '#FFFFFF')
   // Surface & border calculations based on bg brightness (backward compatibility)
   const hex = colors.bgHex.replace('#', '')
   const r = parseInt(hex.substring(0, 2), 16) || 0

@@ -19,7 +19,7 @@
   --color-app-link: var(--custom-uiLinkText);
   --color-app-button: var(--custom-control-button-bg);
   --color-app-button-text: var(--custom-control-button-text);
-  --color-app-on-action: var(--custom-action-foreground);
+  --color-app-on-action: var(--custom-action-foreground, #FFFFFF);
   --color-app-selected: var(--custom-card-selected-bg);
   --color-app-selected-border: var(--custom-card-selected-border);
   --color-app-song: var(--custom-card-song-bg);
@@ -267,11 +267,25 @@ body.theme-custom [data-stage-dock="true"] {
   border-color: var(--custom-dock-border, #2A3644) !important;
 }
 
+body.theme-custom [data-stage-dock="true"] [aria-label="Reposition stage control dock"] {
+  color: var(--custom-dock-btn-icon, var(--custom-chrome-icon, #94A3B8)) !important;
+}
+
+body.theme-custom [data-stage-dock="true"] [aria-label="Reposition stage control dock"]:hover {
+  color: var(--custom-control-accent, #F59E0B) !important;
+}
+
 body.theme-custom [data-stage-dock="true"] button[aria-label="Jump to previous section"],
 body.theme-custom [data-stage-dock="true"] button[aria-label="Jump to next section"] {
   background-color: var(--custom-dock-btn-bg, #121820) !important;
   color: var(--custom-dock-btn-icon, #F1F5F9) !important;
   border-color: var(--custom-dock-border, #2A3644) !important;
+}
+
+body.theme-custom [data-stage-dock="true"] button[aria-label="Jump to previous section"]:hover:not(:disabled),
+body.theme-custom [data-stage-dock="true"] button[aria-label="Jump to next section"]:hover:not(:disabled) {
+  border-color: var(--custom-control-accent, #F59E0B) !important;
+  color: var(--custom-control-accent, #F59E0B) !important;
 }
 
 body.theme-custom [data-stage-dock="true"] button[aria-label*="autoscroll"] {
