@@ -26,6 +26,10 @@ export const ACCIDENTAL_CHORD_VOICINGS: ChordVoicing[] = [
   { chord: 'C#2/F', baseFret: 1, frets: [1, 4, 3, 1, 4, 1], fingers: [1, 3, 2, 1, 4, 1], barres: [1] },
   { chord: 'C#/F', baseFret: 1, frets: [1, 4, 3, 1, 2, 1], fingers: [1, 4, 3, 1, 2, 1], barres: [1] },
   { chord: 'C#/G#', baseFret: 4, frets: [4, 4, 6, 6, 6, 4], fingers: [1, 1, 2, 3, 4, 1], barres: [4] },
+  { chord: 'C#/F#', baseFret: 1, frets: [-1, -1, 4, 1, 2, 1], fingers: [0, 0, 4, 1, 2, 1], barres: [1] },
+  { chord: 'C#/F#', baseFret: 4, frets: [-1, -1, 4, 6, 6, 4], fingers: [0, 0, 1, 3, 4, 1], barres: [4] },
+  { chord: 'C#/F#', baseFret: 9, frets: [-1, 9, 11, 10, 9, 9], fingers: [0, 1, 3, 2, 1, 1], barres: [9] },
+  { chord: 'C#/F#', baseFret: 6, frets: [-1, 9, 6, 6, 6, -1], fingers: [0, 4, 1, 1, 1, 0], barres: [6] },
 
   { chord: 'Db', baseFret: 4, frets: [-1, 4, 6, 6, 6, 4], fingers: [0, 1, 2, 3, 4, 1], barres: [4] },
   { chord: 'Dbm', baseFret: 4, frets: [-1, 4, 6, 6, 5, 4], fingers: [0, 1, 3, 4, 2, 1], barres: [4] },
@@ -44,6 +48,10 @@ export const ACCIDENTAL_CHORD_VOICINGS: ChordVoicing[] = [
   { chord: 'Db2/F', baseFret: 1, frets: [1, 4, 3, 1, 4, 1], fingers: [1, 3, 2, 1, 4, 1], barres: [1] },
   { chord: 'Db/F', baseFret: 1, frets: [1, 4, 3, 1, 2, 1], fingers: [1, 4, 3, 1, 2, 1], barres: [1] },
   { chord: 'Db/Ab', baseFret: 4, frets: [4, 4, 6, 6, 6, 4], fingers: [1, 1, 2, 3, 4, 1], barres: [4] },
+  { chord: 'Db/Gb', baseFret: 1, frets: [-1, -1, 4, 1, 2, 1], fingers: [0, 0, 4, 1, 2, 1], barres: [1] },
+  { chord: 'Db/Gb', baseFret: 4, frets: [-1, -1, 4, 6, 6, 4], fingers: [0, 0, 1, 3, 4, 1], barres: [4] },
+  { chord: 'Db/Gb', baseFret: 9, frets: [-1, 9, 11, 10, 9, 9], fingers: [0, 1, 3, 2, 1, 1], barres: [9] },
+  { chord: 'Db/Gb', baseFret: 6, frets: [-1, 9, 6, 6, 6, -1], fingers: [0, 4, 1, 1, 1, 0], barres: [6] },
 
   // ================= D# / Eb ROOT =================
   { chord: 'Eb', baseFret: 1, frets: [-1, -1, 1, 3, 4, 3], fingers: [0, 0, 1, 2, 4, 3] },

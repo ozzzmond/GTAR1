@@ -6,6 +6,7 @@
 
 import { NATURAL_CHORD_VOICINGS } from '../data/naturalChords'
 import { ACCIDENTAL_CHORD_VOICINGS } from '../data/accidentalChords'
+import { IMPORTED_CHORD_VOICINGS } from '../data/importedChords'
 
 export type VoicingProvenance = 'CURATED_GTAR' | 'LICENSED_IMPORTED' | 'SONG_DEFINED'
 
@@ -65,7 +66,10 @@ export const curatedChords: ChordVoicing[] = [
   ...ACCIDENTAL_CHORD_VOICINGS.map((v) => ({ ...v, source: 'CURATED_GTAR' as const })),
 ]
 
-export const standardChords: ChordVoicing[] = [...curatedChords]
+export const standardChords: ChordVoicing[] = [
+  ...curatedChords,
+  ...IMPORTED_CHORD_VOICINGS.map((v) => ({ ...v, source: 'LICENSED_IMPORTED' as const })),
+]
 
 // Primary default map
 const chordMap = new Map<string, ChordVoicing>()
@@ -74,6 +78,7 @@ const curatedMap = new Map<string, ChordVoicing>()
 // Multi-voicing catalog: maps normalized chord name -> array of all trusted voicings
 const multiVoicingMap = new Map<string, ChordVoicing[]>()
 
+// 1. Index curated voicings (hand-verified highest priority)
 for (const v of curatedChords) {
   const key = v.chord.toLowerCase()
   if (!curatedMap.has(key)) {
@@ -83,6 +88,22 @@ for (const v of curatedChords) {
   const existing = multiVoicingMap.get(key) || []
   existing.push(v)
   multiVoicingMap.set(key, existing)
+}
+
+// 2. Index imported voicings (for missing chords and multiple voicings)
+for (const v of IMPORTED_CHORD_VOICINGS) {
+  const key = v.chord.toLowerCase()
+  const voicing: ChordVoicing = { ...v, source: 'LICENSED_IMPORTED' }
+  if (!chordMap.has(key)) {
+    chordMap.set(key, voicing)
+  }
+  const existing = multiVoicingMap.get(key) || []
+  if (!curatedMap.has(key)) {
+    if (!existing.some(x => x.baseFret === v.baseFret && x.frets.join(',') === v.frets.join(','))) {
+      existing.push(voicing)
+    }
+    multiVoicingMap.set(key, existing)
+  }
 }
 
 /**
@@ -108,7 +129,9 @@ export function normalizeChordForVoicingLookup(chord: string): string[] {
     if (inner) stripped = inner
   }
 
-  const slashIdx = stripped.indexOf('/')
+  // Distinguish slash quality like C6/9 from slash bass like C/E or C6/9/G
+  const slashMatch = /\/([A-Ga-g][#b]?)(min|m)?$/.exec(stripped)
+  const slashIdx = slashMatch ? slashMatch.index : -1
   const basePart = slashIdx !== -1 ? stripped.slice(0, slashIdx).trim() : stripped
   const bassPart = slashIdx !== -1 ? stripped.slice(slashIdx + 1).trim() : null
 
@@ -138,6 +161,7 @@ export function normalizeChordForVoicingLookup(chord: string): string[] {
   const qualVariants = qual === 'sus' ? ['sus4']
     : qual === '2' || qual === 'add2' ? ['add2', 'add9']
     : qual === 'add4' || qual === 'add11' ? ['add4', 'add11']
+    : qual === '6/9' || qual === '69' ? ['6/9', '69']
     : [qual]
 
   // Root variants (canonical + enharmonic)

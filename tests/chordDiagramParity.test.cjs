@@ -419,3 +419,104 @@ test('QUICK_PREVIEW_RENDERER: ChordQuickPreview renders anchored popover with of
   assert.match(previewHtml, /Em/, 'Quick preview must display chord name')
   assert.match(previewHtml, /aria-label="Dismiss quick preview"/, 'Dismiss button must have accessible label')
 })
+
+
+// ============================================================================
+// 16. ISSUE #10: RESTORED LEGACY CHORD COVERAGE & DB/GB PARITY
+// ============================================================================
+test('DB_GB_PARITY_AND_ALTERNATES: Db/Gb and C#/F# resolve playable pattern matching harmonic identity', () => {
+  const dbGb = getChordVoicing('Db/Gb')
+  assert.ok(dbGb, 'Db/Gb must resolve to a valid voicing')
+  assert.deepEqual(getSoundingPitchClasses(dbGb).sort(), ['C#', 'F', 'F#', 'G#'].sort())
+  // Lowest sounding note must be Gb (F#)
+  const lowestFretIdx = dbGb.frets.findIndex(f => f >= 0)
+  assert.equal((OPEN_STRING_SEMITONES[lowestFretIdx] + dbGb.frets[lowestFretIdx]) % 12, 6, 'Lowest sounding note must be F#/Gb')
+
+  // Enharmonic C#/F# parity
+  const csFs = getChordVoicing('C#/F#')
+  assert.ok(csFs, 'C#/F# must resolve to a valid voicing')
+  assert.deepEqual(getSoundingPitchClasses(csFs).sort(), ['C#', 'F', 'F#', 'G#'].sort())
+
+  // Multiple valid voicings supported
+  const voicings = getAllChordVoicings('Db/Gb')
+  assert.ok(voicings.length >= 4, 'Db/Gb must support multiple valid voicings')
+  for (const v of voicings) {
+    assert.ok(v.frets.filter(f => f > 0).every(f => f >= v.baseFret && f < v.baseFret + 5), 'All frets within 5-fret span')
+    const lIdx = v.frets.findIndex(f => f >= 0)
+    assert.equal((OPEN_STRING_SEMITONES[lIdx] + v.frets[lIdx]) % 12, 6, 'Bass note must be Gb/F# across all alternate voicings')
+  }
+
+  // Transposition parity across semitones
+  const transposedPlus2 = transposeChordToken('Db/Gb', 2, true)
+  assert.equal(transposedPlus2, 'Eb/Ab')
+  const ebAb = getChordVoicing(transposedPlus2)
+  assert.ok(ebAb, 'Transposed Eb/Ab must resolve to valid diagram')
+  assert.equal((OPEN_STRING_SEMITONES[ebAb.frets.findIndex(f => f >= 0)] + ebAb.frets[ebAb.frets.findIndex(f => f >= 0)]) % 12, 8, 'Eb/Ab bass must be Ab')
+})
+
+test('REPRESENTATIVE_LEGACY_CHORDS_COVERAGE: Restored slash, suspended, and extended voicings', () => {
+  const representative = [
+    // Restored slash chords
+    ['Db/Gb', 6], ['C#/F#', 6], ['Eb/Ab', 8], ['D#/G#', 8],
+    ['Ab/Db', 1], ['G#/C#', 1], ['F/Bb', 10], ['Gb/B', 11],
+    ['C7/G', 7], ['A/G', 7],
+    // Restored suspended chords
+    ['C#7sus4', null], ['Db7sus4', null], ['Eb7sus4', null], ['Ab7sus4', null],
+    // Restored extended 9th, maj9, 6/9 chords
+    ['C#9', null], ['Db9', null], ['Eb9', null], ['F#9', null], ['Ab9', null],
+    ['Cmaj9', null], ['Dmaj9', null], ['Fmaj9', null], ['Gmaj9', null],
+    ['D6/9', null], ['E6/9', null], ['G6/9', null], ['A6/9', null]
+  ]
+  for (const [chord, expectedBassSemi] of representative) {
+    const v = getChordVoicing(chord)
+    assert.ok(v, `Chord ${chord} must have a valid voicing`)
+    assert.ok(v.frets.filter(f => f > 0).every(f => f >= v.baseFret && f < v.baseFret + 5), `Frets within span for ${chord}`)
+    if (expectedBassSemi !== null) {
+      const lIdx = v.frets.findIndex(f => f >= 0)
+      assert.equal((OPEN_STRING_SEMITONES[lIdx] + v.frets[lIdx]) % 12, expectedBassSemi, `Bass note match for ${chord}`)
+    }
+  }
+})
+
+test('PR45_AND_CDX_ZERO_REGRESSION: All existing curated chords and honest fallbacks preserved', () => {
+  // Verified chords from prompt
+  assert.ok(getChordVoicing('E'))
+  assert.ok(getChordVoicing('F2'))
+  assert.ok(getChordVoicing('G'))
+  assert.ok(getChordVoicing('Em'))
+  assert.ok(getChordVoicing('Asus2'))
+  assert.ok(getChordVoicing('CM7'))
+  assert.ok(getChordVoicing('Csus2'))
+  assert.ok(getChordVoicing('Gm6'))
+  assert.ok(getChordVoicing('C9'))
+  assert.ok(getChordVoicing('F#6'))
+
+  // CDX F3 honest fallback guarantees
+  for (const unsupported of ['Cadd9/E', 'Csus4/E', 'Cmadd9', 'Cmaj13', 'CM7/E']) {
+    assert.equal(getChordVoicing(unsupported), null, `Unsupported chord ${unsupported} must return null`)
+    assert.deepEqual(getAllChordVoicings(unsupported), [])
+  }
+})
+
+test('DB_GB_RENDERING: SVG, Modal, and Quick Preview render playable fretboard for Db/Gb', () => {
+  const dbGb = getChordVoicing('Db/Gb')
+  assert.ok(dbGb)
+
+  // 1. Svg rendering
+  const svgHtml = renderToStaticMarkup(React.createElement(ChordSvgDiagram, { voicing: dbGb }))
+  assert.match(svgHtml, /role="img"/)
+  assert.match(svgHtml, /aria-label="Chord diagram for Db\/Gb"/)
+  assert.match(svgHtml, /data-barre-fret="1"/)
+
+  // 2. Quick preview rendering
+  const anchor = { rect: { top: 50, left: 50, width: 30, height: 20, bottom: 70, right: 80 }, chord: 'Db/Gb' }
+  const previewHtml = renderToStaticMarkup(React.createElement(ChordQuickPreview, { anchor, voicing: dbGb, onClose: () => {} }))
+  assert.match(previewHtml, /Db\/Gb/)
+  assert.doesNotMatch(previewHtml, /unavailable/i)
+
+  // 3. Modal rendering
+  const modalHtml = renderToStaticMarkup(React.createElement(FretboardDiagramModal, { voicing: dbGb, requestedChord: 'Db/Gb', onClose: () => {} }))
+  assert.match(modalHtml, /Db\/Gb/)
+  assert.match(modalHtml, /Frets:.*x x 4 1 2 1/)
+  assert.doesNotMatch(modalHtml, /unavailable/i)
+})
