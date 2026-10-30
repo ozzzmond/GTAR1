@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { GTAR1_VERSION } from '../types/gtar'
 import type { LocalUserProfile } from '../utils/localProfile'
-import { getInitials } from '../utils/localProfile'
+import { getInitials, DEFAULT_AVATAR_PATH } from '../utils/localProfile'
 import {
   Menu,
   X,
@@ -195,17 +195,11 @@ export const Header: React.FC<HeaderProps> = ({
               aria-label={`Musician Profile: ${userProfile.displayName}`}
               className="w-8 h-8 rounded-full border-2 border-app-border hover:border-app-action transition-colors overflow-hidden flex items-center justify-center bg-app-surface focus:outline-none"
             >
-              {userProfile.avatarBase64 ? (
-                <img
-                  src={userProfile.avatarBase64}
-                  alt={userProfile.displayName}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <span className="text-xs font-bold text-sky-300">
-                  {getInitials(userProfile.displayName)}
-                </span>
-              )}
+              <img
+                src={userProfile.avatarBase64 || DEFAULT_AVATAR_PATH}
+                alt={userProfile.displayName}
+                className="w-full h-full object-cover"
+              />
             </button>
 
             {/* Avatar Dropdown Menu */}
@@ -213,15 +207,11 @@ export const Header: React.FC<HeaderProps> = ({
               <div className="absolute right-0 mt-2 w-56 bg-app-surface border border-app-border rounded-2xl p-2 shadow-2xl z-50 animate-scale-in text-xs text-app-text">
                 <div className="px-3 py-2 border-b border-app-border flex items-center gap-2.5">
                   <div className="w-9 h-9 rounded-full bg-app-base border border-app-border flex items-center justify-center text-app-action font-extrabold text-xs overflow-hidden shrink-0">
-                    {userProfile.avatarBase64 ? (
-                      <img
-                        src={userProfile.avatarBase64}
-                        alt=""
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      getInitials(userProfile.displayName)
-                    )}
+                    <img
+                      src={userProfile.avatarBase64 || DEFAULT_AVATAR_PATH}
+                      alt=""
+                      className="w-full h-full object-cover"
+                    />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="font-bold text-app-heading truncate">

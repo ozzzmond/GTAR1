@@ -1,42 +1,93 @@
-import { defineConfig } from 'vite'
+﻿import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
+import type { Plugin } from 'vite'
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-export default defineConfig({
-  plugins: [
-    tailwindcss(),
-    react(),
-    VitePWA({
-      registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'favicon.svg', 'apple-touch-icon.png'],
-      manifest: {
-        name: 'GTAR - Local First Music Stand',
-        short_name: 'GTAR',
-        description: 'Standalone local-first ChordPro music stand and setlist manager',
-        theme_color: '#0f172a',
-        background_color: '#0f172a',
-        display: 'standalone',
-        start_url: '/',
-        icons: [
-          {
-            src: 'pwa-192x192.png',
-            sizes: '192x192',
-            type: 'image/png'
-          },
-          {
-            src: 'pwa-512x512.png',
-            sizes: '512x512',
-            type: 'image/png'
-          }
-        ]
-      },
-      workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg}']
+const projectRoot = path.dirname(fileURLToPath(import.meta.url))
+
+export default defineConfig(({ mode }) => {
+  // Stable environment resolution:
+  // PROD mascot (red Bebeboy) is selected ONLY when explicitly requested via production target
+  // (e.g. GTAR_ENV === 'production' or VITE_APP_ENV === 'production').
+  // DEV mascot (yellow Bebegirl2) is the default active development and standard build branding.
+  const appEnv = process.env.GTAR_ENV || process.env.VITE_APP_ENV || (mode === 'production-pwa' ? 'production' : 'development')
+  const isProd = appEnv === 'production'
+
+  const mascotPublicSubdir = isProd
+    ? 'mascots/bebeboy-red-prod'
+    : 'mascots/bebegirl2-yellow-dev'
+
+  const mascotPlugin = (): Plugin => ({
+    name: 'gtar1-mascot-icons',
+    generateBundle() {
+      // In build output, emit the resolved environment mascot assets to root icon paths in dist/
+      const mascotFiles: Record<string, string> = {
+        'pwa-192x192.png': `${mascotPublicSubdir}/pwa-192.png`,
+        'pwa-512x512.png': `${mascotPublicSubdir}/pwa-512.png`,
+        'apple-touch-icon.png': `${mascotPublicSubdir}/apple-touch-icon-180.png`,
+        'favicon.png': `${mascotPublicSubdir}/favicon-candidate-64.png`,
+        'favicon.ico': `${mascotPublicSubdir}/favicon-candidate-64.png`,
       }
-    })
-  ],
-  server: {
-    port: 5173
+
+      for (const [targetName, sourceRelPath] of Object.entries(mascotFiles)) {
+        const fullSourcePath = path.resolve(projectRoot, 'public', sourceRelPath)
+        if (fs.existsSync(fullSourcePath)) {
+          this.emitFile({
+            type: 'asset',
+            fileName: targetName,
+            source: fs.readFileSync(fullSourcePath),
+          })
+        }
+      }
+    },
+  })
+
+  return {
+    plugins: [
+      tailwindcss(),
+      react(),
+      mascotPlugin(),
+      VitePWA({
+        registerType: 'autoUpdate',
+        includeAssets: [
+          'favicon.ico',
+          'favicon.svg',
+          'favicon.png',
+          'apple-touch-icon.png',
+          'avatars/default-avatar.png',
+        ],
+        manifest: {
+          name: isProd ? 'GTAR — Local First Music Stand' : 'GTAR (Dev) — Local First Music Stand',
+          short_name: isProd ? 'GTAR' : 'GTAR (Dev)',
+          description: 'Standalone local-first ChordPro music stand and setlist manager',
+          theme_color: '#0f172a',
+          background_color: '#0f172a',
+          display: 'standalone',
+          start_url: '/',
+          icons: [
+            {
+              src: 'pwa-192x192.png',
+              sizes: '192x192',
+              type: 'image/png',
+            },
+            {
+              src: 'pwa-512x512.png',
+              sizes: '512x512',
+              type: 'image/png',
+            },
+          ],
+        },
+        workbox: {
+          globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+        },
+      }),
+    ],
+    server: {
+      port: 5173,
+    },
   }
 })

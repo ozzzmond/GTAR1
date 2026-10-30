@@ -4,6 +4,7 @@ import {
   getInitials,
   validateAvatarFile,
   saveLocalProfile,
+  DEFAULT_AVATAR_PATH,
 } from '../utils/localProfile'
 import { Camera, Trash2, X, Check, User } from 'lucide-react'
 
@@ -109,17 +110,11 @@ export const LocalProfileModal: React.FC<LocalProfileModalProps> = ({
           {/* Avatar Preview & Upload */}
           <div className="flex items-center gap-4 p-3 rounded-xl bg-slate-800/60 border border-slate-700/60">
             <div className="relative group shrink-0">
-              {avatar ? (
-                <img
-                  src={avatar}
-                  alt={name}
-                  className="w-16 h-16 rounded-full object-cover border-2 border-sky-500 shadow-md"
-                />
-              ) : (
-                <div className="w-16 h-16 rounded-full bg-slate-700 text-sky-300 font-extrabold text-xl flex items-center justify-center border-2 border-slate-600 shadow-md">
-                  {getInitials(name)}
-                </div>
-              )}
+              <img
+                src={avatar || DEFAULT_AVATAR_PATH}
+                alt={name}
+                className="w-16 h-16 rounded-full object-cover border-2 border-sky-500 shadow-md"
+              />
             </div>
 
             <div className="space-y-1.5 flex-1 min-w-0">
