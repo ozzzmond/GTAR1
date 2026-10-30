@@ -42,7 +42,7 @@ export const CURATED_SONG_SOURCES: readonly SongSource[] = [
     id: 'curated_chordie',
     name: 'Chordie',
     url: 'https://www.chordie.com',
-    desc: 'Direct ChordPro catalog and searchable chord charts',
+    desc: 'External chord index; direct import unavailable',
     isCurated: true,
   },
   {

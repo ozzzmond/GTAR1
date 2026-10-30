@@ -69,6 +69,7 @@ export const BrowseSongSourcesModal: React.FC<BrowseSongSourcesModalProps> = ({
   onSelectSong,
   initialTab = 'browse',
 }) => {
+  const [online, setOnline] = useState(() => navigator.onLine !== false)
   const [activeTab, setActiveTab] = useState<'browse' | 'import'>(initialTab)
 
   // Phase A - Browse Tab State
@@ -111,6 +112,18 @@ export const BrowseSongSourcesModal: React.FC<BrowseSongSourcesModalProps> = ({
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const modalContentRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (!isOpen) return
+    const update = () => setOnline(navigator.onLine !== false)
+    update()
+    window.addEventListener('online', update)
+    window.addEventListener('offline', update)
+    return () => {
+      window.removeEventListener('online', update)
+      window.removeEventListener('offline', update)
+    }
+  }, [isOpen])
 
   // Load custom shortcuts when modal opens
   useEffect(() => {
@@ -548,6 +561,13 @@ export const BrowseSongSourcesModal: React.FC<BrowseSongSourcesModalProps> = ({
           {/* ==================== TAB 1: BROWSE WEBSITES ==================== */}
           {activeTab === 'browse' && (
             <div id="sources-tabpanel-browse" role="tabpanel" aria-labelledby="sources-tab-browse" className="space-y-5">
+              <section aria-labelledby="public-search-heading" className="rounded-xl border border-app-border bg-app-base p-4 space-y-2">
+                <h3 id="public-search-heading" className="text-sm font-bold text-app-heading">Public song search</h3>
+                <p className="text-xs text-app-muted">Search results inside GTAR1 are currently unavailable. You can browse the source websites below without signing in to GTAR1. Each website controls its own access and licensing.</p>
+                <p role="status" className="text-xs text-app-muted">{online ? 'Online: source websites open in a new tab.' : 'You are offline. Source websites need an internet connection. Local Songbook, Stage, and paste or file import remain available.'}</p>
+                <button type="button" onClick={() => setActiveTab('import')} className="min-h-[44px] rounded-xl border border-app-border px-3 py-2 text-xs font-bold text-app-action">Import your own chart</button>
+                <p className="text-xs text-app-muted">Import only charts you own or have permission to use. Keep source and author attribution in your chart.</p>
+              </section>
               {/* Section 1: Direct URL Entry */}
               <section aria-labelledby="direct-url-heading" className="space-y-2">
                 <label
