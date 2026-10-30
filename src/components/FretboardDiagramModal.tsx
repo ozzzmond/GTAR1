@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, X } from 'lucide-react'
 import type { ChordVoicing } from '../utils/chordDictionary'
 import { getAllChordVoicings } from '../utils/chordDictionary'
@@ -16,6 +16,27 @@ export const FretboardDiagramModal: React.FC<FretboardDiagramModalProps> = ({
   onClose,
 }) => {
   const chordTitle = initialVoicing?.chord || requestedChord || ''
+  const dialogRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!chordTitle) return
+    const previousFocus = document.activeElement as HTMLElement | null
+    dialogRef.current?.querySelector('button')?.focus()
+    return () => { if (previousFocus?.isConnected) previousFocus.focus() }
+  }, [chordTitle])
+
+  const trapFocus = (event: React.KeyboardEvent) => {
+    if (event.key !== 'Tab') return
+    const buttons = dialogRef.current?.querySelectorAll<HTMLButtonElement>('button')
+    if (!buttons?.length) return
+    const first = buttons[0]
+    const last = buttons[buttons.length - 1]
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault(); last.focus()
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault(); first.focus()
+    }
+  }
 
   // Support cycling through multiple alternate voicings when available
   const allVoicings = React.useMemo(() => {
@@ -60,14 +81,16 @@ export const FretboardDiagramModal: React.FC<FretboardDiagramModalProps> = ({
   if (!activeVoicing) {
     return (
       <div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+        ref={dialogRef}
+        onKeyDown={trapFocus}
+        className="fixed inset-0 z-[100] overflow-y-auto flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-in fade-in duration-200"
         onClick={onClose}
         role="dialog"
         aria-modal="true"
         aria-labelledby="chord-modal-title"
       >
         <div
-          className="relative w-full max-w-sm rounded-[20px] bg-app-surface border border-app-border p-6 shadow-2xl text-app-text select-none"
+          className="relative w-full max-w-sm max-h-[calc(100dvh-32px)] overflow-y-auto rounded-[20px] bg-app-surface border border-app-border p-6 shadow-2xl text-app-text select-none"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-center justify-between pb-3 border-b border-app-border">
@@ -80,7 +103,7 @@ export const FretboardDiagramModal: React.FC<FretboardDiagramModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-full text-app-muted hover:text-app-heading hover:bg-app-base transition-colors cursor-pointer"
+              className="min-w-11 min-h-11 flex items-center justify-center p-1.5 rounded-full text-app-muted hover:text-app-heading hover:bg-app-base transition-colors cursor-pointer"
               aria-label="Close Diagram"
             >
               <X className="w-5 h-5" />
@@ -108,14 +131,16 @@ export const FretboardDiagramModal: React.FC<FretboardDiagramModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+      ref={dialogRef}
+      onKeyDown={trapFocus}
+      className="fixed inset-0 z-[100] overflow-y-auto flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-in fade-in duration-200"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-labelledby="chord-modal-title"
     >
       <div
-        className="relative w-full max-w-sm rounded-[20px] bg-app-surface border border-app-border p-6 shadow-2xl text-app-text select-none"
+        className="relative w-full max-w-sm max-h-[calc(100dvh-32px)] overflow-y-auto rounded-[20px] bg-app-surface border border-app-border p-6 shadow-2xl text-app-text select-none"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header: Chord Name, Frets & Close */}
@@ -132,7 +157,7 @@ export const FretboardDiagramModal: React.FC<FretboardDiagramModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-full text-app-muted hover:text-app-heading hover:bg-app-base transition-colors cursor-pointer"
+            className="min-w-11 min-h-11 flex items-center justify-center p-1.5 rounded-full text-app-muted hover:text-app-heading hover:bg-app-base transition-colors cursor-pointer"
             aria-label="Close Diagram"
           >
             <X className="w-5 h-5" />
@@ -145,7 +170,7 @@ export const FretboardDiagramModal: React.FC<FretboardDiagramModalProps> = ({
             <button
               type="button"
               onClick={handlePrevVoicing}
-              className="p-1 rounded text-app-muted hover:text-app-text hover:bg-app-surface transition-colors cursor-pointer flex items-center"
+              className="min-w-11 min-h-11 justify-center p-1 rounded text-app-muted hover:text-app-text hover:bg-app-surface transition-colors cursor-pointer flex items-center"
               aria-label="Previous voicing"
             >
               <ChevronLeft className="w-4 h-4" />
@@ -157,7 +182,7 @@ export const FretboardDiagramModal: React.FC<FretboardDiagramModalProps> = ({
             <button
               type="button"
               onClick={handleNextVoicing}
-              className="p-1 rounded text-app-muted hover:text-app-text hover:bg-app-surface transition-colors cursor-pointer flex items-center"
+              className="min-w-11 min-h-11 justify-center p-1 rounded text-app-muted hover:text-app-text hover:bg-app-surface transition-colors cursor-pointer flex items-center"
               aria-label="Next voicing"
             >
               <ChevronRight className="w-4 h-4" />

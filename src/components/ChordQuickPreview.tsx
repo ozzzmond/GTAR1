@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react'
-import { ExternalLink, X } from 'lucide-react'
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { X } from 'lucide-react'
 import type { ChordVoicing } from '../utils/chordDictionary'
 import { ChordSvgDiagram } from './ChordSvgDiagram'
 
@@ -15,6 +15,7 @@ export interface ChordQuickPreviewProps {
   onClose: () => void
   onMouseEnter?: () => void
   onMouseLeave?: () => void
+  focusOnOpen?: boolean
 }
 
 export const ChordQuickPreview: React.FC<ChordQuickPreviewProps> = ({
@@ -24,9 +25,19 @@ export const ChordQuickPreview: React.FC<ChordQuickPreviewProps> = ({
   onClose,
   onMouseEnter,
   onMouseLeave,
+  focusOnOpen = false,
 }) => {
   const popoverRef = useRef<HTMLDivElement>(null)
-  const [, setResizeTick] = useState(0)
+  const [resizeTick, setResizeTick] = useState(0)
+  const [measuredHeight, setMeasuredHeight] = useState(320)
+
+  useLayoutEffect(() => {
+    if (anchor) setMeasuredHeight(popoverRef.current?.getBoundingClientRect().height || 320)
+  }, [anchor, voicing, resizeTick])
+
+  useEffect(() => {
+    if (anchor && focusOnOpen) popoverRef.current?.querySelector('button')?.focus()
+  }, [anchor, focusOnOpen])
 
   // Listen for window resize to update positioning if anchor is active
   useEffect(() => {
@@ -51,8 +62,8 @@ export const ChordQuickPreview: React.FC<ChordQuickPreviewProps> = ({
   if (!anchor) return null
 
   // Derived dimensions
-  const popoverWidth = 210
-  const popoverHeight = voicing ? 280 : 130
+  const popoverWidth = Math.min(210, (typeof window !== 'undefined' ? window.innerWidth : 1024) - 24)
+  const popoverHeight = Math.min(measuredHeight, (typeof window !== 'undefined' ? window.innerHeight : 768) - 24)
   const gap = 8
   const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1024
   const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 768
@@ -79,13 +90,17 @@ export const ChordQuickPreview: React.FC<ChordQuickPreviewProps> = ({
   return (
     <div
       ref={popoverRef}
-      role="tooltip"
+      data-chord-preview="true"
+      role="dialog"
+      aria-label={`${anchor.chord} quick preview`}
       aria-live="polite"
-      className="fixed z-50 rounded-2xl bg-app-surface border border-app-border shadow-2xl p-3 text-app-text select-none animate-in fade-in zoom-in-95 duration-150"
+      className="fixed z-[100] rounded-2xl bg-app-surface border border-app-border shadow-2xl p-3 text-app-text select-none animate-in fade-in zoom-in-95 duration-150"
       style={{
         top: `${top}px`,
         left: `${left}px`,
-        width: '210px',
+        width: `${popoverWidth}px`,
+        maxHeight: 'calc(100dvh - 24px)',
+        overflowY: 'auto',
         pointerEvents: 'auto',
       }}
       onMouseEnter={onMouseEnter}
@@ -101,21 +116,10 @@ export const ChordQuickPreview: React.FC<ChordQuickPreviewProps> = ({
           <span className="text-[10px] font-mono text-app-muted">Guitar</span>
         </div>
         <div className="flex items-center gap-1">
-          {onOpenDiagram && (
-            <button
-              type="button"
-              onClick={() => onOpenDiagram(displayChord, voicing)}
-              className="p-1 rounded-md text-app-muted hover:text-app-heading hover:bg-app-base transition-colors cursor-pointer"
-              title="Open full diagram"
-              aria-label="Open full diagram"
-            >
-              <ExternalLink className="w-3.5 h-3.5" />
-            </button>
-          )}
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded-md text-app-muted hover:text-app-heading hover:bg-app-base transition-colors cursor-pointer"
+            className="min-w-11 min-h-11 flex items-center justify-center rounded-md text-app-muted hover:text-app-heading hover:bg-app-base transition-colors cursor-pointer"
             aria-label="Dismiss quick preview"
           >
             <X className="w-3.5 h-3.5" />
@@ -144,7 +148,7 @@ export const ChordQuickPreview: React.FC<ChordQuickPreviewProps> = ({
 
       {/* Footer tip */}
       <div className="pt-1.5 border-t border-app-border flex items-center justify-between text-[9px] font-mono text-app-muted">
-        <span>Click to pin</span>
+        {onOpenDiagram && <button type="button" className="min-h-11 p-2 text-xs text-app-action cursor-pointer" onClick={() => onOpenDiagram(displayChord, voicing)}>Open Full Diagram</button>}
         <span>ESC to close</span>
       </div>
     </div>

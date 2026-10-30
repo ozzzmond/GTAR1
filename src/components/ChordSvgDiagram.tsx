@@ -151,16 +151,25 @@ export const ChordSvgDiagram: React.FC<ChordSvgDiagramProps> = ({
         const y = startY + (relativeFret - 0.5) * fretSpacing
 
         const indices = voicing.frets
-          .map((f, i) => (f >= barreFret ? i : -1))
+          .map((f, i) => (f === barreFret ? i : -1))
           .filter((i) => i !== -1)
         if (indices.length < 2) return null
 
-        const x1 = startX + indices[0] * stringSpacing
-        const x2 = startX + indices[indices.length - 1] * stringSpacing
+        // Endpoints must share the barre finger; never bridge an open/lower string.
+        const finger = voicing.fingers?.[indices[indices.length - 1]]
+        const endpoints = finger ? indices.filter(i => voicing.fingers?.[i] === finger) : indices
+        if (endpoints.length < 2) return null
+        const first = endpoints[0]
+        const last = endpoints[endpoints.length - 1]
+        if (voicing.frets.slice(first, last + 1).some(f => f < barreFret)) return null
+
+        const x1 = startX + first * stringSpacing
+        const x2 = startX + last * stringSpacing
 
         return (
           <line
             key={`barre-${idx}`}
+            data-barre-fret={barreFret}
             x1={x1}
             y1={y}
             x2={x2}

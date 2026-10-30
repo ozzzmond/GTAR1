@@ -1,3 +1,4 @@
+import { useChordDiagrams } from './useChordDiagrams'
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react'
 import type { SongEntity } from '../types/gtar'
 import { parseGtarSong, splitSongLinesForColumns } from '../utils/songParser'
@@ -24,9 +25,6 @@ import { StageControlDock } from './StageControlDock'
 import { StageToolsModal } from './StageToolsModal'
 import { StageOptionsSheet } from './StageOptionsSheet'
 import { KeyPickerModal } from './KeyPickerModal'
-import { ChordQuickPreview, type ChordQuickPreviewAnchor } from './ChordQuickPreview'
-import { FretboardDiagramModal } from './FretboardDiagramModal'
-import { getChordVoicing, type ChordVoicing } from '../utils/chordDictionary'
 import {
   ArrowLeft,
   Sliders,
@@ -316,11 +314,7 @@ export const StageView: React.FC<StageViewProps> = ({
   const [isToolsOpen, setIsToolsOpen] = useState(false)
   const [isOptionsOpen, setIsOptionsOpen] = useState<boolean>(false)
   const [isKeyPickerOpen, setIsKeyPickerOpen] = useState<boolean>(false)
-  const [selectedVoicing, setSelectedVoicing] = useState<ChordVoicing | null>(null)
-  const [selectedChordName, setSelectedChordName] = useState<string | null>(null)
-  const [previewAnchor, setPreviewAnchor] = useState<ChordQuickPreviewAnchor | null>(null)
-  const [previewVoicing, setPreviewVoicing] = useState<ChordVoicing | null>(null)
-  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
 
   // Overlays / HUD visibility & auto-hide
   const [showStageOverlays, setShowStageOverlays] = useState<boolean>(true)
@@ -344,6 +338,7 @@ export const StageView: React.FC<StageViewProps> = ({
   const fullscreenControllerRef = useRef<ReturnType<typeof createFullscreenController> | null>(null)
 
   // --- Musical Semantics & Parsing ---
+  const diagrams = useChordDiagrams(`${song.id}:${transposeOffset}`, notation !== 'numbers')
   const context = transposeContext(song, transposeOffset)
   const parsed = useMemo(() => parseGtarSong(song.rawContent, transposeOffset), [song.rawContent, transposeOffset])
   const currentKey = context.performanceKey || parsed.key || '—'
@@ -856,7 +851,7 @@ export const StageView: React.FC<StageViewProps> = ({
             Boolean(target.isContentEditable) ||
             target.getAttribute('contenteditable') === 'true')
       )
-      if (isEditable || isOptionsOpen || isKeyPickerOpen || isToolsOpen) {
+      if (e.defaultPrevented || diagrams.isOpen || isEditable || isOptionsOpen || isKeyPickerOpen || isToolsOpen) {
         return
       }
 
@@ -960,6 +955,7 @@ export const StageView: React.FC<StageViewProps> = ({
     canNextSong,
     canPrevSection,
     canNextSection,
+    diagrams.isOpen,
     isOptionsOpen,
     isKeyPickerOpen,
     isToolsOpen,
@@ -1173,6 +1169,9 @@ export const StageView: React.FC<StageViewProps> = ({
                 lineSpacing={lineSpacing}
                 notation={notation}
                 referenceKey={trustworthyKey}
+                onChordClick={diagrams.onChordClick}
+                onChordHover={diagrams.onChordHover}
+                onChordLeave={diagrams.onChordLeave}
               />
             </div>
             <div>
@@ -1185,6 +1184,9 @@ export const StageView: React.FC<StageViewProps> = ({
                 lineSpacing={lineSpacing}
                 notation={notation}
                 referenceKey={trustworthyKey}
+                onChordClick={diagrams.onChordClick}
+                onChordHover={diagrams.onChordHover}
+                onChordLeave={diagrams.onChordLeave}
               />
             </div>
           </div>
@@ -1199,6 +1201,9 @@ export const StageView: React.FC<StageViewProps> = ({
               lineSpacing={lineSpacing}
               notation={notation}
               referenceKey={trustworthyKey}
+                onChordClick={diagrams.onChordClick}
+                onChordHover={diagrams.onChordHover}
+                onChordLeave={diagrams.onChordLeave}
             />
           </div>
         )}
@@ -1446,6 +1451,7 @@ export const StageView: React.FC<StageViewProps> = ({
           onTransposeChange(context.resetOffset)
         }}
       />
+      {diagrams.overlays}
     </div>
   )
 }

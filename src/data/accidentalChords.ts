@@ -84,7 +84,7 @@ export const ACCIDENTAL_CHORD_VOICINGS: ChordVoicing[] = [
   { chord: 'F#', baseFret: 2, frets: [2, 4, 4, 3, 2, 2], fingers: [1, 3, 4, 2, 1, 1], barres: [2] },
   { chord: 'F#m', baseFret: 2, frets: [2, 4, 4, 2, 2, 2], fingers: [1, 3, 4, 1, 1, 1], barres: [2] },
   { chord: 'F#5', baseFret: 2, frets: [2, 4, 4, -1, -1, -1], fingers: [1, 3, 4, 0, 0, 0] },
-  { chord: 'F#6', baseFret: 2, frets: [2, 4, 4, 3, 4, 2], fingers: [1, 2, 3, 1, 4, 1], barres: [2] },
+  { chord: 'F#6', baseFret: 1, frets: [2, -1, 1, 3, 2, -1], fingers: [2, 0, 1, 4, 3, 0] },
   { chord: 'F#m6', baseFret: 1, frets: [2, -1, 1, 2, 2, 2], fingers: [2, 0, 1, 3, 4, 4], barres: [2] },
   { chord: 'F#7', baseFret: 2, frets: [2, 4, 2, 3, 2, 2], fingers: [1, 3, 1, 2, 1, 1], barres: [2] },
   { chord: 'F#maj7', baseFret: 2, frets: [2, 4, 3, 3, 2, 2], fingers: [1, 4, 2, 3, 1, 1], barres: [2] },

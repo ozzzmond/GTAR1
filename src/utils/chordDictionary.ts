@@ -125,6 +125,8 @@ export function normalizeChordForVoicingLookup(chord: string): string[] {
   qual = qual
     .replace(/major/i, 'maj')
     .replace(/minor/i, 'm')
+    .replace(/^M(?=\d)/, 'maj')
+    .replace(/Δ(?=\d)/g, 'maj')
     .replace(/Δ/g, 'maj7')
     .replace(/°/g, 'dim7')
     .replace(/ø/g, 'm7b5')
@@ -132,23 +134,11 @@ export function normalizeChordForVoicingLookup(chord: string): string[] {
   if (qual === 'M' || qual === 'maj') qual = ''
   if (qual === 'min') qual = 'm'
 
-  // Quality candidate variants
-  const qualVariants: string[] = []
-  if (qual === 'sus') {
-    qualVariants.push('sus4', 'sus2')
-  } else if (qual === '2') {
-    qualVariants.push('2', 'add2', 'add9', 'sus2')
-  } else if (qual === 'add2') {
-    qualVariants.push('add2', 'add9', 'sus2')
-  } else if (qual === 'add4') {
-    qualVariants.push('add4', 'add11')
-  } else if (qual === 'add11') {
-    qualVariants.push('add11', 'add4')
-  } else if (qual === 'madd9' || qual === 'm(add9)') {
-    qualVariants.push('madd9', 'm9')
-  } else {
-    qualVariants.push(qual)
-  }
+  // Only aliases with the same pitch identity are safe. Unknown qualities stay unavailable.
+  const qualVariants = qual === 'sus' ? ['sus4']
+    : qual === '2' || qual === 'add2' ? ['add2', 'add9']
+    : qual === 'add4' || qual === 'add11' ? ['add4', 'add11']
+    : [qual]
 
   // Root variants (canonical + enharmonic)
   const rootVariants = [rootCanonical]
@@ -179,10 +169,6 @@ export function normalizeChordForVoicingLookup(chord: string): string[] {
     if (!candidates.includes(c)) candidates.push(c)
   }
 
-  // Priority 1: exact requested string and stripped form
-  add(clean)
-  if (stripped !== clean) add(stripped)
-
   // Priority 2: root/enharmonic + quality variants (+ bass/enharmonics)
   for (const r of rootVariants) {
     for (const q of qualVariants) {
@@ -192,19 +178,6 @@ export function normalizeChordForVoicingLookup(chord: string): string[] {
         }
       } else {
         add(`${r}${q}`)
-      }
-    }
-  }
-
-  // Priority 3: for slash chords with 2/add2/add9/sus, allow fallback to root/bass
-  // Strictly preserving the requested bass note!
-  if (
-    bassVariants.length > 0 &&
-    (qual === '2' || qual === 'add2' || qual === 'add9' || qual === 'sus' || qual === 'sus4')
-  ) {
-    for (const r of rootVariants) {
-      for (const b of bassVariants) {
-        add(`${r}/${b}`)
       }
     }
   }
