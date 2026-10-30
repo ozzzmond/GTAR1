@@ -1,6 +1,7 @@
 import { recoverRestoreSettings, getPendingRestoreJournal, inspectSettingsConflicts, captureSettings, type PendingRestoreJournal, type SettingsConflictInfo } from './utils/restoreSettings'
 import { RecoveryConflictModal } from './components/RecoveryConflictModal'
-import { restoreLibrary, type RestoreMode, type LibraryImage } from './utils/restoreLibrary'
+import { restoreLibraryWithStatus, verifyPendingRestore, loadRecoveryPlan, type RestoreMode, type LibraryImage, type RestoreResult, type RecoveryPlan } from './utils/restoreLibrary'
+import { LibraryRecoveryModal } from './components/LibraryRecoveryModal'
 import type { BackupSettings } from './utils/backupSettings'
 import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import type { SongEntity, WebSetlist, SetlistFolder, ActiveSongState } from './types/gtar'
@@ -168,6 +169,7 @@ export const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [recoveryConflict, setRecoveryConflict] = useState<{ journal: PendingRestoreJournal; conflicts: SettingsConflictInfo[] } | null>(null)
+  const [libraryRecovery, setLibraryRecovery] = useState<{ plan: RecoveryPlan; reason?: string } | null>(null)
 
   // Initial load from isolated IndexedDB
   useEffect(() => {
@@ -182,11 +184,23 @@ export const App: React.FC = () => {
           openRevampDB(),
         ])
         const journal = await getPendingRestoreJournal(db, STORES.RESTORE)
+        let settingsConflict = false
         if (journal) {
           const conflicts = inspectSettingsConflicts(journal, captureSettings())
           if (conflicts.length > 0 && isMounted) {
+            settingsConflict = true
             setRecoveryConflict({ journal, conflicts })
           }
+        }
+        // A restore that committed but was never independently verified offers recovery.
+        if (!settingsConflict && window.navigator.locks) {
+          try {
+            const pending = await verifyPendingRestore()
+            if (pending.needsRecovery) {
+              const plan = await loadRecoveryPlan()
+              if (plan && isMounted) setLibraryRecovery({ plan, reason: pending.reason })
+            }
+          } catch (err) { console.warn('Restore verification check failed; library left unchanged', err) }
         }
         if (isMounted) {
           setSongs(loadedSongs)
@@ -491,15 +505,37 @@ export const App: React.FC = () => {
     mode: RestoreMode, expected: LibraryImage, settings?: BackupSettings
   ) => {
     await setlistSaveQueueRef.current
-    const restored = await restoreLibrary({ songs: importedSongs, setlists: importedSetlists, folders: importedFolders }, mode, expected, settings)
-    setSongs(restored.songs)
-    setSetlists(restored.setlists)
-    setFolders(restored.folders)
+    const result = await restoreLibraryWithStatus({ songs: importedSongs, setlists: importedSetlists, folders: importedFolders }, mode, expected, settings)
+    publishLibrary(result.image)
+    if (result.status === 'COMMITTED_UNVERIFIED') {
+      const plan = await loadRecoveryPlan().catch(() => null)
+      if (plan) setLibraryRecovery({ plan, reason: result.reason })
+    }
+    return result
+  }
+
+  // Publish only data read back from IndexedDB after a completed transaction.
+  const publishLibrary = (image: LibraryImage) => {
+    setSongs(image.songs)
+    setSetlists(image.setlists)
+    setFolders(image.folders)
     setSelectedSong(null)
     setEditingSong(null)
     setStageQueue([])
     setActiveTab('SONGS')
     setCurrentNavTarget({ type: 'ALL_SONGS' })
+  }
+
+  const handleOpenRecovery = async () => {
+    await setlistSaveQueueRef.current
+    const plan = await loadRecoveryPlan()
+    if (!plan) throw new Error('No recovery snapshot is available.')
+    setIsBackupOpen(false)
+    setLibraryRecovery({ plan })
+  }
+
+  const handleRecovered = (result: RestoreResult) => {
+    publishLibrary(result.image)
   }
 
   const handleSelectSong = (song: SongEntity) => {
@@ -918,7 +954,19 @@ export const App: React.FC = () => {
           setlists={setlists}
           folders={folders}
           onImport={handleImport}
+          onOpenRecovery={handleOpenRecovery}
           onClose={() => setIsBackupOpen(false)}
+        />
+      )}
+
+      {/* Library Recovery (undo last restore / unverified restore) */}
+      {libraryRecovery && !recoveryConflict && (
+        <LibraryRecoveryModal
+          plan={libraryRecovery.plan}
+          reason={libraryRecovery.reason}
+          onRecovered={handleRecovered}
+          onReload={async () => { const plan = await loadRecoveryPlan(); setLibraryRecovery(plan ? { plan } : null) }}
+          onClose={() => setLibraryRecovery(null)}
         />
       )}
 
