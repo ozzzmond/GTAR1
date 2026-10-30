@@ -58,7 +58,8 @@ export const RecoveryConflictModal: React.FC<RecoveryConflictModalProps> = ({
     setActionError(null)
     try {
       const db = await openRevampDB()
-      await resolveRestoreConflict(db, STORES.RESTORE, selectedResolution)
+      const currentSettings = Object.fromEntries(conflicts.map(c => [c.key, c.currentValue]));
+      await resolveRestoreConflict(db, STORES.RESTORE, selectedResolution, currentSettings)
       onResolved()
     } catch (err) {
       setActionError((err as Error).message || 'Resolution failed')

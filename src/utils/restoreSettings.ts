@@ -86,78 +86,72 @@ export type RestoreConflictResolution = 'KEEP_CURRENT' | 'RESTORE_PRE_RESTORE' |
 export async function resolveRestoreConflict(
   db: IDBDatabase,
   storeName: string,
-  resolution: RestoreConflictResolution
+  resolution: RestoreConflictResolution,
+  expectedCurrentSettings?: SettingsImage
 ): Promise<void> {
   const execute = async () => {
-    // 1. Snapshot current settings before resolution
     const currentBefore = captureSettings()
+    if (expectedCurrentSettings) {
+      for (const key of Object.keys(expectedCurrentSettings)) {
+        if ((expectedCurrentSettings[key] ?? null) !== (currentBefore[key] ?? null)) {
+          throw new Error("Settings changed in another tab during review. Please review latest conflict state.")
+        }
+      }
+    }
 
-    // 2. Fetch journal and compute target settings to apply
     let journal: PendingRestoreJournal | null = null
     let targetSettings: SettingsImage | null = null
+    let changedSettings = false
 
     await new Promise<void>((resolve, reject) => {
-      try {
-        const tx = db.transaction(storeName, 'readonly')
-        const store = tx.objectStore(storeName)
-        const req = store.get(RESTORE_JOURNAL_KEY)
-        req.onsuccess = () => {
-          journal = (req.result as PendingRestoreJournal) || null
-          resolve()
-        }
-        req.onerror = () => reject(req.error || new Error('Failed to read restore journal for conflict resolution'))
-      } catch (err) {
-        reject(err)
-      }
-    })
-
-    if (!journal) return
-    const activeJournal: PendingRestoreJournal = journal
-
-    if (resolution === 'RESTORE_PRE_RESTORE') {
-      targetSettings = activeJournal.settingsBefore
-    } else if (resolution === 'APPLY_BACKUP') {
-      targetSettings = activeJournal.settingsAfter
-    } else if (resolution === 'KEEP_CURRENT') {
-      targetSettings = currentBefore
-    }
-
-    // 3. Atomically remove the journal record from IndexedDB first.
-    // If this transaction fails or aborts, nothing in localStorage is modified.
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(storeName, 'readwrite', { durability: 'strict' })
+      const tx = db.transaction(storeName, "readwrite", { durability: "strict" })
+      let failure: unknown = null
+      const abort = (err: unknown) => { failure = err; tx.abort() }
       tx.oncomplete = () => resolve()
-      tx.onabort = tx.onerror = () => reject(tx.error || new Error('Failed to commit journal resolution'))
+      tx.onabort = tx.onerror = () => reject(failure || tx.error || new Error("Conflict resolution transaction aborted"))
+
       const store = tx.objectStore(storeName)
-      store.delete(RESTORE_JOURNAL_KEY)
+      const req = store.get(RESTORE_JOURNAL_KEY)
+      req.onsuccess = () => {
+        journal = req.result || null
+        if (!journal) {
+          resolve()
+          return
+        }
+        const activeJournal = journal
+
+        if (resolution === "RESTORE_PRE_RESTORE") {
+          targetSettings = activeJournal.settingsBefore
+        } else if (resolution === "APPLY_BACKUP") {
+          targetSettings = activeJournal.settingsAfter
+        } else if (resolution === "KEEP_CURRENT") {
+          targetSettings = currentBefore
+        }
+
+        try {
+          if (targetSettings && resolution !== "KEEP_CURRENT") {
+            changedSettings = true
+            writeSettings(targetSettings)
+          }
+          store.delete(RESTORE_JOURNAL_KEY)
+        } catch (err) {
+          abort(err)
+        }
+      }
+      req.onerror = () => abort(req.error || new Error("Failed to read restore journal"))
+    }).catch((err) => {
+      if (changedSettings) {
+        try { writeSettings(currentBefore) } catch {}
+      }
+      throw err
     })
 
-    // 4. Transaction committed successfully: now apply chosen settings with rollback guard if write/readback fails
-    if (targetSettings && resolution !== 'KEEP_CURRENT') {
-      try {
-        writeSettings(targetSettings)
-      } catch (err) {
-        // Roll back localStorage to pre-resolution snapshot
-        try { writeSettings(currentBefore) } catch {}
-        // Restore journal in IDB so recovery evidence is not lost
-        try {
-          await new Promise<void>((resolve, reject) => {
-            const tx = db.transaction(storeName, 'readwrite', { durability: 'strict' })
-            tx.oncomplete = () => resolve()
-            tx.onabort = tx.onerror = () => reject(tx.error)
-            tx.objectStore(storeName).put(journal!)
-          })
-        } catch {}
-        throw err
-      }
-    }
-
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       window.dispatchEvent(new Event(SETTINGS_CHANGED))
     }
   }
 
-  if (typeof navigator !== 'undefined' && navigator.locks) {
+  if (typeof navigator !== "undefined" && navigator.locks) {
     return navigator.locks.request(RESTORE_LOCK, execute)
   }
   return execute()

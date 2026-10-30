@@ -306,6 +306,64 @@ test('Real IndexedDB: baseline R1/R2/R6 and adversarial restore verification in 
     await page.getByRole('button', { name: /Apply Resolution & Continue/i }).click();
     await page.getByRole('dialog').waitFor({ state: 'hidden' });
     assert.equal(await page.evaluate(() => localStorage.getItem('gtar_stage_font_size')), '99', 'Retry resolution succeeds and retains musician active settings');
+
+    // Failure safety check 2: localStorage write/quota failure leaves journal in IDB
+    await page.evaluate(async () => {
+      const storage = await import('/src/utils/storage.ts');
+      const settings = await import('/src/utils/restoreSettings.ts');
+      const beforeImg = settings.captureSettings();
+      const afterImg = settings.planSettings(beforeImg, { themeMode: 'crimson-stage' });
+      const db = await storage.openRevampDB();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(storage.STORES.RESTORE, 'readwrite');
+        tx.objectStore(storage.STORES.RESTORE).put({ id: 'pending-restore', settingsBefore: beforeImg, settingsAfter: afterImg });
+        tx.oncomplete = resolve;
+        tx.onerror = reject;
+      });
+      storage.closeRevampDB();
+      localStorage.setItem('gtar_stage_font_size', '77');
+    });
+    await page.reload();
+    await page.getByRole('dialog').waitFor({ state: 'visible' });
+
+    // Inject localStorage write failure during settings application
+    await page.evaluate(() => {
+      window.originalSetItem = Storage.prototype.setItem;
+      let failedOnce = false;
+      Storage.prototype.setItem = function(key, val) {
+        if (!failedOnce && key.startsWith('gtar')) {
+          failedOnce = true;
+          throw new DOMException('Injected quota error during resolution', 'QuotaExceededError');
+        }
+        return window.originalSetItem.call(this, key, val);
+      };
+    });
+
+    await page.getByLabel(/Apply interrupted backup settings/i).check();
+    await page.getByRole('button', { name: /Apply Resolution & Continue/i }).click();
+    await page.waitForFunction(() => document.body.innerText.includes('Resolution failed') || document.body.innerText.includes('Injected quota error'));
+
+    // Journal MUST still be present in IndexedDB (never lost when write fails)
+    const journalAfterWriteFail = await page.evaluate(async () => {
+      const storage = await import('/src/utils/storage.ts');
+      const settings = await import('/src/utils/restoreSettings.ts');
+      const db = await storage.openRevampDB();
+      const j = await settings.getPendingRestoreJournal(db, storage.STORES.RESTORE);
+      storage.closeRevampDB();
+      return j;
+    });
+    assert.ok(journalAfterWriteFail !== null, 'Journal preserved in IDB after localStorage write failure');
+
+    // Restore setItem and test concurrent cross-tab race guard
+    await page.evaluate(() => {
+      Storage.prototype.setItem = window.originalSetItem;
+      // Simulate another tab modifying settings during conflict review
+      localStorage.setItem('gtar_stage_font_size', '88');
+    });
+
+    await page.getByRole('button', { name: /Apply Resolution & Continue/i }).click();
+    await page.waitForFunction(() => document.body.innerText.includes('Settings changed in another tab'));
+    assert.equal(await page.evaluate(() => localStorage.getItem('gtar_stage_font_size')), '88', 'Newer cross-tab edit 88 protected from stale conflict overwrite');
     t.diagnostic('A12 real modal preview/cancel settings unchanged; failed restore publishes no UI; successful restore publishes committed library')
     await context.close()
   } finally { if (browser) await browser.close(); await server.close() }
