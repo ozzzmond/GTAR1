@@ -16,6 +16,7 @@ import {
   X,
   Layers,
   ArrowRight,
+  Globe,
 } from 'lucide-react'
 import { validateFolderParentChange } from '../utils/folders'
 
@@ -38,6 +39,7 @@ export interface ExplorerNavigationProps {
   onDeleteFolder: (folderId: string) => Promise<void>
   onNewSong: () => void
   onNewSetlist: () => void
+  onOpenSources?: () => void
   onSelectSetlist?: (setlistId: string) => void
   onCloseMobileDrawer?: () => void
 }
@@ -53,6 +55,7 @@ export const ExplorerNavigation: React.FC<ExplorerNavigationProps> = ({
   onDeleteFolder,
   onNewSong,
   onNewSetlist,
+  onOpenSources,
   onSelectSetlist,
   onCloseMobileDrawer,
 }) => {
@@ -495,6 +498,7 @@ export const ExplorerNavigation: React.FC<ExplorerNavigationProps> = ({
                 <Music className="w-4 h-4 text-app-action" />
                 <span>All Songs</span>
               </div>
+
               <span
                 className={`text-[10px] px-1.5 py-0.2 rounded-full ${
                   isSelected({ type: 'ALL_SONGS' })
@@ -505,6 +509,23 @@ export const ExplorerNavigation: React.FC<ExplorerNavigationProps> = ({
                 {songs.length}
               </span>
             </div>
+
+            {/* Browse External Song Sources Entry */}
+            {onOpenSources && (
+              <div
+                onClick={() => {
+                  onOpenSources()
+                  onCloseMobileDrawer?.()
+                }}
+                className="flex items-center justify-between px-2.5 py-1.5 rounded-lg cursor-pointer text-xs transition-colors hover:bg-app-surface/60 text-app-text"
+              >
+                <div className="flex items-center gap-2">
+                  <Globe className="w-4 h-4 text-app-action" />
+                  <span>Browse Sources</span>
+                </div>
+                <span className="text-[10px] text-app-muted">External</span>
+              </div>
+            )}
 
             {/* Tags Sub-header */}
             <div className="pt-2">
