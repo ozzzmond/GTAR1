@@ -11,7 +11,7 @@
  */
 
 import { generateUUID } from './uuid'
-import { SONG_SOURCE_PROVIDERS, resolveSongSourceProvider } from './songSourceProviders'
+import { SONG_SOURCE_PROVIDERS, resolveSongSourceProvider, getExternalSongSearch } from './songSourceProviders'
 export * from './songSourceRetrieval'
 
 export interface SongSource {
@@ -128,6 +128,21 @@ export function openExternalSongSource(rawUrl: string): { success: boolean; url?
   }
 
   return { success: true, url: check.url }
+}
+
+/** User-triggered website navigation only; never fetch provider content. */
+export function searchOnlineSongSource(providerId: string, query: string): { success: boolean; message: string } {
+  const target = getExternalSongSearch(providerId, query)
+  if (!target.success) return { success: false, message: target.error }
+  if (navigator.onLine === false) return { success: false, message: 'You are offline. Connect to search online; your query is kept.' }
+  try {
+    const result = openExternalSongSource(target.url)
+    if (!result.success) return { success: false, message: result.error || 'Could not open the source website.' }
+    const provider = resolveSongSourceProvider(providerId)
+    return { success: true, message: target.homepageFallback
+      ? `Opening ${provider.name} website. Search or browse there; your query is kept here.`
+      : `Opening ${provider.name} search in a new tab.` }
+  } catch { return { success: false, message: 'Could not open the source website. Check browser popup settings.' } }
 }
 
 /**

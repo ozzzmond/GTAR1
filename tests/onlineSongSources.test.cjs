@@ -69,7 +69,7 @@ const {
   getHostnameFallback,
 } = require('../src/utils/songSources.ts')
 const { SONG_SOURCE_PROVIDERS, getExternalSongSearch, DEFAULT_SONG_SOURCE_PROVIDER } = require('../src/utils/songSourceProviders.ts')
-const { loadSongSourceProvider, saveSongSourceProvider, SONG_SOURCE_PROVIDER_KEY } = require('../src/utils/songSources.ts')
+const { loadSongSourceProvider, saveSongSourceProvider, SONG_SOURCE_PROVIDER_KEY, searchOnlineSongSource } = require('../src/utils/songSources.ts')
 const { BrowseSongSourcesModal } = require('../src/components/BrowseSongSourcesModal.tsx')
 const { Header } = require('../src/components/Header.tsx')
 const { SongbookHomeView } = require('../src/components/SongbookHomeView.tsx')
@@ -137,82 +137,66 @@ test('provider preference: clean default, stale IDs, isolated setting and denied
   } finally { mockLocalStorage.getItem = get; mockLocalStorage.setItem = set }
 })
 
-test('online search UI: preserve query, persist provider, safe submit, fallback, offline and import boundary', async () => {
+test('Sources manages shared provider preference and manual imports without a second query input', async () => {
   mockLocalStorage.clear()
   lastWindowOpened = null
-  Object.defineProperty(global.navigator, 'onLine', { configurable: true, value: true })
   const container = document.createElement('div')
   document.body.appendChild(container)
   let root = createRoot(container)
   const render = async () => act(async () => root.render(React.createElement(BrowseSongSourcesModal, {isOpen:true, onClose:()=>{}})))
   await render()
   const select = () => container.querySelector('#online-source-provider')
-  const input = () => container.querySelector('#online-source-query')
-  const form = () => input().closest('form')
   const changeProvider = async id => act(async () => {
     select().value = id
     select().dispatchEvent(new window.Event('change', {bubbles:true}))
   })
-  const submit = async () => act(async () => form().dispatchEvent(new window.Event('submit', {bubbles:true,cancelable:true})))
   assert.equal(select().value, 'ultimate_guitar')
   assert.equal(select().options.length, 4)
-  assert.equal(Array.from(container.querySelectorAll('button')).filter(b => b.textContent.trim() === 'Manual import').length, 4)
-  assert.equal(container.querySelectorAll('[title^="Import from"]').length, 0)
-  assert.equal(lastWindowOpened, null, 'Opening Sources must not navigate')
-  await submit()
-  assert.match(container.querySelector('#online-source-error').textContent, /Enter a song or artist/)
+  assert.equal(container.querySelector('#online-source-query'), null)
   assert.equal(lastWindowOpened, null)
-  const query = 'Amazing Grace & John Newton'
-  await act(async () => setInputValue(input(), query))
   await changeProvider('chordie')
-  assert.equal(input().value, query)
   assert.equal(loadSongSourceProvider(), 'chordie')
-  await submit()
-  assert.equal(new URL(lastWindowOpened.url).searchParams.get('q'), query)
-  assert.equal(new URL(lastWindowOpened.url).hostname, 'www.chordie.com')
-  assert.equal(lastWindowOpened.target, '_blank')
-  assert.equal(lastWindowOpened.features, 'noopener,noreferrer')
-  assert.equal(lastWindowOpened.opener, null)
-  assert.match(container.textContent, /Opening Chordie search in a new tab/)
-  assert.doesNotMatch(mockLocalStorage.getItem(SONG_SOURCE_PROVIDER_KEY), /Amazing/)
-  for (const id of ['songselect', 'opmtunes']) {
-    await changeProvider(id)
-    assert.equal(input().value, query)
-    assert.match(container.textContent, /Direct search link unavailable/)
-    await submit()
-    assert.equal(lastWindowOpened.url, new URL(SONG_SOURCE_PROVIDERS.find(p => p.id === id).homepageUrl).href)
-    assert.match(container.textContent, /search or browse on its website/)
-  }
-  Object.defineProperty(global.navigator, 'onLine', { configurable: true, value: false })
-  await act(async () => window.dispatchEvent(new window.Event('offline')))
-  lastWindowOpened = null
-  await submit()
-  assert.equal(lastWindowOpened, null)
-  assert.match(container.querySelector('#online-source-error').textContent, /offline.*query is kept/)
-  assert.equal(input().value, query)
-  Object.defineProperty(global.navigator, 'onLine', { configurable: true, value: true })
-  await act(async () => window.dispatchEvent(new window.Event('online')))
+  await changeProvider('songselect')
+  assert.match(container.textContent, /Direct search link unavailable/)
   const set = mockLocalStorage.setItem
   try {
     mockLocalStorage.setItem = () => { throw new Error('PRIVATE_STORAGE') }
     await changeProvider('ultimate_guitar')
-    assert.equal(input().value, query)
     assert.match(container.textContent, /Provider changed for this visit/)
     assert.doesNotMatch(container.textContent, /PRIVATE_STORAGE/)
-    await submit()
-    assert.equal(new URL(lastWindowOpened.url).searchParams.get('value'), query)
+    assert.equal(select().value, 'ultimate_guitar')
   } finally { mockLocalStorage.setItem = set }
   const importLink = Array.from(container.querySelectorAll('button')).find(b => b.textContent === 'Import & Preview')
   await act(async () => importLink.click())
   assert.ok(container.querySelector('#import-raw-text-input'))
   await act(async () => container.querySelector('#sources-tab-browse').click())
-  assert.equal(input().value, query, 'Import tab switch preserves query')
   await changeProvider('chordie')
   await act(async () => root.unmount())
   root = createRoot(container)
   await render()
-  assert.equal(select().value, 'chordie', 'A new mount reads the saved provider')
-  assert.equal(input().value, '', 'Search text is never persisted')
+  assert.equal(select().value, 'chordie')
   await act(async () => root.unmount())
   container.remove()
+})
+
+test('shared online action validates before navigation and reports offline or denied navigation safely', () => {
+  Object.defineProperty(global.navigator, 'onLine', { configurable:true, value:true })
+  lastWindowOpened = null
+  assert.equal(searchOnlineSongSource('ultimate_guitar', '  ').success, false)
+  assert.equal(lastWindowOpened, null)
+  Object.defineProperty(global.navigator, 'onLine', { configurable:true, value:false })
+  assert.match(searchOnlineSongSource('chordie', 'Amazing Grace').message, /offline/)
+  assert.equal(lastWindowOpened, null)
+  Object.defineProperty(global.navigator, 'onLine', { configurable:true, value:true })
+  assert.equal(searchOnlineSongSource('ultimate_guitar', 'Amazing Grace').success, true)
+  assert.equal(new URL(lastWindowOpened.url).searchParams.get('value'), 'Amazing Grace')
+  assert.equal(lastWindowOpened.features, 'noopener,noreferrer')
+  const open = window.open
+  try {
+    window.open = () => { throw new Error('PRIVATE_POPUP') }
+    const result = searchOnlineSongSource('chordie', 'Amazing Grace')
+    assert.equal(result.success, false)
+    assert.match(result.message, /popup settings/)
+    assert.doesNotMatch(result.message, /PRIVATE_POPUP/)
+  } finally { window.open = open }
 })

@@ -18,7 +18,6 @@ import {
   Copy,
   RefreshCw,
   Eye,
-  Search,
 } from 'lucide-react'
 import {
   type SongSource,
@@ -26,8 +25,6 @@ import {
   validateAndNormalizeWebsiteUrl,
   openExternalSongSource,
   loadCustomSongSources,
-  loadSongSourceProvider,
-  saveSongSourceProvider,
   saveCustomSongSources,
   getHostnameFallback,
   getProviderForUrl,
@@ -37,7 +34,8 @@ import {
   type SourceProviderMetadata,
   MAX_IMPORT_BYTES,
 } from '../utils/songSources'
-import { SONG_SOURCE_PROVIDERS, MAX_SOURCE_QUERY_LENGTH, getExternalSongSearch, resolveSongSourceProvider } from '../utils/songSourceProviders'
+import { useSongSourceProvider } from '../hooks/useSongSourceProvider'
+import { SONG_SOURCE_PROVIDERS } from '../utils/songSourceProviders'
 import { syncCanonicalDirectives } from '../utils/chordProMetadata'
 import { parseChordProLine } from '../utils/songParser'
 import { generateUUID } from '../utils/uuid'
@@ -51,6 +49,7 @@ export interface BrowseSongSourcesModalProps {
   songs?: SongEntity[]
   onSelectSong?: (song: SongEntity) => void
   initialTab?: 'browse' | 'import'
+  onSearchOnline?: () => void
 }
 
 const SAMPLE_CHORDPRO = `{title: Amazing Grace}
@@ -72,13 +71,9 @@ export const BrowseSongSourcesModal: React.FC<BrowseSongSourcesModalProps> = ({
   songs = [],
   onSelectSong,
   initialTab = 'browse',
+  onSearchOnline,
 }) => {
-  const [providerId, setProviderId] = useState(loadSongSourceProvider)
-  const [onlineQuery, setOnlineQuery] = useState('')
-  const [searchError, setSearchError] = useState<string | null>(null)
-  const [searchStatus, setSearchStatus] = useState('')
-  const [preferenceNotice, setPreferenceNotice] = useState('')
-  const provider = resolveSongSourceProvider(providerId)
+  const { provider, selectProvider, preferenceNotice } = useSongSourceProvider()
   const [online, setOnline] = useState(() => navigator.onLine !== false)
   const [activeTab, setActiveTab] = useState<'browse' | 'import'>(initialTab)
 
@@ -139,10 +134,6 @@ export const BrowseSongSourcesModal: React.FC<BrowseSongSourcesModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setCustomSources(loadCustomSongSources())
-      setProviderId(loadSongSourceProvider())
-      setSearchError(null)
-      setSearchStatus('')
-      setPreferenceNotice('')
       setDirectUrl('')
       setDirectUrlError(null)
       setShowForm(false)
@@ -208,23 +199,6 @@ export const BrowseSongSourcesModal: React.FC<BrowseSongSourcesModalProps> = ({
     setTimeout(() => {
       setToastMessage((prev) => (prev === msg ? null : prev))
     }, 3200)
-  }
-
-  const handleOnlineSearch = (event: React.FormEvent) => {
-    event.preventDefault()
-    setSearchError(null)
-    setSearchStatus('')
-    const target = getExternalSongSearch(provider.id, onlineQuery)
-    if (!target.success) { setSearchError(target.error); return }
-    if (!online || navigator.onLine === false) {
-      setSearchError('You are offline. Connect to search online; your query is kept.')
-      return
-    }
-    const result = openExternalSongSource(target.url)
-    if (!result.success) { setSearchError(result.error || 'Could not open the source website.'); return }
-    setSearchStatus(target.homepageFallback
-      ? `Opening ${provider.name}. A direct search link is unavailable; search or browse on its website. Your query is kept here.`
-      : `Opening ${provider.name} search in a new tab.`)
   }
 
   // --- Phase A Handlers ---
@@ -592,40 +566,17 @@ export const BrowseSongSourcesModal: React.FC<BrowseSongSourcesModalProps> = ({
           {/* ==================== TAB 1: BROWSE WEBSITES ==================== */}
           {activeTab === 'browse' && (
             <div id="sources-tabpanel-browse" role="tabpanel" aria-labelledby="sources-tab-browse" className="space-y-5">
-              <section aria-labelledby="public-search-heading" className="rounded-xl border border-app-border bg-app-base p-4 space-y-3">
-                <h3 id="public-search-heading" className="text-sm font-bold text-app-heading">Search Online Songs</h3>
-                <form onSubmit={handleOnlineSearch} className="space-y-2">
-                  <div className="grid grid-cols-1 sm:grid-cols-[11rem_minmax(0,1fr)] gap-2">
-                    <div className="space-y-1">
-                      <label htmlFor="online-source-provider" className="block text-xs font-semibold text-app-heading">Provider</label>
-                      <select id="online-source-provider" value={provider.id} onChange={event => {
-                        const id = event.target.value
-                        setProviderId(id)
-                        setSearchError(null)
-                        setSearchStatus('')
-                        setPreferenceNotice(saveSongSourceProvider(id) ? '' : 'Provider changed for this visit. Browser storage is unavailable.')
-                      }} className="min-h-[44px] w-full rounded-xl border border-app-border bg-app-surface px-3 text-xs text-app-text focus:outline-none focus:border-app-action">
-                        {SONG_SOURCE_PROVIDERS.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-                      </select>
-                    </div>
-                    <div className="space-y-1">
-                      <label htmlFor="online-source-query" className="block text-xs font-semibold text-app-heading">Song or artist</label>
-                      <div className="flex gap-2">
-                        <input id="online-source-query" type="search" value={onlineQuery} maxLength={MAX_SOURCE_QUERY_LENGTH}
-                          onChange={event => { setOnlineQuery(event.target.value); setSearchError(null); setSearchStatus('') }}
-                          placeholder="Song title or artist" aria-invalid={!!searchError} aria-describedby={searchError ? 'online-source-error' : 'online-source-help'}
-                          className="min-h-[44px] min-w-0 flex-1 rounded-xl border border-app-border bg-app-surface px-3 text-xs text-app-text focus:outline-none focus:border-app-action" />
-                        <button type="submit" className="min-h-[44px] shrink-0 rounded-xl bg-app-action px-3 text-xs font-bold text-app-on-action flex items-center gap-1.5 hover:brightness-110">
-                          <Search className="w-3.5 h-3.5" /><span>Search</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                  {searchError && <p id="online-source-error" role="alert" className="text-xs text-red-400">{searchError}</p>}
-                </form>
-                <p id="online-source-help" className="text-xs text-app-muted">Search opens the selected website in a new tab. {provider.capabilities.externalSearch ? '' : 'Direct search link unavailable; opens its homepage instead. '}
-                  Import charts you own or have permission to use with <button type="button" onClick={() => setActiveTab('import')} className="underline text-app-action">Import &amp; Preview</button> to keep them local and available offline. Keep source and author attribution.</p>
-                <p role="status" className="text-xs text-app-muted">{online ? searchStatus : 'You are offline. Local Songbook, Stage, and paste or file import remain available.'}</p>
+              <section aria-labelledby="public-search-heading" className="rounded-xl border border-app-border bg-app-base p-4 space-y-2">
+                <h3 id="public-search-heading" className="text-sm font-bold text-app-heading">Online provider</h3>
+                <label htmlFor="online-source-provider" className="sr-only">Provider</label>
+                <select id="online-source-provider" value={provider.id} onChange={event => selectProvider(event.target.value)}
+                  className="min-h-[44px] w-full rounded-xl border border-app-border bg-app-surface px-3 text-xs text-app-text focus-visible:outline-2 focus-visible:outline-app-action">
+                  {SONG_SOURCE_PROVIDERS.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+                </select>
+                <p className="text-xs text-app-muted">Use Online Sources in the header search. {provider.capabilities.externalSearch ? 'Results open on the provider website.' : 'Direct search link unavailable; opens its homepage instead.'}</p>
+                {onSearchOnline && <button type="button" onClick={onSearchOnline} className="min-h-[44px] rounded-xl border border-app-border px-3 text-xs font-semibold text-app-action">Use header search</button>}
+                <p className="text-xs text-app-muted">Import charts you own or have permission to use with <button type="button" onClick={() => setActiveTab('import')} className="underline text-app-action">Import &amp; Preview</button> to keep them local and available offline. Keep source and author attribution.</p>
+                {!online && <p role="status" className="text-xs text-app-muted">You are offline. Local Songbook, Stage, and paste or file import remain available.</p>}
                 {preferenceNotice && <p role="status" className="text-xs text-app-muted">{preferenceNotice}</p>}
               </section>
               {/* Section 1: Direct URL Entry */}
