@@ -1,4 +1,5 @@
-import { recoverRestoreSettings } from './utils/restoreSettings'
+import { recoverRestoreSettings, getPendingRestoreJournal, inspectSettingsConflicts, captureSettings, type PendingRestoreJournal, type SettingsConflictInfo } from './utils/restoreSettings'
+import { RecoveryConflictModal } from './components/RecoveryConflictModal'
 import { restoreLibrary, type RestoreMode, type LibraryImage } from './utils/restoreLibrary'
 import type { BackupSettings } from './utils/backupSettings'
 import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
@@ -157,6 +158,7 @@ export const App: React.FC = () => {
   // Initialization State
   const [isLoading, setIsLoading] = useState<boolean>(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [recoveryConflict, setRecoveryConflict] = useState<{ journal: PendingRestoreJournal; conflicts: SettingsConflictInfo[] } | null>(null)
 
   // Initial load from isolated IndexedDB
   useEffect(() => {
@@ -164,11 +166,19 @@ export const App: React.FC = () => {
 
     async function initStorage() {
       try {
-        const [loadedSongs, loadedSetlists, loadedFolders] = await Promise.all([
+        const [loadedSongs, loadedSetlists, loadedFolders, db] = await Promise.all([
           loadAllSongs(),
           loadAllSetlists(),
           loadAllFolders(),
+          openRevampDB(),
         ])
+        const journal = await getPendingRestoreJournal(db, STORES.RESTORE)
+        if (journal) {
+          const conflicts = inspectSettingsConflicts(journal, captureSettings())
+          if (conflicts.length > 0 && isMounted) {
+            setRecoveryConflict({ journal, conflicts })
+          }
+        }
         if (isMounted) {
           setSongs(loadedSongs)
           setSetlists(loadedSetlists)
@@ -876,6 +886,19 @@ export const App: React.FC = () => {
           profile={userProfile}
           onSaveProfile={(updated) => setUserProfile(updated)}
           onClose={() => setIsProfileOpen(false)}
+        />
+      )}
+
+      {/* Recovery Conflict Modal */}
+      {recoveryConflict && (
+        <RecoveryConflictModal
+          journal={recoveryConflict.journal}
+          conflicts={recoveryConflict.conflicts}
+          songs={songs}
+          setlists={setlists}
+          folders={folders}
+          onResolved={() => setRecoveryConflict(null)}
+          onDismiss={() => setRecoveryConflict(null)}
         />
       )}
 
