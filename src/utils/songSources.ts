@@ -11,6 +11,7 @@
  */
 
 import { generateUUID } from './uuid'
+export * from './songSourceRetrieval'
 
 export interface SongSource {
   id: string
