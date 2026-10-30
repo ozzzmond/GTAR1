@@ -74,14 +74,14 @@ export const Header: React.FC<HeaderProps> = ({
   }, [])
 
   return (
-    <header className="bg-slate-900 border-b border-slate-800 sticky top-0 z-40 px-3 py-2.5">
+    <header className="bg-app-header border-b border-app-border sticky top-0 z-40 px-3 py-2.5">
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 sm:gap-4">
         {/* Left: Mobile Drawer Toggle & App Branding */}
         <div className="flex items-center gap-2 sm:gap-3">
           <button
             type="button"
             onClick={onToggleMobileDrawer}
-            className="md:hidden p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="md:hidden p-1.5 rounded-lg header-neutral-icon hover:text-app-heading hover:bg-app-base transition-colors"
             aria-label={isMobileDrawerOpen ? 'Close explorer menu' : 'Open explorer menu'}
           >
             {isMobileDrawerOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -95,10 +95,10 @@ export const Header: React.FC<HeaderProps> = ({
               G
             </div>
             <div className="hidden sm:block">
-              <span className="text-base font-extrabold text-white tracking-tight group-hover:text-sky-300 transition-colors">
+              <span className="text-base font-extrabold header-primary-text tracking-tight group-hover:text-app-link transition-colors">
                 GTAR
               </span>
-              <span className="text-[10px] text-slate-400 font-mono ml-2">
+              <span className="text-[10px] header-secondary-text font-mono ml-2">
                 {GTAR1_VERSION}
               </span>
             </div>
@@ -114,7 +114,7 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Center: Search Box */}
         <div className="flex-1 max-w-md mx-1 sm:mx-2">
           <div className="relative flex items-center">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 pointer-events-none" />
+            <Search className="w-4 h-4 header-neutral-icon absolute left-3 pointer-events-none" />
             <input
               ref={searchInputRef}
               type="text"
@@ -124,14 +124,14 @@ export const Header: React.FC<HeaderProps> = ({
               onFocus={() => setIsSearchActive(true)}
               onBlur={() => setIsSearchActive(false)}
               placeholder={`Search ${searchScopeLabel}... (Esc to clear)`}
-              className="w-full pl-9 pr-8 py-1.5 rounded-xl bg-slate-800/90 border border-slate-700/80 text-xs text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors"
+              className="header-search-input w-full pl-9 pr-8 py-1.5 rounded-xl bg-app-surface border border-app-border text-xs text-app-text placeholder:text-app-muted focus:outline-none focus:border-app-accent focus:ring-1 focus:ring-app-accent transition-colors"
             />
             {searchQuery && (
               <button
                 type="button"
                 onClick={() => onSearchChange('')}
                 aria-label="Clear search query"
-                className="absolute right-2.5 p-0.5 text-slate-400 hover:text-white rounded"
+                className="absolute right-2.5 p-0.5 header-neutral-icon hover:text-app-heading rounded"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -142,13 +142,13 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Right Actions */}
         <div className="flex items-center gap-1.5 sm:gap-2">
           {/* Main Views Switcher */}
-          <nav aria-label="Main navigation" className="hidden sm:flex items-center bg-slate-800/80 p-0.5 rounded-xl border border-slate-700/80 text-xs font-semibold">
+          <nav aria-label="Main navigation" className="hidden sm:flex items-center bg-app-surface/80 p-0.5 rounded-xl border border-app-border text-xs font-semibold">
             <button
               onClick={() => setActiveTab('SONGS')}
               className={`px-3 py-1 rounded-lg transition-colors flex items-center gap-1.5 ${
                 activeTab === 'SONGS'
-                  ? 'bg-sky-600 text-white shadow-sm'
-                  : 'text-slate-300 hover:text-white'
+                  ? 'bg-app-action text-app-on-action shadow-sm'
+                  : 'text-app-muted hover:text-app-heading'
               }`}
             >
               <Music className="w-3.5 h-3.5" />
@@ -158,8 +158,8 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={() => setActiveTab('SETLISTS')}
               className={`px-3 py-1 rounded-lg transition-colors flex items-center gap-1.5 ${
                 activeTab === 'SETLISTS'
-                  ? 'bg-sky-600 text-white shadow-sm'
-                  : 'text-slate-300 hover:text-white'
+                  ? 'bg-app-action text-app-on-action shadow-sm'
+                  : 'text-app-muted hover:text-app-heading'
               }`}
             >
               <ListMusic className="w-3.5 h-3.5" />
@@ -170,7 +170,7 @@ export const Header: React.FC<HeaderProps> = ({
           {/* New Song Button */}
           <button
             onClick={onNewSong}
-            className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-semibold text-xs transition-colors shadow-sm flex items-center gap-1"
+            className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-app-action hover:brightness-110 text-app-on-action font-semibold text-xs transition-colors shadow-sm flex items-center gap-1"
           >
             <Plus className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">New Song</span>
@@ -181,9 +181,9 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={onOpenBackup}
             title="Backup & Restore (Local JSON)"
             aria-label="Backup and Restore"
-            className="px-2 sm:px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white text-xs font-medium transition-colors flex items-center gap-1"
+            className="ui-button px-2 sm:px-2.5 py-1.5 rounded-xl bg-app-button hover:brightness-110 border border-app-border text-app-button-text text-xs font-medium transition-colors flex items-center gap-1"
           >
-            <Database className="w-3.5 h-3.5 text-sky-400" />
+            <Database className="w-3.5 h-3.5 text-app-accent" />
             <span className="hidden md:inline">Backup</span>
           </button>
 
@@ -193,7 +193,7 @@ export const Header: React.FC<HeaderProps> = ({
               type="button"
               onClick={() => setShowAvatarMenu(!showAvatarMenu)}
               aria-label={`Musician Profile: ${userProfile.displayName}`}
-              className="w-8 h-8 rounded-full border-2 border-slate-700 hover:border-sky-400 transition-colors overflow-hidden flex items-center justify-center bg-slate-800 focus:outline-none"
+              className="w-8 h-8 rounded-full border-2 border-app-border hover:border-app-action transition-colors overflow-hidden flex items-center justify-center bg-app-surface focus:outline-none"
             >
               {userProfile.avatarBase64 ? (
                 <img
@@ -210,9 +210,9 @@ export const Header: React.FC<HeaderProps> = ({
 
             {/* Avatar Dropdown Menu */}
             {showAvatarMenu && (
-              <div className="absolute right-0 mt-2 w-56 bg-slate-800 border border-slate-700 rounded-2xl p-2 shadow-2xl z-50 animate-scale-in text-xs">
-                <div className="px-3 py-2 border-b border-slate-750 flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-full bg-slate-700 border border-slate-600 flex items-center justify-center text-sky-300 font-extrabold text-xs overflow-hidden shrink-0">
+              <div className="absolute right-0 mt-2 w-56 bg-app-surface border border-app-border rounded-2xl p-2 shadow-2xl z-50 animate-scale-in text-xs text-app-text">
+                <div className="px-3 py-2 border-b border-app-border flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-full bg-app-base border border-app-border flex items-center justify-center text-app-action font-extrabold text-xs overflow-hidden shrink-0">
                     {userProfile.avatarBase64 ? (
                       <img
                         src={userProfile.avatarBase64}
@@ -224,7 +224,7 @@ export const Header: React.FC<HeaderProps> = ({
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="font-bold text-white truncate">
+                    <div className="font-bold text-app-heading truncate">
                       {userProfile.displayName}
                     </div>
                     <div className="text-[10px] text-emerald-400 flex items-center gap-1 font-medium">
@@ -241,9 +241,9 @@ export const Header: React.FC<HeaderProps> = ({
                       setShowAvatarMenu(false)
                       onOpenProfile()
                     }}
-                    className="w-full px-3 py-2 rounded-xl text-left hover:bg-slate-700/70 text-slate-200 flex items-center gap-2 transition-colors font-medium"
+                    className="w-full px-3 py-2 rounded-xl text-left hover:bg-app-base text-app-text flex items-center gap-2 transition-colors font-medium"
                   >
-                    <User className="w-3.5 h-3.5 text-sky-400" />
+                    <User className="w-3.5 h-3.5 text-app-action" />
                     <span>Edit Local Profile</span>
                   </button>
 
@@ -253,9 +253,9 @@ export const Header: React.FC<HeaderProps> = ({
                       setShowAvatarMenu(false)
                       onOpenBackup()
                     }}
-                    className="w-full px-3 py-2 rounded-xl text-left hover:bg-slate-700/70 text-slate-200 flex items-center gap-2 transition-colors font-medium"
+                    className="w-full px-3 py-2 rounded-xl text-left hover:bg-app-base text-app-text flex items-center gap-2 transition-colors font-medium"
                   >
-                    <Database className="w-3.5 h-3.5 text-sky-400" />
+                    <Database className="w-3.5 h-3.5 text-app-action" />
                     <span>Backup &amp; Restore</span>
                   </button>
 
@@ -267,15 +267,15 @@ export const Header: React.FC<HeaderProps> = ({
                         setShowAvatarMenu(false)
                         onOpenTheme()
                       }}
-                      className="w-full px-3 py-2 rounded-xl text-left hover:bg-slate-700/70 text-slate-200 flex items-center gap-2 transition-colors font-medium"
+                      className="w-full px-3 py-2 rounded-xl text-left hover:bg-app-base text-app-text flex items-center gap-2 transition-colors font-medium"
                     >
-                      <Palette className="w-3.5 h-3.5 text-sky-400" />
+                      <Palette className="w-3.5 h-3.5 text-app-action" />
                       <span>Stage &amp; Color Theme</span>
                     </button>
                   )}
                 </div>
 
-                <div className="pt-1 border-t border-slate-700/60 px-3 py-1.5 text-[10px] text-slate-400">
+                <div className="pt-1 border-t border-app-border px-3 py-1.5 text-[10px] text-app-muted">
                   GTAR1 Standalone Core • Zero Cloud Sync
                 </div>
               </div>

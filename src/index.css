@@ -166,16 +166,40 @@ body.theme-custom {
 }
 
 /* Explicit chrome roles avoid recoloring menus nested under the header. */
-body.theme-custom header { background-color: var(--custom-chrome-header-bg) !important; }
+body.theme-custom header {
+  background-color: var(--custom-chrome-header-bg) !important;
+  border-bottom-color: var(--custom-card-border, #2A3644) !important;
+}
+
+body.theme-custom .ui-filter-bar {
+  background-color: var(--custom-chrome-filter-bg) !important;
+  border-bottom-color: var(--custom-card-border, #2A3644) !important;
+}
+
+body.theme-custom .ui-explorer-nav {
+  background-color: var(--custom-chrome-toolbar-bg) !important;
+  border-right-color: var(--custom-card-border, #2A3644) !important;
+}
+
+body.theme-custom [data-explorer-canvas="true"],
+body.theme-custom .explorer-canvas {
+  background-color: var(--custom-stage-bg, #121820) !important;
+}
+
 /* 2. APP CHROME: Search Bar & Search Border */
-body.theme-custom .pill-search {
+body.theme-custom .pill-search,
+body.theme-custom header input[type="text"],
+body.theme-custom .header-search-input {
   background-color: var(--custom-chrome-search-bg, var(--custom-stage-bg, #121820)) !important;
   border-color: var(--custom-chrome-search-border, var(--custom-stage-border, #2A3644)) !important;
+  color: var(--custom-control-input-text, #F1F5F9) !important;
 }
 body.theme-custom .pill-search input {
   color: var(--custom-control-input-text, #F1F5F9) !important;
 }
-body.theme-custom .pill-search input::placeholder {
+body.theme-custom .pill-search input::placeholder,
+body.theme-custom header input[type="text"]::placeholder,
+body.theme-custom .header-search-input::placeholder {
   color: var(--custom-chrome-icon, #94A3B8) !important;
   opacity: 0.7;
 }
@@ -197,8 +221,14 @@ body.theme-custom .toolbar-icon-btn .active-dot {
 }
 
 /* Explicit card surfaces; selected states have their own paired tokens. */
-body.theme-custom .ui-song-card { background-color: var(--custom-card-song-bg) !important; }
-body.theme-custom .ui-setlist-card { background-color: var(--custom-card-setlist-bg) !important; }
+body.theme-custom .ui-song-card {
+  background-color: var(--custom-card-song-bg) !important;
+  border-color: var(--custom-card-border, #2A3644) !important;
+}
+body.theme-custom .ui-setlist-card {
+  background-color: var(--custom-card-setlist-bg) !important;
+  border-color: var(--custom-card-border, #2A3644) !important;
+}
 body.theme-custom .ui-selection-card {
   background-color: var(--custom-card-selected-bg) !important;
   border-color: var(--custom-card-selected-border) !important;

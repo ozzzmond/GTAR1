@@ -1,4 +1,4 @@
-/** Reference strings and triangle-tone playback adapted from Legacy BandSyncModal.tsx.
+/** Reference strings and triangle-tone playback for GTAR1.
  * No microphone, permissions, persistence, or remote playback.
  */
 import { createAudioContext } from './metronome'

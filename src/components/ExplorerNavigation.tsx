@@ -220,8 +220,8 @@ export const ExplorerNavigation: React.FC<ExplorerNavigationProps> = ({
         <div
           className={`group flex items-center justify-between px-2 py-1.5 rounded-lg cursor-pointer transition-colors ${
             folderIsSelected
-              ? 'bg-sky-600/30 text-sky-200 border border-sky-500/40 font-semibold'
-              : 'hover:bg-slate-800/80 text-slate-300'
+              ? 'bg-app-action/20 text-app-action border border-app-action/40 font-semibold'
+              : 'hover:bg-app-surface/60 text-app-text'
           }`}
           style={{ paddingLeft: `${8 + depth * 14}px` }}
           onClick={() => {
@@ -235,7 +235,7 @@ export const ExplorerNavigation: React.FC<ExplorerNavigationProps> = ({
                 e.stopPropagation()
                 toggleFolderExpanded(folder.id)
               }}
-              className="p-0.5 text-slate-400 hover:text-white rounded"
+              className="p-0.5 text-app-muted hover:text-app-heading rounded"
               aria-label={isExpanded ? 'Collapse folder' : 'Expand folder'}
             >
               {isExpanded ? (
@@ -265,7 +265,7 @@ export const ExplorerNavigation: React.FC<ExplorerNavigationProps> = ({
                     if (e.key === 'Escape') setEditingFolderId(null)
                   }}
                   autoFocus
-                  className="w-full bg-slate-900 border border-sky-500 px-1.5 py-0.5 rounded text-white text-xs outline-none"
+                  className="w-full bg-app-base border border-app-action px-1.5 py-0.5 rounded text-app-heading text-xs outline-none"
                 />
                 <button
                   type="button"
@@ -290,7 +290,7 @@ export const ExplorerNavigation: React.FC<ExplorerNavigationProps> = ({
           </div>
 
           <div className="flex items-center gap-1 shrink-0">
-            <span className="text-[10px] text-slate-400 px-1.5 py-0.2 rounded-full bg-slate-800">
+            <span className="text-[10px] text-app-muted px-1.5 py-0.2 rounded-full bg-app-surface border border-app-border">
               {folderSetlists.length}
             </span>
 
@@ -305,7 +305,7 @@ export const ExplorerNavigation: React.FC<ExplorerNavigationProps> = ({
                   onClick={() => handleStartCreateFolder(folder.id)}
                   title="Create subfolder"
                   aria-label="Create subfolder"
-                  className="p-0.5 rounded hover:bg-slate-700 text-slate-400 hover:text-sky-300"
+                  className="p-0.5 rounded hover:bg-app-surface text-app-muted hover:text-app-heading"
                 >
                   <FolderPlus className="w-3 h-3" />
                 </button>
@@ -314,7 +314,7 @@ export const ExplorerNavigation: React.FC<ExplorerNavigationProps> = ({
                   onClick={() => handleStartRenameFolder(folder)}
                   title="Rename folder"
                   aria-label="Rename folder"
-                  className="p-0.5 rounded hover:bg-slate-700 text-slate-400 hover:text-sky-300"
+                  className="p-0.5 rounded hover:bg-app-surface text-app-muted hover:text-app-heading"
                 >
                   <Edit2 className="w-3 h-3" />
                 </button>
@@ -323,7 +323,7 @@ export const ExplorerNavigation: React.FC<ExplorerNavigationProps> = ({
                   onClick={() => handleStartMoveFolder(folder)}
                   title="Move folder"
                   aria-label="Move folder"
-                  className="p-0.5 rounded hover:bg-slate-700 text-slate-400 hover:text-sky-300"
+                  className="p-0.5 rounded hover:bg-app-surface text-app-muted hover:text-app-heading"
                 >
                   <ArrowRight className="w-3 h-3" />
                 </button>
@@ -332,7 +332,7 @@ export const ExplorerNavigation: React.FC<ExplorerNavigationProps> = ({
                   onClick={() => handleDeleteFolderSafe(folder)}
                   title="Delete folder"
                   aria-label="Delete folder"
-                  className="p-0.5 rounded hover:bg-slate-700 text-slate-400 hover:text-red-400"
+                  className="p-0.5 rounded hover:bg-app-surface text-app-muted hover:text-status-error"
                 >
                   <Trash2 className="w-3 h-3" />
                 </button>
@@ -344,17 +344,17 @@ export const ExplorerNavigation: React.FC<ExplorerNavigationProps> = ({
         {/* Move folder select popover/inline row */}
         {isMoving && (
           <div
-            className="my-1.5 p-2 bg-slate-800 rounded-lg border border-slate-700 flex flex-col gap-1.5"
+            className="my-1.5 p-2 bg-app-surface rounded-lg border border-app-border flex flex-col gap-1.5"
             style={{ marginLeft: `${8 + depth * 14}px` }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="text-[11px] font-semibold text-slate-300">
+            <div className="text-[11px] font-semibold text-app-text">
               Move "{folder.name}" to parent:
             </div>
             <select
               value={moveFolderTargetParentId}
               onChange={(e) => setMoveFolderTargetParentId(e.target.value)}
-              className="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded px-2 py-1 outline-none focus:border-sky-500"
+              className="bg-app-base border border-app-border text-app-text text-xs rounded px-2 py-1 outline-none focus:border-app-accent"
             >
               <option value="">(Root / No Parent)</option>
               {folders
@@ -373,14 +373,14 @@ export const ExplorerNavigation: React.FC<ExplorerNavigationProps> = ({
               <button
                 type="button"
                 onClick={() => setMovingFolderId(null)}
-                className="px-2 py-0.5 bg-slate-700 rounded text-slate-300 text-[10px]"
+                className="ui-button px-2 py-0.5 bg-app-button border border-app-border rounded text-app-button-text text-[10px]"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={() => handleConfirmMoveFolder(folder)}
-                className="px-2 py-0.5 bg-sky-600 rounded text-white text-[10px] font-semibold"
+                className="px-2 py-0.5 bg-app-action rounded text-app-on-action text-[10px] font-semibold"
               >
                 Save Move
               </button>
@@ -400,8 +400,8 @@ export const ExplorerNavigation: React.FC<ExplorerNavigationProps> = ({
                   key={sl.id}
                   className={`group flex items-center justify-between px-2 py-1 rounded-lg cursor-pointer transition-colors ${
                     slSelected
-                      ? 'bg-sky-600/25 text-sky-200 border border-sky-500/30 font-medium'
-                      : 'hover:bg-slate-800/60 text-slate-400 hover:text-slate-200'
+                      ? 'bg-app-action/20 text-app-action border border-app-action/40 font-medium'
+                      : 'hover:bg-app-surface/60 text-app-muted hover:text-app-text'
                   }`}
                   style={{ paddingLeft: `${22 + depth * 14}px` }}
                   onClick={() => {
@@ -412,7 +412,7 @@ export const ExplorerNavigation: React.FC<ExplorerNavigationProps> = ({
                     <ListMusic className="w-3.5 h-3.5 text-purple-400 shrink-0" />
                     <span className="truncate">{sl.name}</span>
                   </div>
-                  <span className="text-[10px] text-slate-500 px-1 py-0.2">
+                  <span className="text-[10px] text-app-muted px-1 py-0.2">
                     {sl.songs?.length || 0}
                   </span>
                 </div>
@@ -436,14 +436,14 @@ export const ExplorerNavigation: React.FC<ExplorerNavigationProps> = ({
   return (
     <nav
       aria-label="Music Explorer Navigation"
-      className="h-full flex flex-col bg-slate-900 border-r border-slate-800 select-none overflow-y-auto p-3 text-slate-200"
+      className="ui-explorer-nav h-full flex flex-col bg-app-toolbar border-r border-app-border select-none overflow-y-auto p-3 text-app-text"
     >
       {/* Quick Action Buttons */}
       <div className="flex items-center gap-2 mb-4">
         <button
           type="button"
           onClick={onNewSong}
-          className="flex-1 py-1.5 px-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-semibold text-xs transition-colors shadow-sm flex items-center justify-center gap-1"
+          className="flex-1 py-1.5 px-2.5 rounded-xl bg-app-action hover:brightness-110 text-app-on-action font-semibold text-xs transition-colors shadow-sm flex items-center justify-center gap-1"
         >
           <Plus className="w-3.5 h-3.5" />
           <span>New Song</span>
@@ -451,9 +451,9 @@ export const ExplorerNavigation: React.FC<ExplorerNavigationProps> = ({
         <button
           type="button"
           onClick={onNewSetlist}
-          className="flex-1 py-1.5 px-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-semibold text-xs transition-colors flex items-center justify-center gap-1"
+          className="ui-button flex-1 py-1.5 px-2.5 rounded-xl bg-app-button hover:brightness-110 border border-app-border text-app-button-text font-semibold text-xs transition-colors flex items-center justify-center gap-1"
         >
-          <ListMusic className="w-3.5 h-3.5 text-purple-400" />
+          <ListMusic className="w-3.5 h-3.5 text-app-section" />
           <span>New Set</span>
         </button>
       </div>
@@ -462,11 +462,11 @@ export const ExplorerNavigation: React.FC<ExplorerNavigationProps> = ({
       {/* SECTION 1: MASTER SONGBOOK & TAGS                                         */}
       {/* ========================================================================= */}
       <div className="mb-5">
-        <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider px-1 mb-1.5">
+        <div className="flex items-center justify-between text-xs font-bold text-app-muted uppercase tracking-wider px-1 mb-1.5">
           <button
             type="button"
             onClick={() => setSongbookExpanded(!songbookExpanded)}
-            className="flex items-center gap-1 hover:text-white"
+            className="ui-section-text flex items-center gap-1 hover:text-app-heading"
           >
             {songbookExpanded ? (
               <ChevronDown className="w-3.5 h-3.5" />
@@ -475,7 +475,7 @@ export const ExplorerNavigation: React.FC<ExplorerNavigationProps> = ({
             )}
             <span>Songbook</span>
           </button>
-          <span className="text-[10px] text-slate-500 font-normal">
+          <span className="text-[10px] text-app-muted font-normal">
             {songs.length} master {songs.length === 1 ? 'song' : 'songs'}
           </span>
         </div>
@@ -487,19 +487,19 @@ export const ExplorerNavigation: React.FC<ExplorerNavigationProps> = ({
               onClick={() => selectAndCloseDrawer({ type: 'ALL_SONGS' })}
               className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg cursor-pointer text-xs transition-colors ${
                 isSelected({ type: 'ALL_SONGS' })
-                  ? 'bg-sky-600 text-white font-semibold shadow-sm'
-                  : 'hover:bg-slate-800 text-slate-300'
+                  ? 'bg-app-action text-app-on-action font-semibold shadow-sm'
+                  : 'hover:bg-app-surface/60 text-app-text'
               }`}
             >
               <div className="flex items-center gap-2">
-                <Music className="w-4 h-4 text-sky-400" />
+                <Music className="w-4 h-4 text-app-action" />
                 <span>All Songs</span>
               </div>
               <span
                 className={`text-[10px] px-1.5 py-0.2 rounded-full ${
                   isSelected({ type: 'ALL_SONGS' })
-                    ? 'bg-sky-700 text-white'
-                    : 'bg-slate-800 text-slate-400'
+                    ? 'bg-app-action/80 text-app-on-action'
+                    : 'bg-app-surface border border-app-border text-app-muted'
                 }`}
               >
                 {songs.length}
@@ -508,18 +508,18 @@ export const ExplorerNavigation: React.FC<ExplorerNavigationProps> = ({
 
             {/* Tags Sub-header */}
             <div className="pt-2">
-              <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400 px-2 py-1">
+              <div className="flex items-center justify-between text-[11px] font-semibold text-app-muted px-2 py-1">
                 <button
                   type="button"
                   onClick={() => setTagsExpanded(!tagsExpanded)}
-                  className="flex items-center gap-1 hover:text-slate-200"
+                  className="flex items-center gap-1 hover:text-app-heading"
                 >
                   {tagsExpanded ? (
                     <ChevronDown className="w-3 h-3" />
                   ) : (
                     <ChevronRight className="w-3 h-3" />
                   )}
-                  <Tag className="w-3 h-3 text-emerald-400" />
+                  <Tag className="w-3 h-3 text-app-section" />
                   <span>Tags ({allTags.length})</span>
                 </button>
               </div>
@@ -540,15 +540,15 @@ export const ExplorerNavigation: React.FC<ExplorerNavigationProps> = ({
                           onClick={() => selectAndCloseDrawer({ type: 'TAG', tag: t })}
                           className={`flex items-center justify-between px-2 py-1 rounded-lg cursor-pointer text-xs transition-colors ${
                             tagSelected
-                              ? 'bg-emerald-600/30 text-emerald-200 border border-emerald-500/40 font-semibold'
-                              : 'hover:bg-slate-800 text-slate-300'
+                              ? 'bg-app-action/20 text-app-action border border-app-action/40 font-semibold'
+                              : 'hover:bg-app-surface/60 text-app-text'
                           }`}
                         >
                           <div className="flex items-center gap-1.5 min-w-0">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
                             <span className="truncate">#{t}</span>
                           </div>
-                          <span className="text-[10px] text-slate-400 px-1.5 py-0.2 rounded-full bg-slate-800">
+                          <span className="text-[10px] text-app-muted px-1.5 py-0.2 rounded-full bg-app-surface border border-app-border">
                             {count}
                           </span>
                         </div>
@@ -566,11 +566,11 @@ export const ExplorerNavigation: React.FC<ExplorerNavigationProps> = ({
       {/* SECTION 2: SETLISTS & FOLDER HIERARCHY                                    */}
       {/* ========================================================================= */}
       <div className="flex-1">
-        <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider px-1 mb-1.5">
+        <div className="flex items-center justify-between text-xs font-bold text-app-muted uppercase tracking-wider px-1 mb-1.5">
           <button
             type="button"
             onClick={() => setSetlistsExpanded(!setlistsExpanded)}
-            className="flex items-center gap-1 hover:text-white"
+            className="ui-section-text flex items-center gap-1 hover:text-app-heading"
           >
             {setlistsExpanded ? (
               <ChevronDown className="w-3.5 h-3.5" />
@@ -584,7 +584,7 @@ export const ExplorerNavigation: React.FC<ExplorerNavigationProps> = ({
             onClick={() => handleStartCreateFolder(null)}
             title="Create root folder"
             aria-label="Create root folder"
-            className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-amber-300"
+            className="p-1 rounded hover:bg-app-surface text-app-muted hover:text-app-heading"
           >
             <FolderPlus className="w-3.5 h-3.5" />
           </button>
@@ -597,19 +597,19 @@ export const ExplorerNavigation: React.FC<ExplorerNavigationProps> = ({
               onClick={() => selectAndCloseDrawer({ type: 'ALL_SETLISTS' })}
               className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg cursor-pointer text-xs transition-colors ${
                 isSelected({ type: 'ALL_SETLISTS' })
-                  ? 'bg-sky-600 text-white font-semibold shadow-sm'
-                  : 'hover:bg-slate-800 text-slate-300'
+                  ? 'bg-app-action text-app-on-action font-semibold shadow-sm'
+                  : 'hover:bg-app-surface/60 text-app-text'
               }`}
             >
               <div className="flex items-center gap-2">
-                <Layers className="w-4 h-4 text-purple-400" />
+                <Layers className="w-4 h-4 text-app-section" />
                 <span>All Setlists</span>
               </div>
               <span
                 className={`text-[10px] px-1.5 py-0.2 rounded-full ${
                   isSelected({ type: 'ALL_SETLISTS' })
-                    ? 'bg-sky-700 text-white'
-                    : 'bg-slate-800 text-slate-400'
+                    ? 'bg-app-action/80 text-app-on-action'
+                    : 'bg-app-surface border border-app-border text-app-muted'
                 }`}
               >
                 {setlists.length}
@@ -621,15 +621,15 @@ export const ExplorerNavigation: React.FC<ExplorerNavigationProps> = ({
               onClick={() => selectAndCloseDrawer({ type: 'UNFILED_SETLISTS' })}
               className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg cursor-pointer text-xs transition-colors ${
                 isSelected({ type: 'UNFILED_SETLISTS' })
-                  ? 'bg-purple-600/30 text-purple-200 border border-purple-500/40 font-semibold'
-                  : 'hover:bg-slate-800 text-slate-300'
+                  ? 'bg-app-action text-app-on-action font-semibold shadow-sm'
+                  : 'hover:bg-app-surface/60 text-app-text'
               }`}
             >
               <div className="flex items-center gap-2">
-                <ListMusic className="w-4 h-4 text-purple-400" />
+                <ListMusic className="w-4 h-4 text-app-section" />
                 <span>Unfiled Setlists</span>
               </div>
-              <span className="text-[10px] text-slate-400 px-1.5 py-0.2 rounded-full bg-slate-800">
+              <span className="text-[10px] text-app-muted px-1.5 py-0.2 rounded-full bg-app-surface border border-app-border">
                 {unfiledSetlists.length}
               </span>
             </div>
@@ -637,7 +637,7 @@ export const ExplorerNavigation: React.FC<ExplorerNavigationProps> = ({
             {/* Inline Root Folder Creation */}
             {isCreatingFolder && newFolderParentId === null && (
               <div
-                className="p-2 my-1 bg-slate-800 rounded-lg border border-slate-700 flex items-center gap-1.5"
+                className="p-2 my-1 bg-app-surface rounded-lg border border-app-border flex items-center gap-1.5"
                 onClick={(e) => e.stopPropagation()}
               >
                 <Folder className="w-3.5 h-3.5 text-amber-400 shrink-0" />
@@ -651,7 +651,7 @@ export const ExplorerNavigation: React.FC<ExplorerNavigationProps> = ({
                     if (e.key === 'Escape') setIsCreatingFolder(false)
                   }}
                   autoFocus
-                  className="w-full bg-slate-900 border border-slate-700 text-xs text-white rounded px-1.5 py-0.5 outline-none focus:border-sky-500"
+                  className="w-full bg-app-base border border-app-border text-xs text-app-heading rounded px-1.5 py-0.5 outline-none focus:border-app-accent"
                 />
                 <button
                   type="button"
@@ -664,7 +664,7 @@ export const ExplorerNavigation: React.FC<ExplorerNavigationProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsCreatingFolder(false)}
-                  className="p-1 text-slate-400 hover:text-white"
+                  className="p-1 text-app-muted hover:text-app-heading"
                   aria-label="Cancel folder creation"
                 >
                   <X className="w-3.5 h-3.5" />
@@ -680,7 +680,7 @@ export const ExplorerNavigation: React.FC<ExplorerNavigationProps> = ({
             {/* Inline Subfolder Creation (if child) */}
             {isCreatingFolder && newFolderParentId !== null && (
               <div
-                className="p-2 my-1 bg-slate-800 rounded-lg border border-slate-700 flex items-center gap-1.5 ml-4"
+                className="p-2 my-1 bg-app-surface rounded-lg border border-app-border flex items-center gap-1.5 ml-4"
                 onClick={(e) => e.stopPropagation()}
               >
                 <Folder className="w-3.5 h-3.5 text-amber-400 shrink-0" />
@@ -694,7 +694,7 @@ export const ExplorerNavigation: React.FC<ExplorerNavigationProps> = ({
                     if (e.key === 'Escape') setIsCreatingFolder(false)
                   }}
                   autoFocus
-                  className="w-full bg-slate-900 border border-slate-700 text-xs text-white rounded px-1.5 py-0.5 outline-none focus:border-sky-500"
+                  className="w-full bg-app-base border border-app-border text-xs text-app-heading rounded px-1.5 py-0.5 outline-none focus:border-app-accent"
                 />
                 <button
                   type="button"
@@ -707,7 +707,7 @@ export const ExplorerNavigation: React.FC<ExplorerNavigationProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsCreatingFolder(false)}
-                  className="p-1 text-slate-400 hover:text-white"
+                  className="p-1 text-app-muted hover:text-app-heading"
                   aria-label="Cancel subfolder creation"
                 >
                   <X className="w-3.5 h-3.5" />
