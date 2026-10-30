@@ -21,7 +21,7 @@ test('A1-A5/A11: strict source validation rejects malformed/ambiguous graphs bef
     { ...backup(), songs: [{ ...song(), isFavorite: 'false' }] },
     { ...backup(), setlists: [{ ...backup().setlists[0], folderId: 'missing' }] },
     { ...backup(), songs: [{ ...song(), content: 'different' }] },
-    { ...backup(), setlists: [{ id: 'l', name: 'order', songs: [{ id: 's', title: 'x', position: 9 }] }] },
+    { ...backup(), setlists: [{ id: 'l', name: 'order', songs: [{ id: 's', title: 'x', position: 9 }, { id: 's', title: 'x', position: 2 }] }] },
     { ...backup(), setlists: [{ id: 'l', name: 'entries', songs: [{ id: 's', title: 'x', entryId: 'e' }, { id: 's', title: 'x', entryId: 'e' }] }] },
     { ...backup(), trash: [{ private: 'unsupported scope' }] },
   ]
@@ -51,4 +51,38 @@ test('A2/A8/A9: legacy unversioned/v1/v2 and native v1 retain numeric identity, 
   const first = parseBackupJson(JSON.stringify([loose]))
   assert.equal(first.isValid, true)
   assert.equal(first.songs[0].id, parseBackupJson(JSON.stringify([loose])).songs[0].id)
+})
+
+test('GTAR1 setlist position order validation: supports noncontiguous positions, empty setlists, repeated references, rejects malformed order', () => {
+  // 1. Noncontiguous positions: single song with position 9, or gap positions (0, 2, 5), (10, 20)
+  assert.equal(parseBackupJson(JSON.stringify({ ...backup(), setlists: [{ id: 'l', name: 'noncontiguous-single', songs: [{ id: 's', title: 'x', position: 9 }] }] })).isValid, true)
+  assert.equal(parseBackupJson(JSON.stringify({ ...backup(), setlists: [{ id: 'l', name: 'noncontiguous-gaps', songs: [{ id: 's', title: 'x', position: 0, entryId: 'e1' }, { id: 's', title: 'x', position: 2, entryId: 'e2' }, { id: 's', title: 'x', position: 5, entryId: 'e3' }] }] })).isValid, true)
+  assert.equal(parseBackupJson(JSON.stringify({ ...backup(), setlists: [{ id: 'l', name: '1-indexed', songs: [{ id: 's', title: 'x', position: 1, entryId: 'e1' }, { id: 's', title: 'x', position: 2, entryId: 'e2' }] }] })).isValid, true)
+
+  // 2. Empty setlists
+  assert.equal(parseBackupJson(JSON.stringify({ ...backup(), setlists: [{ id: 'l1', name: 'empty set', songs: [] }] })).isValid, true)
+
+  // 3. Multiple setlists with mixed positions
+  assert.equal(parseBackupJson(JSON.stringify({ ...backup(), setlists: [
+    { id: 'l1', name: 'empty set', songs: [] },
+    { id: 'l2', name: 'first set', songs: [{ id: 's', title: 'x', position: 0, entryId: 'e1' }, { id: 's', title: 'x', position: 10, entryId: 'e2' }] },
+    { id: 'l3', name: 'second set', songs: [{ id: 's', title: 'x', position: 1, entryId: 'e3' }, { id: 's', title: 'x', position: 2, entryId: 'e4' }] }
+  ] })).isValid, true)
+
+  // 4. Repeated song references with distinct increasing positions and entryIds
+  const repeated = parseBackupJson(JSON.stringify({ ...backup(), setlists: [{ id: 'l', name: 'repeated', songs: [{ id: 's', title: 'x', position: 0, entryId: 'e1' }, { id: 's', title: 'x', position: 1, entryId: 'e2' }] }] }))
+  assert.equal(repeated.isValid, true)
+
+  // 5. Malformed order rejections
+  // 5a. Descending positions
+  assert.equal(parseBackupJson(JSON.stringify({ ...backup(), setlists: [{ id: 'l', name: 'descending', songs: [{ id: 's', title: 'x', position: 5, entryId: 'e1' }, { id: 's', title: 'x', position: 2, entryId: 'e2' }] }] })).isValid, false)
+  // 5b. Duplicate positions
+  assert.equal(parseBackupJson(JSON.stringify({ ...backup(), setlists: [{ id: 'l', name: 'duplicate-pos', songs: [{ id: 's', title: 'x', position: 3, entryId: 'e1' }, { id: 's', title: 'x', position: 3, entryId: 'e2' }] }] })).isValid, false)
+  // 5c. Negative position
+  assert.equal(parseBackupJson(JSON.stringify({ ...backup(), setlists: [{ id: 'l', name: 'negative-pos', songs: [{ id: 's', title: 'x', position: -1 }] }] })).isValid, false)
+
+  // 6. Roundtrip: freshly exported payload from noncontiguous setlists is valid
+  const noncontigNative = createBackupPayload(repeated.songs, repeated.setlists, repeated.folders)
+  const roundtripParsed = parseBackupJson(JSON.stringify(noncontigNative))
+  assert.equal(roundtripParsed.isValid, true)
 })
