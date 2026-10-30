@@ -1,6 +1,6 @@
-import { planLibraryRestore, type RestoreMode, type LibraryImage } from '../utils/restoreLibrary'
+import { planLibraryRestore, readLibraryImage, getLastRestoreInfo, type RestoreMode, type LibraryImage, type RestoreResult, type LastRestoreInfo } from '../utils/restoreLibrary'
 import { MAX_BACKUP_BYTES } from '../utils/backupValidation'
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useRef, useEffect } from 'react'
 import type { SongEntity, WebSetlist, SetlistFolder } from '../types/gtar'
 import { createBackupPayload, parseBackupJson } from '../utils/jsonBackup'
 import { type BackupSettings } from '../utils/backupSettings'
@@ -26,7 +26,8 @@ export interface BackupModalProps {
     importedSetlists: WebSetlist[],
     importedFolders: SetlistFolder[],
     mode: RestoreMode, expected: LibraryImage, settings?: BackupSettings
-  ) => Promise<void>
+  ) => Promise<RestoreResult>
+  onOpenRecovery?: () => Promise<void>
   onClose: () => void
 }
 
@@ -35,6 +36,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
   setlists,
   folders,
   onImport,
+  onOpenRecovery,
   onClose,
 }) => {
   const [mode, setMode] = useState<'EXPORT' | 'IMPORT'>('EXPORT')
@@ -49,7 +51,16 @@ export const BackupModal: React.FC<BackupModalProps> = ({
     error?: string
   } | null>(null)
   const [restoreMode, setRestoreMode] = useState<RestoreMode>('MERGE')
-  const [previewBaseline, setPreviewBaseline] = useState<LibraryImage>({ songs, setlists, folders })
+  // Preview baseline is the authoritative IndexedDB image, never UI state.
+  const [previewBaseline, setPreviewBaseline] = useState<LibraryImage | null>(null)
+  const [baselineError, setBaselineError] = useState('')
+  const baselineRequest = useRef(0)
+  const [lastRestore, setLastRestore] = useState<LastRestoreInfo | null>(null)
+  useEffect(() => {
+    let live = true
+    getLastRestoreInfo().then(info => { if (live) setLastRestore(info) }, () => {})
+    return () => { live = false }
+  }, [])
   const [partialImport, setPartialImport] = useState(false)
   const [isImporting, setIsImporting] = useState<boolean>(false)
 
@@ -108,7 +119,13 @@ export const BackupModal: React.FC<BackupModalProps> = ({
 
   const validateImportPayload = (text: string) => {
     const result = parseBackupJson(text)
-    setPreviewBaseline(structuredClone({ songs, setlists, folders }))
+    const request = ++baselineRequest.current
+    setPreviewBaseline(null)
+    setBaselineError('')
+    readLibraryImage().then(
+      image => { if (request === baselineRequest.current) setPreviewBaseline(image) },
+      error => { if (request === baselineRequest.current) setBaselineError(`Could not read the local library: ${(error as Error)?.message || 'unknown error'}`) },
+    )
     setPartialImport(!!result.partial)
     if (result.isValid) {
       setImportPreview({
@@ -130,19 +147,21 @@ export const BackupModal: React.FC<BackupModalProps> = ({
   }
 
   const handleExecuteImport = async () => {
-    if (!importPreview || !importPreview.valid) return
+    if (!importPreview || !importPreview.valid || !previewBaseline) return
 
     setIsImporting(true)
     try {
       if (partialImport && restoreMode === 'REPLACE') throw new Error('Song-only imports support Merge only. Use a complete backup for Replace.')
-      if (restoreMode === 'REPLACE' && !window.confirm(`Replace the entire local library (${songs.length} songs, ${setlists.length} setlists, ${folders.length} folders) with this backup? Local records absent from the backup will be removed.`)) return
-      await onImport(importPreview.songs, importPreview.setlists, importPreview.folders, restoreMode, previewBaseline, importPreview.themeSettings)
-      alert(
-        `Successfully restored ${importPreview.songs.length} canonical songs, ${importPreview.setlists.length} setlists, and ${importPreview.folders.length} folders!`
-      )
+      if (restoreMode === 'REPLACE' && !window.confirm(`Replace the entire local library (${previewBaseline.songs.length} songs, ${previewBaseline.setlists.length} setlists, ${previewBaseline.folders.length} folders) with this backup? Local records absent from the backup will be removed. The current library is kept as a recovery snapshot for Undo.`)) return
+      const result = await onImport(importPreview.songs, importPreview.setlists, importPreview.folders, restoreMode, previewBaseline, importPreview.themeSettings)
+      if (result.status === 'COMMITTED_VERIFIED') {
+        alert(`Successfully restored and verified: ${result.image.songs.length} songs, ${result.image.setlists.length} setlists, and ${result.image.folders.length} folders. Your previous library is kept for Undo last restore.`)
+      } else {
+        alert(`Restore was saved but could not be verified (${result.reason || 'readback failed'}). Your previous library is kept as a recovery snapshot — review it in Library Recovery.`)
+      }
       onClose()
     } catch (err: any) {
-      alert(`Import error: ${err?.message || 'Storage write failed'}`)
+      alert(`Import error: Restore not applied; your library was not changed. ${err?.message || 'Storage write failed'}`)
     } finally {
       setIsImporting(false)
     }
@@ -150,7 +169,8 @@ export const BackupModal: React.FC<BackupModalProps> = ({
 
   let planError = ''
   let planSummary = ''
-  if (importPreview?.valid) {
+  if (importPreview?.valid && baselineError) planError = baselineError
+  else if (importPreview?.valid && previewBaseline) {
     try {
       if (partialImport && restoreMode === 'REPLACE') throw new Error('Song-only imports require Merge.')
       const planned = planLibraryRestore(previewBaseline, { songs: importPreview.songs, setlists: importPreview.setlists, folders: importPreview.folders }, restoreMode)
@@ -292,7 +312,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
                     Restore safety and scope
                   </div>
                   <p className="text-[11px] text-app-muted leading-relaxed">
-                    Merge keeps local records and rejects conflicting IDs. Replace removes the local library and restores the backup exactly. Both validate the graph and verify all stores before atomic commit. Appearance and stage settings in the backup are restored with interruption recovery. The local profile is kept. Unsupported backup sections are rejected.
+                    Merge keeps local records and rejects conflicting IDs. Replace removes the local library and restores the backup exactly. The preview compares against the library saved on this device. Saving the current library as a recovery snapshot and writing the backup happen in one all-or-nothing step: if any part fails, nothing changes. Success is shown only after the saved library is read back and matches. Undo last restore returns the previous library and keeps records you edited afterwards unless you choose otherwise; only the most recent restore can be undone. Appearance and stage settings in the backup are restored with interruption recovery. The local profile is kept. Unsupported backup sections are rejected.
                   </p>
                 </div>
               </div>
@@ -372,16 +392,28 @@ export const BackupModal: React.FC<BackupModalProps> = ({
               {planSummary && <p className="text-xs text-app-muted">{planSummary}</p>}
               {planError && <p role="alert" className="text-xs text-status-error">{planError}</p>}
               <div className="flex items-center justify-end gap-2 pt-2">
+                {lastRestore && onOpenRecovery && (
+                  <button
+                    type="button"
+                    disabled={isImporting}
+                    onClick={() => { onOpenRecovery().catch(error => alert((error as Error).message)) }}
+                    className="ui-button mr-auto px-3.5 py-1.5 rounded-xl bg-app-button hover:brightness-110 disabled:opacity-40 text-app-button-text border border-app-border text-xs font-semibold transition-colors"
+                  >
+                    Undo last restore…
+                  </button>
+                )}
+                {isImporting && <span role="status" className="text-[11px] text-app-muted">Keep this tab open until restore finishes.</span>}
                 <button
                   type="button"
+                  disabled={isImporting}
                   onClick={() => { if (!isImporting) onClose() }}
-                  className="ui-button px-3.5 py-1.5 rounded-xl bg-app-button hover:brightness-110 text-app-button-text border border-app-border text-xs font-semibold transition-colors"
+                  className="ui-button px-3.5 py-1.5 rounded-xl bg-app-button hover:brightness-110 disabled:opacity-40 text-app-button-text border border-app-border text-xs font-semibold transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
-                  disabled={!importPreview?.valid || !!planError || isImporting}
+                  disabled={!importPreview?.valid || !previewBaseline || !!planError || isImporting}
                   onClick={handleExecuteImport}
                   className="px-4 py-1.5 rounded-xl bg-app-action hover:brightness-110 disabled:opacity-40 text-app-on-action text-xs font-semibold transition-colors shadow-sm flex items-center gap-1.5"
                 >
