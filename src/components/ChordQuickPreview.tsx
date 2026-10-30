@@ -35,7 +35,7 @@ export const ChordQuickPreview: React.FC<ChordQuickPreviewProps> = ({
     if (anchor) setMeasuredHeight(popoverRef.current?.getBoundingClientRect().height || 320)
   }, [anchor, voicing, resizeTick])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (anchor && focusOnOpen) popoverRef.current?.querySelector('button')?.focus()
   }, [anchor, focusOnOpen])
 
@@ -48,10 +48,12 @@ export const ChordQuickPreview: React.FC<ChordQuickPreviewProps> = ({
   }, [anchor])
 
   // Global ESC key listener to dismiss quick preview
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!anchor) return
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        e.preventDefault()
+        e.stopPropagation()
         onClose()
       }
     }
@@ -94,6 +96,13 @@ export const ChordQuickPreview: React.FC<ChordQuickPreviewProps> = ({
       role="dialog"
       aria-label={`${anchor.chord} quick preview`}
       aria-live="polite"
+      tabIndex={-1}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') {
+          e.stopPropagation()
+          onClose()
+        }
+      }}
       className="fixed z-[100] rounded-2xl bg-app-surface border border-app-border shadow-2xl p-3 text-app-text select-none animate-in fade-in zoom-in-95 duration-150"
       style={{
         top: `${top}px`,
