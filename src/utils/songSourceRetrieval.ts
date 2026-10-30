@@ -19,94 +19,9 @@ import { validateAndNormalizeWebsiteUrl } from './songSources'
 export const MAX_IMPORT_BYTES = 256 * 1024 // 256 KB
 export const DEFAULT_RETRIEVAL_TIMEOUT_MS = 8000
 
-export type ProviderClassification = 'RESTRICTED' | 'UNSUPPORTED' | 'PERMITTED'
-
-export interface SourceProviderMetadata {
-  id: string
-  name: string
-  classification: ProviderClassification
-  description: string
-  restrictionReason: string
-  requiresAuth: boolean
-  corsSupported: boolean
-  homepageUrl: string
-  matchUrl: (url: string) => boolean
-}
-
-export const KNOWN_SOURCE_PROVIDERS: readonly SourceProviderMetadata[] = [
-  {
-    id: 'songselect',
-    name: 'SongSelect (CCLI)',
-    classification: 'RESTRICTED',
-    description: 'Praise & worship chords and lead sheets',
-    restrictionReason: 'SongSelect requires a paid CCLI license and authenticated session. Automated retrieval is prohibited by CCLI Terms of Service.',
-    requiresAuth: true,
-    corsSupported: false,
-    homepageUrl: 'https://songselect.ccli.com',
-    matchUrl: (url: string) => {
-      try {
-        const host = new URL(url).hostname.toLowerCase()
-        return host === 'songselect.ccli.com' || host.endsWith('.ccli.com')
-      } catch {
-        return false
-      }
-    },
-  },
-  {
-    id: 'ultimate_guitar',
-    name: 'Ultimate Guitar',
-    classification: 'RESTRICTED',
-    description: 'Guitar tabs, chords, and bass tabs repository',
-    restrictionReason: 'Ultimate Guitar Terms of Service prohibit scraping and automated extraction. Client-side requests are blocked by CORS and anti-bot protection.',
-    requiresAuth: false,
-    corsSupported: false,
-    homepageUrl: 'https://www.ultimate-guitar.com',
-    matchUrl: (url: string) => {
-      try {
-        const host = new URL(url).hostname.toLowerCase()
-        return host === 'ultimate-guitar.com' || host.endsWith('.ultimate-guitar.com')
-      } catch {
-        return false
-      }
-    },
-  },
-  {
-    id: 'chordie',
-    name: 'Chordie',
-    classification: 'UNSUPPORTED',
-    description: 'Public chord and guitar tab index',
-    restrictionReason: 'Chordie does not offer a public CORS-enabled API for web applications.',
-    requiresAuth: false,
-    corsSupported: false,
-    homepageUrl: 'https://www.chordie.com',
-    matchUrl: (url: string) => {
-      try {
-        const host = new URL(url).hostname.toLowerCase()
-        return host === 'chordie.com' || host.endsWith('.chordie.com')
-      } catch {
-        return false
-      }
-    },
-  },
-  {
-    id: 'opmtunes',
-    name: 'OPMTunes',
-    classification: 'UNSUPPORTED',
-    description: 'Original Pilipino Music chords and tabs',
-    restrictionReason: 'OPMTunes does not offer a public CORS-enabled API for web applications.',
-    requiresAuth: false,
-    corsSupported: false,
-    homepageUrl: 'https://www.opmtunes.com',
-    matchUrl: (url: string) => {
-      try {
-        const host = new URL(url).hostname.toLowerCase()
-        return host === 'opmtunes.com' || host.endsWith('.opmtunes.com')
-      } catch {
-        return false
-      }
-    },
-  },
-]
+import { SONG_SOURCE_PROVIDERS as KNOWN_SOURCE_PROVIDERS, type SourceProviderMetadata } from './songSourceProviders'
+export { SONG_SOURCE_PROVIDERS as KNOWN_SOURCE_PROVIDERS } from './songSourceProviders'
+export type { SourceProviderMetadata, ProviderClassification } from './songSourceProviders'
 
 /**
  * Finds known provider metadata for a given URL.

@@ -11,6 +11,7 @@
  */
 
 import { generateUUID } from './uuid'
+import { SONG_SOURCE_PROVIDERS, resolveSongSourceProvider } from './songSourceProviders'
 export * from './songSourceRetrieval'
 
 export interface SongSource {
@@ -23,36 +24,28 @@ export interface SongSource {
   updatedAt?: number
 }
 
-export const CURATED_SONG_SOURCES: readonly SongSource[] = [
-  {
-    id: 'curated_songselect',
-    name: 'SongSelect',
-    url: 'https://songselect.ccli.com',
-    desc: 'Praise & worship chords and lead sheets (CCLI)',
-    isCurated: true,
-  },
-  {
-    id: 'curated_ultimate_guitar',
-    name: 'Ultimate Guitar',
-    url: 'https://www.ultimate-guitar.com',
-    desc: 'Global chords, tabs, and guitar lead sheets',
-    isCurated: true,
-  },
-  {
-    id: 'curated_chordie',
-    name: 'Chordie',
-    url: 'https://www.chordie.com',
-    desc: 'External chord index; direct import unavailable',
-    isCurated: true,
-  },
-  {
-    id: 'curated_opmtunes',
-    name: 'OPMTunes',
-    url: 'https://www.opmtunes.com',
-    desc: 'Original Pilipino Music (OPM) chords & Pinoy classics',
-    isCurated: true,
-  },
-]
+export const CURATED_SONG_SOURCES: readonly SongSource[] = SONG_SOURCE_PROVIDERS.map(provider => ({
+  id: `curated_${provider.id}`,
+  name: provider.name,
+  url: provider.homepageUrl,
+  desc: provider.description,
+  isCurated: true,
+}))
+
+// A separate preference key avoids modifying appearance, library or shortcut data.
+export const SONG_SOURCE_PROVIDER_KEY = 'gtar1_song_source_provider'
+
+export function loadSongSourceProvider(): string {
+  try { return resolveSongSourceProvider(localStorage.getItem(SONG_SOURCE_PROVIDER_KEY)).id }
+  catch { return resolveSongSourceProvider(null).id }
+}
+
+export function saveSongSourceProvider(id: string): boolean {
+  try {
+    localStorage.setItem(SONG_SOURCE_PROVIDER_KEY, resolveSongSourceProvider(id).id)
+    return true
+  } catch { return false }
+}
 
 export const SONG_SOURCES_STORAGE_KEY = 'gtar1_custom_song_sources'
 
