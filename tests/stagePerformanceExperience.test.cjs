@@ -8,7 +8,7 @@ for (const ext of ['.ts', '.tsx']) {
   require.extensions[ext] = (module, filename) =>
     module._compile(
       ts.transpileModule(
-        fs.readFileSync(filename, 'utf8'),
+        fs.readFileSync(filename, 'utf8').replaceAll('import.meta.env', '({DEV:false})'),
         {
           compilerOptions: {
             module: ts.ModuleKind.CommonJS,

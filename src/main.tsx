@@ -5,6 +5,12 @@ import './index.css'
 import { applyThemeRuntime, hydrateThemeSettings } from './components/ThemeModal'
 
 import { openRevampDB } from './utils/storage'
+import { recordDiagnostic } from './diagnostics/runtime'
+
+if (import.meta.env.GTAR1_DEV_DIAGNOSTICS) {
+  recordDiagnostic('SESSION_STARTED')
+  void import('./diagnostics/mount')
+}
 
 // Recover an interrupted settings restore before any component reads appearance.
 async function start() {
@@ -16,6 +22,7 @@ async function start() {
       <React.StrictMode><App /></React.StrictMode>
     )
   } catch (error) {
+    recordDiagnostic('INITIAL_LOAD_FAILED')
     document.getElementById('root')!.textContent = `Local storage unavailable: ${(error as Error).message}. Reload to retry recovery.`
   }
 }

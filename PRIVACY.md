@@ -9,6 +9,21 @@ GTAR1 is designed from the ground up as a **local-first, offline-capable progres
 3. **No Background Network Sync**: The core application initiates zero network requests during normal startup, chord viewing, editing, or setlist management once the PWA assets are cached.
 4. **Local Backups**: All backup exports (`.json`) are generated entirely within your browser and saved directly to your local file system. Restoring a backup processes the file client-side without uploading data anywhere.
 
+## DEV Diagnostics
+
+The development app environment includes optional diagnostics controls. Production
+targets exclude the controls and collector at build time. A memory-only buffer
+retains at most 20 predefined events, cleared on reload, tab close, or manual clear.
+It records UTC time, severity, area, and a fixed event code/message. It accepts no
+raw error content, song data, profile metadata, backups, secrets, URLs, storage
+contents, console output, or network traces. No telemetry or upload occurs.
+
+Only clicking **Export logs** downloads a bounded plain-text file locally. Export
+adds app version, UTC times, and a coarse platform/browser/device estimate derived
+from the browser-reported user-agent, with `unknown` fallback. The raw user-agent
+is discarded. Filenames include a fresh random suffix and session counter, never
+a stable device identifier. Browser estimates are not verified device identities.
+
 ## Network Requests & Optional External Fonts
 
 While GTAR1 operates completely offline with system fonts and built-in typography stacks (`Inter`, `JetBrains Mono`, `Fira Code`, `Georgia`):

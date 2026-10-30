@@ -42,6 +42,7 @@ import {
 } from './components/ExplorerNavigation'
 import { loadLocalProfile, type LocalUserProfile } from './utils/localProfile'
 import { generateUUID } from './utils/uuid'
+import { recordDiagnostic } from './diagnostics/runtime'
 import { resolveNavigation, type NavigationState } from './utils/navigation'
 
 export const App: React.FC = () => {
@@ -195,6 +196,7 @@ export const App: React.FC = () => {
           setIsLoading(false)
         }
       } catch (err: any) {
+        recordDiagnostic('INITIAL_LOAD_FAILED')
         if (isMounted) {
           setLoadError(err?.message || 'Failed to initialize local IndexedDB storage')
           setIsLoading(false)
