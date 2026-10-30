@@ -927,6 +927,19 @@ export const App: React.FC = () => {
       <BrowseSongSourcesModal
         isOpen={isSourcesOpen}
         onClose={() => setIsSourcesOpen(false)}
+        songs={songs}
+        onSaveSong={async (song) => {
+          await saveSong(song)
+          setSongs((prev) => {
+            const idx = prev.findIndex((s) => s.id === song.id)
+            if (idx >= 0) return prev.map((s, i) => (i === idx ? song : s))
+            return [song, ...prev]
+          })
+        }}
+        onSelectSong={(song) => {
+          setSelectedSong(song)
+          setActiveTab('SONGS')
+        }}
       />
     </div>
   )
