@@ -1,4 +1,4 @@
-﻿import { defineConfig } from 'vite'
+import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
@@ -29,8 +29,11 @@ export default defineConfig(({ mode }) => {
         'pwa-192x192.png': `${mascotPublicSubdir}/pwa-192.png`,
         'pwa-512x512.png': `${mascotPublicSubdir}/pwa-512.png`,
         'apple-touch-icon.png': `${mascotPublicSubdir}/apple-touch-icon-180.png`,
-        'favicon.png': `${mascotPublicSubdir}/favicon-candidate-64.png`,
-        'favicon.ico': `${mascotPublicSubdir}/favicon-candidate-64.png`,
+        'favicon-16x16.png': `${mascotPublicSubdir}/favicon-16x16.png`,
+        'favicon-32x32.png': `${mascotPublicSubdir}/favicon-32x32.png`,
+        'favicon-48x48.png': `${mascotPublicSubdir}/favicon-48x48.png`,
+        'favicon.png': `${mascotPublicSubdir}/favicon-32x32.png`,
+        'favicon.ico': `${mascotPublicSubdir}/favicon.ico`,
       }
 
       for (const [targetName, sourceRelPath] of Object.entries(mascotFiles)) {
@@ -55,6 +58,9 @@ export default defineConfig(({ mode }) => {
         registerType: 'autoUpdate',
         includeAssets: [
           'favicon.ico',
+          'favicon-16x16.png',
+          'favicon-32x32.png',
+          'favicon-48x48.png',
           'favicon.svg',
           'favicon.png',
           'apple-touch-icon.png',

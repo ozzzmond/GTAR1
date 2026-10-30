@@ -88,6 +88,16 @@ test('VITE_PWA_CONFIG_ENV_ISOLATION: builds DEV with yellow Bebegirl2 and PROD w
     assert.ok(manifest.icons && manifest.icons.length >= 2, 'Manifest defines icons')
     assert.equal(manifest.icons[0].sizes, '192x192', 'First icon is 192x192')
     assert.equal(manifest.icons[1].sizes, '512x512', 'Second icon is 512x512')
+
+    const isDevBuild = manifest.name.includes('(Dev)')
+    const expectedSubdir = isDevBuild ? 'bebegirl2-yellow-dev' : 'bebeboy-red-prod'
+
+    for (const file of ['favicon-16x16.png', 'favicon-32x32.png', 'favicon-48x48.png', 'favicon.ico']) {
+      const distFile = path.join(distDir, file)
+      assert.ok(fs.existsSync(distFile), `dist/${file} exists in build output`)
+      const expectedFile = path.join(projectRoot, 'public/mascots', expectedSubdir, file)
+      assert.ok(fs.readFileSync(distFile).equals(fs.readFileSync(expectedFile)), `dist/${file} matches ${expectedSubdir}`)
+    }
   }
 })
 
@@ -103,4 +113,86 @@ test('HEADER_MASCOT_LOGO_RENDERING: renders mascot icon and eliminates legacy bl
   // Header must not contain the legacy hardcoded blue G square
   assert.ok(!headerContent.includes('bg-sky-600 flex items-center justify-center font-black text-white text-base shadow-sm group-hover:bg-sky-500'), 'Header must not contain legacy blue G styles')
   assert.ok(!headerContent.match(/<div[^>]*bg-sky-600[^>]*>\s*G\s*<\/div>/), 'Header must not render legacy blue G')
+})
+
+
+// 5. Favicon variants and multi-resolution ICO validation
+test('FAVICON_VARIANTS_PRESENCE_AND_ICO_VALIDATION: valid 16/32/48 PNGs and multi-res ICO for DEV and PROD', () => {
+  function getPngDimensions(buf) {
+    assert.equal(buf.subarray(0, 8).toString('hex'), '89504e470d0a1a0a', 'Must be PNG signature')
+    return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) }
+  }
+
+  function parseIco(buf) {
+    assert.equal(buf.readUInt16LE(0), 0, 'ICO reserved must be 0')
+    assert.equal(buf.readUInt16LE(2), 1, 'ICO type must be 1 (icon)')
+    const count = buf.readUInt16LE(4)
+    assert.ok(count >= 3, 'ICO must contain at least 3 entries')
+    const entries = []
+    for (let i = 0; i < count; i++) {
+      const offset = 6 + i * 16
+      const width = buf.readUInt8(offset) || 256
+      const height = buf.readUInt8(offset + 1) || 256
+      const bpp = buf.readUInt16LE(offset + 6)
+      const size = buf.readUInt32LE(offset + 8)
+      const dataOffset = buf.readUInt32LE(offset + 12)
+      entries.push({ width, height, bpp, size, dataOffset })
+    }
+    return entries
+  }
+
+  const environments = [
+    { name: 'DEV (Yellow Bebegirl2)', dir: 'public/mascots/bebegirl2-yellow-dev' },
+    { name: 'PROD (Red Bebeboy)', dir: 'public/mascots/bebeboy-red-prod' },
+  ]
+
+  for (const env of environments) {
+    const p16 = path.join(projectRoot, env.dir, 'favicon-16x16.png')
+    const p32 = path.join(projectRoot, env.dir, 'favicon-32x32.png')
+    const p48 = path.join(projectRoot, env.dir, 'favicon-48x48.png')
+    const pIco = path.join(projectRoot, env.dir, 'favicon.ico')
+
+    assert.ok(fs.existsSync(p16), `${env.name} favicon-16x16.png exists`)
+    assert.ok(fs.existsSync(p32), `${env.name} favicon-32x32.png exists`)
+    assert.ok(fs.existsSync(p48), `${env.name} favicon-48x48.png exists`)
+    assert.ok(fs.existsSync(pIco), `${env.name} favicon.ico exists`)
+
+    assert.deepEqual(getPngDimensions(fs.readFileSync(p16)), { width: 16, height: 16 })
+    assert.deepEqual(getPngDimensions(fs.readFileSync(p32)), { width: 32, height: 32 })
+    assert.deepEqual(getPngDimensions(fs.readFileSync(p48)), { width: 48, height: 48 })
+
+    const icoEntries = parseIco(fs.readFileSync(pIco))
+    const sizes = icoEntries.map((e) => `${e.width}x${e.height}`)
+    assert.ok(sizes.includes('16x16'), `${env.name} ICO includes 16x16`)
+    assert.ok(sizes.includes('32x32'), `${env.name} ICO includes 32x32`)
+    assert.ok(sizes.includes('48x48'), `${env.name} ICO includes 48x48`)
+  }
+
+  // Root DEV favicons in public/ match yellow Bebegirl2
+  const root16 = fs.readFileSync(path.join(projectRoot, 'public/favicon-16x16.png'))
+  const yellow16 = fs.readFileSync(path.join(projectRoot, 'public/mascots/bebegirl2-yellow-dev/favicon-16x16.png'))
+  assert.ok(root16.equals(yellow16), 'Root public/favicon-16x16.png matches yellow Bebegirl2')
+
+  const root32 = fs.readFileSync(path.join(projectRoot, 'public/favicon-32x32.png'))
+  const yellow32 = fs.readFileSync(path.join(projectRoot, 'public/mascots/bebegirl2-yellow-dev/favicon-32x32.png'))
+  assert.ok(root32.equals(yellow32), 'Root public/favicon-32x32.png matches yellow Bebegirl2')
+
+  const rootIco = fs.readFileSync(path.join(projectRoot, 'public/favicon.ico'))
+  const yellowIco = fs.readFileSync(path.join(projectRoot, 'public/mascots/bebegirl2-yellow-dev/favicon.ico'))
+  assert.ok(rootIco.equals(yellowIco), 'Root public/favicon.ico matches yellow Bebegirl2')
+})
+
+// 6. index.html browser tab favicon references
+test('INDEX_HTML_FAVICON_REFERENCES: accurate browser-tab icon links and no legacy SVG icon override', () => {
+  const htmlPath = path.join(projectRoot, 'index.html')
+  const html = fs.readFileSync(htmlPath, 'utf8')
+
+  // Must NOT declare type="image/svg+xml" for favicon (which overrides mascot icons in modern browsers)
+  assert.ok(!html.includes('type="image/svg+xml"'), 'index.html must not use type="image/svg+xml" favicon link')
+  assert.ok(!html.includes('href="/favicon.svg"'), 'index.html must not point browser tab icon to /favicon.svg')
+
+  // Must declare high-resolution and standard PNG favicons plus ICO
+  assert.match(html, /<link rel="icon" type="image\/png" sizes="32x32" href="\/favicon-32x32\.png" \/>/, 'index.html includes 32x32 favicon')
+  assert.match(html, /<link rel="icon" type="image\/png" sizes="16x16" href="\/favicon-16x16\.png" \/>/, 'index.html includes 16x16 favicon')
+  assert.match(html, /<link rel="icon" href="\/favicon\.ico"/, 'index.html includes /favicon.ico fallback')
 })
