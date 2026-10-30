@@ -20,6 +20,7 @@ import {
   ChevronRight,
   ListMusic,
   ExternalLink,
+  Globe,
 } from 'lucide-react'
 import { generateUUID } from '../utils/uuid'
 import { normalizeTags } from '../utils/tags'
@@ -33,6 +34,7 @@ export interface SongbookHomeViewProps {
   onSelectSong: (song: SongEntity) => void
   onEditSong: (song: SongEntity) => void
   onNewSong: () => void
+  onOpenSources?: () => void
   onDeleteSong: (songId: string) => Promise<void>
   onSaveSong: (song: SongEntity) => Promise<void>
   onBulkUpdateSongs?: (updated: SongEntity[]) => Promise<void>
@@ -59,6 +61,7 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
   onSelectSong,
   onEditSong,
   onNewSong,
+  onOpenSources,
   onDeleteSong,
   onSaveSong,
   onBulkUpdateSongs,
@@ -732,6 +735,18 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
                 </span>
               </h2>
 
+              <div className="flex items-center gap-2">
+                {onOpenSources && (
+                  <button
+                    type="button"
+                    onClick={onOpenSources}
+                    className="ui-button px-3 py-1.5 rounded-xl bg-app-button hover:brightness-110 border border-app-border text-app-button-text font-semibold text-xs transition-colors flex items-center gap-1.5 shadow-sm"
+                    title="Browse External Song Sources"
+                  >
+                    <Globe className="w-3.5 h-3.5 text-sky-400" />
+                    <span>Browse Sources</span>
+                  </button>
+                )}
               <button
                 type="button"
                 onClick={onNewSong}
@@ -740,6 +755,7 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add Song</span>
               </button>
+              </div>
             </div>
 
             {/* Empty State */}
@@ -752,7 +768,7 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
                     ? `No songs found matching "${searchQuery}". Clear your search query or add a new song.`
                     : 'Your songbook library is currently empty. Add your first chord chart or restore from backup.'}
                 </p>
-                <div className="flex justify-center gap-2">
+                <div className="flex justify-center gap-2 flex-wrap">
                   {searchQuery && (
                     <button
                       type="button"
@@ -760,6 +776,16 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
                       className="ui-button px-3 py-1.5 bg-app-button hover:brightness-110 rounded-xl text-xs text-app-button-text font-semibold border border-app-border"
                     >
                       Clear Search
+                    </button>
+                  )}
+                  {onOpenSources && (
+                    <button
+                      type="button"
+                      onClick={onOpenSources}
+                      className="ui-button px-3.5 py-1.5 bg-app-button hover:brightness-110 rounded-xl text-xs text-app-button-text font-semibold flex items-center gap-1 border border-app-border shadow-sm"
+                    >
+                      <Globe className="w-3.5 h-3.5 text-sky-400" />
+                      <span>Browse Sources</span>
                     </button>
                   )}
                   <button

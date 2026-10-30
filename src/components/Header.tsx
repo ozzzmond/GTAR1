@@ -12,6 +12,7 @@ import {
   Music,
   ListMusic,
   Palette,
+  Globe,
 } from 'lucide-react'
 
 export type ActiveTab = 'SONGS' | 'SETLISTS' | 'VIEWER' | 'EDITOR' | 'STAGE'
@@ -23,6 +24,7 @@ export interface HeaderProps {
   onOpenBackup: () => void
   onOpenProfile: () => void
   onOpenTheme?: () => void
+  onOpenSources?: () => void
   userProfile: LocalUserProfile
   searchQuery: string
   onSearchChange: (query: string) => void
@@ -38,6 +40,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenBackup,
   onOpenProfile,
   onOpenTheme,
+  onOpenSources,
   userProfile,
   searchQuery,
   onSearchChange,
@@ -182,6 +185,19 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="hidden sm:inline">New Song</span>
           </button>
 
+          {/* Browse Song Sources Entry */}
+          {onOpenSources && (
+            <button
+              onClick={onOpenSources}
+              title="Browse Song Sources"
+              aria-label="Browse Song Sources"
+              className="ui-button px-2 sm:px-2.5 py-1.5 rounded-xl bg-app-button hover:brightness-110 border border-app-border text-app-button-text text-xs font-medium transition-colors flex items-center gap-1"
+            >
+              <Globe className="w-3.5 h-3.5 text-app-accent" />
+              <span className="hidden md:inline">Sources</span>
+            </button>
+          )}
+
           {/* Backup & Restore Entry */}
           <button
             onClick={onOpenBackup}
@@ -242,6 +258,21 @@ export const Header: React.FC<HeaderProps> = ({
                     <User className="w-3.5 h-3.5 text-app-action" />
                     <span>Edit Local Profile</span>
                   </button>
+
+                  {onOpenSources && (
+                    <button
+                      type="button"
+                      data-testid="header-sources-btn"
+                      onClick={() => {
+                        setShowAvatarMenu(false)
+                        onOpenSources()
+                      }}
+                      className="w-full px-3 py-2 rounded-xl text-left hover:bg-app-base text-app-text flex items-center gap-2 transition-colors font-medium"
+                    >
+                      <Globe className="w-3.5 h-3.5 text-app-action" />
+                      <span>Browse Song Sources</span>
+                    </button>
+                  )}
 
                   <button
                     type="button"

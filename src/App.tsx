@@ -25,6 +25,7 @@ import { DesktopEditor } from './components/DesktopEditor'
 import { SetlistManager } from './components/SetlistManager'
 import { StageView, type StageQueueItem } from './components/StageView'
 import { BackupModal } from './components/BackupModal'
+import { BrowseSongSourcesModal } from './components/BrowseSongSourcesModal'
 import { LocalProfileModal } from './components/LocalProfileModal'
 import {
   ThemeModal,
@@ -104,6 +105,7 @@ export const App: React.FC = () => {
   const [isBackupOpen, setIsBackupOpen] = useState<boolean>(false)
   const [isProfileOpen, setIsProfileOpen] = useState<boolean>(false)
   const [isThemeOpen, setIsThemeOpen] = useState<boolean>(false)
+  const [isSourcesOpen, setIsSourcesOpen] = useState<boolean>(false)
   const [userProfile, setUserProfile] = useState<LocalUserProfile>(loadLocalProfile)
 
   // Stage Color Theme (persisted in localStorage)
@@ -713,6 +715,7 @@ export const App: React.FC = () => {
         onOpenBackup={() => setIsBackupOpen(true)}
         onOpenProfile={() => setIsProfileOpen(true)}
         onOpenTheme={() => setIsThemeOpen(true)}
+        onOpenSources={() => setIsSourcesOpen(true)}
         userProfile={userProfile}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
@@ -735,6 +738,7 @@ export const App: React.FC = () => {
             onDeleteFolder={handleDeleteFolder}
             onNewSong={handleNewSong}
             onNewSetlist={handleNewSetlist}
+            onOpenSources={() => setIsSourcesOpen(true)}
             onSelectSetlist={(slId) => handleSelectNavTarget({ type: 'SETLIST', setlistId: slId })}
           />
         </aside>
@@ -765,6 +769,7 @@ export const App: React.FC = () => {
                 onDeleteFolder={handleDeleteFolder}
                 onNewSong={handleNewSong}
                 onNewSetlist={handleNewSetlist}
+                onOpenSources={() => setIsSourcesOpen(true)}
                 onSelectSetlist={(slId) => handleSelectNavTarget({ type: 'SETLIST', setlistId: slId })}
                 onCloseMobileDrawer={() => setIsMobileDrawerOpen(false)}
               />
@@ -789,6 +794,7 @@ export const App: React.FC = () => {
               onSelectSong={handleSelectSong}
               onEditSong={handleEditSong}
               onNewSong={handleNewSong}
+              onOpenSources={() => setIsSourcesOpen(true)}
               onDeleteSong={handleDeleteSong}
               onSaveSong={handleSaveFromEditor as any}
               onBulkUpdateSongs={handleBulkUpdateSongs}
@@ -915,6 +921,12 @@ export const App: React.FC = () => {
           }
         }}
         onSelectTheme={(theme) => setStageTheme(theme)}
+      />
+
+      {/* Browse Song Sources Modal */}
+      <BrowseSongSourcesModal
+        isOpen={isSourcesOpen}
+        onClose={() => setIsSourcesOpen(false)}
       />
     </div>
   )
