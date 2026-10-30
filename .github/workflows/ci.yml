@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Test and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        id: node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24.20.0'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Validate dependencies from committed lockfile
+        id: dependencies
+        run: npm ci
+
+      # The existing browser suite serves dist/, so build before running npm test.
+      - name: TypeScript and production PWA build
+        id: build
+        run: npm run build
+
+      - name: Install mandatory Chromium browser and system dependencies
+        id: browser
+        run: npx --no-install playwright install --with-deps chromium
+
+      # Firefox remains optional under the existing test's skip semantics.
+      # Chromium launch failures and all test assertions remain mandatory failures.
+      - name: Run existing automated tests
+        id: tests
+        run: npm test
+
+      - name: Write compact verification receipt
+        if: ${{ always() }}
+        env:
+          RECEIPT_REPOSITORY: ${{ github.repository }}
+          RECEIPT_BRANCH: ${{ github.head_ref || github.ref_name }}
+          RECEIPT_SHA: ${{ github.sha }}
+          RECEIPT_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          RECEIPT_TRIGGER: ${{ github.event_name }}
+          RECEIPT_NODE: ${{ steps.node.outputs.node-version }}
+          RECEIPT_DEPENDENCIES: ${{ steps.dependencies.outcome }}
+          RECEIPT_BROWSER: ${{ steps.browser.outcome }}
+          RECEIPT_TESTS: ${{ steps.tests.outcome }}
+          RECEIPT_BUILD: ${{ steps.build.outcome }}
+          RECEIPT_STATUS: ${{ job.status }}
+        run: |
+          node --input-type=commonjs <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const fields = [
+            ['Repository', 'REPOSITORY'], ['Branch', 'BRANCH'],
+            ['Tested commit SHA (PR merge commit for pull_request)', 'SHA'],
+            ['Head commit SHA', 'HEAD_SHA'], ['Trigger', 'TRIGGER'],
+            ['Node version', 'NODE'], ['Dependency install', 'DEPENDENCIES'],
+            ['Chromium install', 'BROWSER'], ['Test result', 'TESTS'],
+            ['Build result', 'BUILD'], ['Overall verification status', 'STATUS'],
+          ];
+          const summary = '# CI verification\n\n' + fields.map(([label, key]) =>
+            `${label}: ${process.env[`RECEIPT_${key}`] || 'unavailable'}`
+          ).join('\n\n') + '\n\nFirefox may be skipped when unavailable; see native test logs for counts and reasons.\n';
+          fs.writeFileSync(path.join(process.env.RUNNER_TEMP, 'ci-verification.md'), summary);
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
+          NODE
+
+      - name: Upload verification receipt
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ci-verification
+          path: ${{ runner.temp }}/ci-verification.md
+          retention-days: 7
+          if-no-files-found: error
