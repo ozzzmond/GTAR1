@@ -1,4 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
+import styles from './Header.module.css'
+import { SearchHelp } from './SearchHelp'
 import { useSongSourceProvider } from '../hooks/useSongSourceProvider'
 import { SONG_SOURCE_PROVIDERS } from '../utils/songSourceProviders'
 import { searchOnlineSongSource } from '../utils/songSources'
@@ -19,7 +21,7 @@ import {
   Terminal,
 } from 'lucide-react'
 
-export type SearchScope = 'MY_SONGS' | 'ONLINE_SOURCES'
+export type SearchScope = 'MY_SONGS' | 'FAVORITES' | 'ONLINE_SOURCES'
 
 export type ActiveTab = 'SONGS' | 'SETLISTS' | 'VIEWER' | 'EDITOR' | 'STAGE'
 
@@ -101,9 +103,9 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header className="bg-app-header border-b border-app-border sticky top-0 z-40 px-3 py-2.5">
-      <div className="max-w-7xl mx-auto flex flex-wrap lg:flex-nowrap items-center justify-between gap-2 sm:gap-4">
+      <div className={styles.layout}>
         {/* Left: Mobile Drawer Toggle & App Branding */}
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className={`flex items-center gap-2 sm:gap-3 ${styles.brand}`}>
           <button
             type="button"
             onClick={onToggleMobileDrawer}
@@ -137,53 +139,52 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
 
           {/* Local Offline Pill */}
-          <span className="hidden lg:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-950/60 text-emerald-400 border border-emerald-800/60">
+          <span title="Local Standalone" className={`hidden lg:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-950/60 text-emerald-400 border border-emerald-800/60 ${styles.status}`}>
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-            Local Standalone
+            <span>Local Standalone</span>
           </span>
         </div>
 
         {/* One primary search input. Online navigation requires explicit submit. */}
-        <form onSubmit={submitSearch} role="search" aria-label="Global song search" className="order-last lg:order-none w-full lg:w-auto lg:flex-1 lg:min-w-0 lg:max-w-lg space-y-1.5">
-          <div className="flex min-w-0 gap-1.5 items-center">
+        <form onSubmit={submitSearch} role="search" aria-label="Global song search" className={styles.search}>
+          <div className={`${styles.controls} ${onlineScope ? styles.online : ''}`}>
             <select aria-label="Search scope" value={searchScope} onChange={event => onSearchScopeChange?.(event.target.value as SearchScope)}
               className="min-h-[44px] w-[8.5rem] shrink-0 rounded-xl border border-app-border bg-app-surface px-2.5 text-xs text-app-text focus-visible:outline-2 focus-visible:outline-app-action">
-              <option value="MY_SONGS">My Songs</option><option value="ONLINE_SOURCES">Online Sources</option>
+              <option value="MY_SONGS">My Songs</option><option value="FAVORITES">Favorites</option><option value="ONLINE_SOURCES">Online Sources</option>
             </select>
-            <div className="relative flex min-w-0 flex-1 items-center">
+            {onlineScope && <select aria-label="Online provider" value={provider.id} onChange={event => selectProvider(event.target.value)}
+              className="min-h-[44px] min-w-0 rounded-xl border border-app-border bg-app-surface px-2.5 text-xs text-app-text focus-visible:outline-2 focus-visible:outline-app-action">
+              {SONG_SOURCE_PROVIDERS.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </select>}
+            <div className={`relative flex min-w-0 flex-1 items-center ${styles.query}`}>
               <Search className="w-4 h-4 header-neutral-icon absolute left-3 pointer-events-none" />
               <input ref={searchInputRef} type="text" aria-label="Global search" value={searchQuery}
                 onChange={event => onSearchChange(event.target.value)} onKeyDown={handleKeyDown}
                 onFocus={() => setIsSearchActive(true)} onBlur={() => setIsSearchActive(false)}
-                placeholder={onlineScope ? 'Song or artist on website' : `Search ${searchScopeLabel}... (Esc to clear)`}
+                placeholder={onlineScope ? 'Song or artist on website' : `Search ${searchScope === 'FAVORITES' ? 'Favorites' : searchScopeLabel}... (Esc to clear)`}
                 aria-describedby={onlineScope ? 'global-online-help' : undefined}
                 aria-invalid={searchFeedback?.success === false}
                 className="header-search-input min-h-[44px] min-w-0 w-full pl-9 pr-10 rounded-xl bg-app-surface border border-app-border text-xs text-app-text placeholder:text-app-muted focus:outline-none focus:border-app-accent focus:ring-1 focus:ring-app-accent transition-colors" />
               {searchQuery && <button type="button" onClick={() => { onSearchChange(''); searchInputRef.current?.focus() }} aria-label="Clear search query"
                 className="absolute right-0 min-h-[44px] min-w-[36px] flex items-center justify-center header-neutral-icon hover:text-app-heading rounded"><X className="w-3.5 h-3.5" /></button>}
             </div>
-          </div>
-          {onlineScope && <>
-            <div className="flex gap-1.5 items-center">
-              <select aria-label="Online provider" value={provider.id} onChange={event => selectProvider(event.target.value)}
-                className="min-h-[44px] min-w-0 flex-1 rounded-xl border border-app-border bg-app-surface px-2.5 text-xs text-app-text focus-visible:outline-2 focus-visible:outline-app-action">
-                {SONG_SOURCE_PROVIDERS.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-              </select>
-              <button type="submit" className="min-h-[44px] rounded-xl bg-app-action px-3 text-xs font-bold text-app-on-action flex items-center gap-1.5 hover:brightness-110">
+            {onlineScope && <>
+              <button type="submit" className="min-h-[44px] shrink-0 whitespace-nowrap rounded-xl bg-app-action px-3 text-xs font-bold text-app-on-action flex items-center justify-center gap-1.5 hover:brightness-110">
                 <Globe className="w-3.5 h-3.5" />{provider.capabilities.externalSearch ? 'Search Online' : 'Open Website'}
               </button>
-            </div>
-            <p id="global-online-help" className="text-[11px] text-app-muted">{provider.capabilities.externalSearch ? 'Results open on the provider website in a new tab.' : 'Opens the provider homepage; search or browse there.'}</p>
-            {preferenceNotice && <p role="status" className="text-xs text-app-muted">{preferenceNotice}</p>}
-          </>}
+              <SearchHelp>{provider.capabilities.externalSearch ? 'Results open on the provider website in a new tab.' : 'Opens the provider homepage; search or browse there.'}</SearchHelp>
+            </>}
+          </div>
+          {onlineScope && preferenceNotice && <p role="status" className="text-xs text-app-muted">{preferenceNotice}</p>}
           {searchFeedback && <p role={searchFeedback.success ? 'status' : 'alert'} className={`text-xs ${searchFeedback.success ? 'text-app-muted' : 'text-red-400'}`}>{searchFeedback.message}</p>}
         </form>
 
         {/* Right Actions */}
-        <div className="flex items-center gap-1.5 sm:gap-2">
+        <div className={`flex items-center gap-1.5 sm:gap-2 ${styles.actions}`}>
           {/* Main Views Switcher */}
           <nav aria-label="Main navigation" className="hidden sm:flex items-center bg-app-surface/80 p-0.5 rounded-xl border border-app-border text-xs font-semibold min-h-[36px]">
             <button
+              aria-label="Songbook"
               onClick={() => setActiveTab('SONGS')}
               className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${
                 activeTab === 'SONGS'
@@ -195,6 +196,7 @@ export const Header: React.FC<HeaderProps> = ({
               <span>Songbook</span>
             </button>
             <button
+              aria-label="Setlists"
               onClick={() => setActiveTab('SETLISTS')}
               className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${
                 activeTab === 'SETLISTS'
@@ -209,6 +211,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* New Song Button */}
           <button
+            aria-label="New Song"
             onClick={onNewSong}
             className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-app-action hover:brightness-110 text-app-on-action font-semibold text-xs transition-colors shadow-sm flex items-center gap-1.5 min-h-[36px]"
           >

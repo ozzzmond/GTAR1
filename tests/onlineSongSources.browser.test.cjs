@@ -21,8 +21,8 @@ test('unified search: local filtering, explicit provider navigation, shared sett
     await server.listen()
     const origin = `http://127.0.0.1:${server.httpServer.address().port}`
     browser = await launchBrowser()
-    for (const viewport of [{ width: 1440, height: 900 }, { width: 768, height: 1024 }, { width: 375, height: 667 }]) {
-      const context = await browser.newContext({ viewport })
+    for (const viewport of [{ width: 1024, height: 768 }, { width: 1920, height: 1080 }, { width: 1440, height: 900 }, { width: 768, height: 1024 }, { width: 375, height: 667 }]) {
+      const context = await browser.newContext({ viewport, hasTouch:viewport.width < 640 })
       const page = await context.newPage()
       const errors = [], externalRequests = []
       page.on('pageerror', error => errors.push(error.message))
@@ -35,7 +35,7 @@ test('unified search: local filtering, explicit provider navigation, shared sett
       await page.evaluate(async () => {
         const core = await import('/src/utils/storage.ts')
         for (const [id, title] of [['unified-alpha', 'Alpha Grace'], ['unified-beta', 'Beta Song']]) {
-          await core.saveSong({ id, title, artist:'Local musician', format:'CHORD_PRO', rawContent:'[G]Local chart', tags:[], createdAt:1, updatedAt:1 })
+          await core.saveSong({ id, title, artist:'Local musician', format:'CHORD_PRO', rawContent:'[G]Local chart', tags:[], isFavorite:id === 'unified-alpha', createdAt:1, updatedAt:1 })
         }
         await core.saveSetlist({ id:'unified-gig', name:'Unified Gig', songs:[], createdAt:1, updatedAt:1 })
       })
@@ -58,6 +58,22 @@ test('unified search: local filtering, explicit provider navigation, shared sett
       assert.equal(await main.getByText('Beta Song', { exact:true }).count(), 0)
       await query.press('Enter')
       assert.equal(await scope.inputValue(), 'MY_SONGS')
+      assert.deepEqual(await scope.locator('option').allTextContents(), ['My Songs', 'Favorites', 'Online Sources'])
+      await query.fill('')
+      await scope.selectOption('FAVORITES')
+      await main.getByText('Alpha Grace', { exact:true }).waitFor()
+      assert.equal(await main.getByText('Beta Song', { exact:true }).count(), 0)
+      await query.fill('Beta')
+      assert.equal(await main.getByText('Alpha Grace', { exact:true }).count(), 0)
+      assert.equal(await main.getByText('Beta Song', { exact:true }).count(), 0)
+      await query.fill('Alpha')
+      await scope.selectOption('ONLINE_SOURCES')
+      await query.fill('Beta')
+      await main.getByText('Alpha Grace', { exact:true }).waitFor()
+      assert.equal(await main.getByText('Beta Song', { exact:true }).count(), 0, 'Online preserves favorites filter')
+      await scope.selectOption('FAVORITES')
+      assert.equal(await main.getByText('Alpha Grace', { exact:true }).count(), 0)
+      await scope.selectOption('MY_SONGS')
       await context.setOffline(true)
       await query.fill('Beta')
       await main.getByText('Beta Song', { exact:true }).waitFor()
@@ -84,6 +100,31 @@ test('unified search: local filtering, explicit provider navigation, shared sett
       await scope.selectOption('ONLINE_SOURCES')
       await query.press('Enter')
       await globalForm.getByRole('alert').filter({ hasText:'Enter a song or artist' }).waitFor()
+      const info = page.getByRole('button', { name:'About online search', exact:true })
+      const tooltip = page.getByRole('tooltip')
+      assert.equal(await tooltip.isVisible(), false)
+      const headerHeight = await page.locator('header').first().evaluate(el => el.offsetHeight)
+      await info.hover()
+      await tooltip.waitFor({ state:'visible' })
+      assert.match(await tooltip.textContent(), /Results open on the provider website in a new tab/)
+      assert.equal(await page.locator('header').first().evaluate(el => el.offsetHeight), headerHeight)
+      await page.mouse.move(0, 0)
+      await tooltip.waitFor({ state:'hidden' })
+      await info.focus()
+      await tooltip.waitFor({ state:'visible' })
+      await info.press('Escape')
+      await tooltip.waitFor({ state:'hidden' })
+      await info.press('Enter')
+      await tooltip.waitFor({ state:'visible' })
+      await info.press('Escape')
+      await query.focus()
+      await tooltip.waitFor({ state:'hidden' })
+      if (viewport.width < 640) {
+        await info.tap()
+        await tooltip.waitFor({ state:'visible' })
+        await query.tap()
+        await tooltip.waitFor({ state:'hidden' })
+      }
       const term = 'Amazing Grace & John Newton'
       await query.fill(term)
       assert.deepEqual(externalRequests, [], 'Typing and scope changes never contact providers')
@@ -114,6 +155,9 @@ test('unified search: local filtering, explicit provider navigation, shared sett
         assert.equal(url.pathname, '/')
         assert.equal(url.search, '')
       }
+      await info.focus()
+      assert.match(await tooltip.textContent(), /Opens the provider homepage; search or browse there/ )
+      await info.press('Escape')
       assert.equal(externalRequests.length, 4)
       // The Sources dialog is management/import only; its selection updates the same header preference.
       await openSources()
@@ -160,6 +204,14 @@ test('unified search: local filtering, explicit provider navigation, shared sett
       }
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Header fits desktop/tablet/mobile')
       if (process.env.GTAR1_SOURCES_VISUAL_QA) await page.screenshot({ path:path.join(os.tmpdir(), `gtar1-unified-search-${viewport.width}.png`) })
+      if (viewport.width >= 1024) {
+        const controls = await Promise.all([scope, provider, query, globalForm.getByRole('button', { name:'Search Online', exact:true }), info].map(control => control.boundingBox()))
+        for (let i = 1; i < controls.length; i++) {
+          assert.ok(Math.abs(controls[i].y - controls[0].y) < 1, 'Online controls share one desktop row')
+          assert.ok(controls[i].x >= controls[i-1].x + controls[i-1].width, 'Scope, provider, input, submit, info order')
+        }
+        assert.ok(await page.locator('header').first().evaluate(el => el.offsetHeight <= 65), 'Compact desktop header')
+      }
       const saved = await page.evaluate(() => localStorage.getItem('gtar1_song_source_provider'))
       assert.equal(saved, 'chordie')
       await page.reload()

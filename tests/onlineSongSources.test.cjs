@@ -1,3 +1,5 @@
+// CSS modules are compiled by Vite in browser tests; DOM unit tests need class names only.
+require.extensions['.css'] = module => { module.exports = { __esModule: true, default: new Proxy({}, { get: (_, key) => key }) } }
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
