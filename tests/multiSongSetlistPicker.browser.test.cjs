@@ -187,11 +187,32 @@ test('Multi-song setlist picker browser: Outlook search picker, Ctrl+K, multi-se
     await page.locator('.ui-setlist-card button', { hasText: 'River Flow' }).first().waitFor({ state: 'visible', timeout: 3000 })
     await page.locator('.ui-setlist-card button', { hasText: 'Night Sky' }).first().waitFor({ state: 'visible', timeout: 3000 })
 
-    // 10. Test Escape dismissal
+    // 10. Test Outlook-style live multi-search in browser (comma & space separated)
     const searchSongsBtn = page.getByRole('button', { name: /search songs/i }).first()
     await searchSongsBtn.click()
     await picker.waitFor({ state: 'visible', timeout: 3000 })
+    const reopenInput = page.locator('#multi-song-search-input')
 
+    // 10a. Comma-separated query displays both songs simultaneously without Enter
+    await reopenInput.fill('Morning Sun, Night Sky')
+    await picker.locator('[role="option"]').filter({ hasText: 'Morning Sun' }).waitFor({ state: 'visible', timeout: 3000 })
+    await picker.locator('[role="option"]').filter({ hasText: 'Night Sky' }).waitFor({ state: 'visible', timeout: 3000 })
+    let matchingOptions = await picker.locator('[role="option"]').count()
+    assert.equal(matchingOptions, 2, 'Displays exactly 2 matching songs for comma-separated query')
+
+    // 10b. Space-separated query resolves without breaking multiword titles
+    await reopenInput.fill('River Flow Night Sky')
+    await picker.locator('[role="option"]').filter({ hasText: 'River Flow' }).waitFor({ state: 'visible', timeout: 3000 })
+    await picker.locator('[role="option"]').filter({ hasText: 'Night Sky' }).waitFor({ state: 'visible', timeout: 3000 })
+    matchingOptions = await picker.locator('[role="option"]').count()
+    assert.equal(matchingOptions, 2, 'Displays exactly 2 matching songs for space-separated query')
+
+    // 10c. Trailing comma input does not create empty chips or broad matches
+    await reopenInput.fill('River Flow, ')
+    matchingOptions = await picker.locator('[role="option"]').count()
+    assert.equal(matchingOptions, 1, 'Trailing comma keeps only River Flow')
+
+    // 11. Test Escape dismissal
     await page.keyboard.press('Escape')
     await picker.waitFor({ state: 'hidden', timeout: 3000 })
     assert.ok(!(await picker.isVisible()), 'Picker dismissed via Escape key')

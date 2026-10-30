@@ -52,7 +52,12 @@ const React = require('react')
 const { act } = React
 const { createRoot } = require('react-dom/client')
 
-const { MultiSongSetlistPicker } = require('../src/components/MultiSongSetlistPicker.tsx')
+const {
+  MultiSongSetlistPicker,
+  songMatchesPhrase,
+  segmentSpaceSeparatedTitles,
+  parseSearchPhrases,
+} = require('../src/components/MultiSongSetlistPicker.tsx')
 const { SetlistManager } = require('../src/components/SetlistManager.tsx')
 
 function setInputValue(el, value) {
@@ -194,63 +199,193 @@ test('MULTI_SONG_PICKER_SEARCH_AND_DISAMBIGUATION: Filters local songs by title,
   })
 })
 
-test('MULTI_QUERY_CHIPS: Entering multiple queries creates chips and filters correctly', async () => {
+const OWNER_WORSHIP_SONGS = [
+  ...SAMPLE_SONGS,
+  {
+    id: 'song-5',
+    title: 'Christ Be Magnified',
+    artist: 'Cody Carnes',
+    key: 'A',
+    rawContent: '{title: Christ Be Magnified}\n{artist: Cody Carnes}\n{key: A}\n[A]Were creation songs of praise',
+    format: 'CHORD_PRO',
+    tags: ['worship', 'contemporary'],
+    createdAt: 5000,
+    updatedAt: 5000,
+  },
+  {
+    id: 'song-6',
+    title: 'Goodness of God',
+    artist: 'Bethel Music',
+    key: 'Ab',
+    rawContent: '{title: Goodness of God}\n{artist: Bethel Music}\n{key: Ab}\n[Ab]I love you Lord',
+    format: 'CHORD_PRO',
+    tags: ['worship', 'praise'],
+    createdAt: 6000,
+    updatedAt: 6000,
+  },
+  {
+    id: 'song-7',
+    title: 'Great Are You Lord',
+    artist: 'All Sons & Daughters',
+    key: 'G',
+    rawContent: '{title: Great Are You Lord}\n{artist: All Sons & Daughters}\n{key: G}\n[G]You give life You are love',
+    format: 'CHORD_PRO',
+    tags: ['worship'],
+    createdAt: 7000,
+    updatedAt: 7000,
+  },
+]
+
+test('OUTLOOK_MULTI_QUERY_SEARCH: Immediate reactive comma and space-separated multi-search without Enter', async () => {
   const container = dom.window.document.getElementById('test-container')
   const root = createRoot(container)
 
+  let addedSongs = []
   await act(async () => {
     root.render(
       React.createElement(MultiSongSetlistPicker, {
         isOpen: true,
         onClose: () => {},
         currentSetlist: SAMPLE_SETLIST,
-        allSongs: SAMPLE_SONGS,
-        onAddSongs: async () => {},
+        allSongs: OWNER_WORSHIP_SONGS,
+        onAddSongs: async (songs) => { addedSongs = songs },
       })
     )
   })
 
   const searchInput = container.querySelector('#multi-song-search-input')
+  assert.ok(searchInput, 'Search input exists')
 
-  // Type "Hallelujah" and press Enter to create query chip
+  // A: Live search for single partial title without pressing Enter
+  await act(async () => {
+    setInputValue(searchInput, 'Goodness of')
+  })
+  let options = container.querySelectorAll('[role="option"]')
+  assert.equal(options.length, 1, 'Partial title with space "Goodness of" matches exactly 1 song')
+  assert.ok(options[0].textContent.includes('Goodness of God'), 'Matched Goodness of God')
+
+  // B: Comma-separated titles matching all three songs simultaneously without pressing Enter
+  await act(async () => {
+    setInputValue(searchInput, 'Christ Be Magnified, Goodness of God, Great Are You Lord')
+  })
+  options = container.querySelectorAll('[role="option"]')
+  assert.equal(options.length, 3, 'Comma-separated query displays all 3 matching songs simultaneously')
+  const titles = Array.from(options).map((el) => el.querySelector('.font-bold').textContent.trim())
+  assert.ok(titles.includes('Christ Be Magnified'))
+  assert.ok(titles.includes('Goodness of God'))
+  assert.ok(titles.includes('Great Are You Lord'))
+
+  // C: Space-separated titles matching multiple songs without breaking multiword titles
+  await act(async () => {
+    setInputValue(searchInput, 'Goodness of God Great Are You Lord')
+  })
+  options = container.querySelectorAll('[role="option"]')
+  assert.equal(options.length, 2, 'Space-separated full titles match 2 distinct songs without word-splitting')
+  const spaceTitles = Array.from(options).map((el) => el.querySelector('.font-bold').textContent.trim())
+  assert.ok(spaceTitles.includes('Goodness of God'))
+  assert.ok(spaceTitles.includes('Great Are You Lord'))
+
+  // Another space-separated test: Amazing Grace Hotel California
+  await act(async () => {
+    setInputValue(searchInput, 'Amazing Grace Hotel California')
+  })
+  options = container.querySelectorAll('[role="option"]')
+  assert.equal(options.length, 2, 'Space-separated titles "Amazing Grace Hotel California" match 2 songs')
+  const agHcTitles = Array.from(options).map((el) => el.querySelector('.font-bold').textContent.trim())
+  assert.ok(agHcTitles.includes('Amazing Grace'))
+  assert.ok(agHcTitles.includes('Hotel California'))
+
+  // D: Trailing comma & whitespace input does not create empty chips or false broad matches
+  await act(async () => {
+    setInputValue(searchInput, 'Amazing Grace, ')
+  })
+  options = container.querySelectorAll('[role="option"]')
+  assert.equal(options.length, 1, 'Trailing comma and space preserves only Amazing Grace')
+  assert.ok(options[0].textContent.includes('Amazing Grace'))
+
+  // E: Reactive updates when typing, deleting, pasting
+  await act(async () => {
+    setInputValue(searchInput, 'Christ Be Magnified, Goodness of God')
+  })
+  options = container.querySelectorAll('[role="option"]')
+  assert.equal(options.length, 2, 'Deleting 3rd song immediately reduces results to 2')
+
+  // Checkbox multi-selection across distinct phrases
+  const firstCheckbox = options[0]
+  const secondCheckbox = options[1]
+  await act(async () => {
+    firstCheckbox.click()
+  })
+  await act(async () => {
+    secondCheckbox.click()
+  })
+
+  assert.ok(container.textContent.includes('2 songs selected'), '2 songs selected across independent phrases')
+
+  // F: Selections persist when input changes
   await act(async () => {
     setInputValue(searchInput, 'Hallelujah')
-    searchInput.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
   })
-
-  // Verify query chip was created
-  let queryChips = container.querySelectorAll('[aria-label^="Remove query filter"]')
-  assert.equal(queryChips.length, 1, 'Should have 1 query chip')
-  assert.ok(container.textContent.includes('Hallelujah'))
-
-  // Results should only show 2 Hallelujah songs
-  let options = container.querySelectorAll('[role="option"]')
-  assert.equal(options.length, 2, 'Should filter by Hallelujah chip')
-
-  // Type second query "Buckley" and press Enter
-  await act(async () => {
-    setInputValue(searchInput, 'Buckley')
-    searchInput.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
-  })
-
-  queryChips = container.querySelectorAll('[aria-label^="Remove query filter"]')
-  assert.equal(queryChips.length, 2, 'Should have 2 query chips')
-
-  options = container.querySelectorAll('[role="option"]')
-  assert.equal(options.length, 1, 'Should narrow down to Buckley Hallelujah')
-
-  // Remove the Buckley chip by clicking its remove button
-  const buckleyRemoveBtn = container.querySelector('[aria-label="Remove query filter Buckley"]')
-  await act(async () => {
-    buckleyRemoveBtn.click()
-  })
-
-  options = container.querySelectorAll('[role="option"]')
-  assert.equal(options.length, 2, 'Should return to 2 Hallelujah songs after removing chip')
+  assert.ok(container.textContent.includes('2 songs selected'), 'Selected count persists across query changes')
 
   await act(async () => {
     root.unmount()
   })
+})
+
+test('DETERMINISTIC_QUERY_PARSER_UNIT_TESTS: parseSearchPhrases and segmentSpaceSeparatedTitles', () => {
+  // 1. Single title with spaces preserved
+  const single1 = parseSearchPhrases('Amazing Grace', OWNER_WORSHIP_SONGS)
+  assert.deepEqual(single1, ['Amazing Grace'])
+
+  const single2 = parseSearchPhrases('Goodness of', OWNER_WORSHIP_SONGS)
+  assert.deepEqual(single2, ['Goodness of'])
+
+  // 2. Comma-separated full titles
+  const commaPhrases = parseSearchPhrases(
+    'Christ Be Magnified, Goodness of God, Great Are You Lord',
+    OWNER_WORSHIP_SONGS
+  )
+  assert.deepEqual(commaPhrases, [
+    'Christ Be Magnified',
+    'Goodness of God',
+    'Great Are You Lord',
+  ])
+
+  // 3. Space-separated multiword titles
+  const spacePhrases1 = parseSearchPhrases(
+    'Goodness of God Great Are You Lord',
+    OWNER_WORSHIP_SONGS
+  )
+  assert.deepEqual(spacePhrases1, ['Goodness of God', 'Great Are You Lord'])
+
+  const spacePhrases2 = parseSearchPhrases(
+    'Amazing Grace Hotel California',
+    OWNER_WORSHIP_SONGS
+  )
+  assert.deepEqual(spacePhrases2, ['Amazing Grace', 'Hotel California'])
+
+  // 4. In-progress typing with partial remainder
+  const inProgress = parseSearchPhrases(
+    'Goodness of God Great Are',
+    OWNER_WORSHIP_SONGS
+  )
+  assert.deepEqual(inProgress, ['Goodness of God', 'Great Are'])
+
+  // 5. Trailing comma and empty whitespace ignored
+  const trailingComma = parseSearchPhrases('Amazing Grace, ', OWNER_WORSHIP_SONGS)
+  assert.deepEqual(trailingComma, ['Amazing Grace'])
+
+  const onlyCommas = parseSearchPhrases(', , ,', OWNER_WORSHIP_SONGS)
+  assert.deepEqual(onlyCommas, [])
+
+  // 6. Direct song matches phrase
+  const song5 = OWNER_WORSHIP_SONGS.find((s) => s.id === 'song-5')
+  assert.ok(songMatchesPhrase(song5, 'Christ Be Magnified'))
+  assert.ok(songMatchesPhrase(song5, 'Cody Carnes'))
+  assert.ok(songMatchesPhrase(song5, 'A'))
+  assert.ok(songMatchesPhrase(song5, 'worship'))
+  assert.ok(!songMatchesPhrase(song5, 'Hotel'))
 })
 
 test('SELECTION_AND_ORDER_PRESERVATION: Multi-select checkboxes, selected count, chips, and order stability', async () => {
