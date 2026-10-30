@@ -11,6 +11,7 @@
  */
 
 import { generateUUID } from './uuid'
+import { SONG_SOURCE_PROVIDERS, resolveSongSourceProvider, getExternalSongSearch } from './songSourceProviders'
 export * from './songSourceRetrieval'
 
 export interface SongSource {
@@ -23,36 +24,28 @@ export interface SongSource {
   updatedAt?: number
 }
 
-export const CURATED_SONG_SOURCES: readonly SongSource[] = [
-  {
-    id: 'curated_songselect',
-    name: 'SongSelect',
-    url: 'https://songselect.ccli.com',
-    desc: 'Praise & worship chords and lead sheets (CCLI)',
-    isCurated: true,
-  },
-  {
-    id: 'curated_ultimate_guitar',
-    name: 'Ultimate Guitar',
-    url: 'https://www.ultimate-guitar.com',
-    desc: 'Global chords, tabs, and guitar lead sheets',
-    isCurated: true,
-  },
-  {
-    id: 'curated_chordie',
-    name: 'Chordie',
-    url: 'https://www.chordie.com',
-    desc: 'Direct ChordPro catalog and searchable chord charts',
-    isCurated: true,
-  },
-  {
-    id: 'curated_opmtunes',
-    name: 'OPMTunes',
-    url: 'https://www.opmtunes.com',
-    desc: 'Original Pilipino Music (OPM) chords & Pinoy classics',
-    isCurated: true,
-  },
-]
+export const CURATED_SONG_SOURCES: readonly SongSource[] = SONG_SOURCE_PROVIDERS.map(provider => ({
+  id: `curated_${provider.id}`,
+  name: provider.name,
+  url: provider.homepageUrl,
+  desc: provider.description,
+  isCurated: true,
+}))
+
+// A separate preference key avoids modifying appearance, library or shortcut data.
+export const SONG_SOURCE_PROVIDER_KEY = 'gtar1_song_source_provider'
+
+export function loadSongSourceProvider(): string {
+  try { return resolveSongSourceProvider(localStorage.getItem(SONG_SOURCE_PROVIDER_KEY)).id }
+  catch { return resolveSongSourceProvider(null).id }
+}
+
+export function saveSongSourceProvider(id: string): boolean {
+  try {
+    localStorage.setItem(SONG_SOURCE_PROVIDER_KEY, resolveSongSourceProvider(id).id)
+    return true
+  } catch { return false }
+}
 
 export const SONG_SOURCES_STORAGE_KEY = 'gtar1_custom_song_sources'
 
@@ -135,6 +128,21 @@ export function openExternalSongSource(rawUrl: string): { success: boolean; url?
   }
 
   return { success: true, url: check.url }
+}
+
+/** User-triggered website navigation only; never fetch provider content. */
+export function searchOnlineSongSource(providerId: string, query: string): { success: boolean; message: string } {
+  const target = getExternalSongSearch(providerId, query)
+  if (!target.success) return { success: false, message: target.error }
+  if (navigator.onLine === false) return { success: false, message: 'You are offline. Connect to search online; your query is kept.' }
+  try {
+    const result = openExternalSongSource(target.url)
+    if (!result.success) return { success: false, message: result.error || 'Could not open the source website.' }
+    const provider = resolveSongSourceProvider(providerId)
+    return { success: true, message: target.homepageFallback
+      ? `Opening ${provider.name} website. Search or browse there; your query is kept here.`
+      : `Opening ${provider.name} search in a new tab.` }
+  } catch { return { success: false, message: 'Could not open the source website. Check browser popup settings.' } }
 }
 
 /**

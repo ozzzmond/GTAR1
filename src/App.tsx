@@ -19,7 +19,7 @@ import {
   deleteFolder,
   saveAllSongs,
 } from './utils/storage'
-import { Header, type ActiveTab } from './components/Header'
+import { Header, type ActiveTab, type SearchScope } from './components/Header'
 import { SongbookHomeView } from './components/SongbookHomeView'
 import { SongViewer } from './components/SongViewer'
 import { DesktopEditor } from './components/DesktopEditor'
@@ -108,6 +108,16 @@ export const App: React.FC = () => {
   })
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [searchScope, setSearchScope] = useState<SearchScope>('MY_SONGS')
+  const [lastLocalQuery, setLastLocalQuery] = useState('')
+  const globalSearchRef = useRef<HTMLInputElement>(null)
+  // Online edits never change the visible local filter until My Songs is selected.
+  const localSearchQuery = searchScope === 'MY_SONGS' ? searchQuery : lastLocalQuery
+  const handleSearchScopeChange = (scope: SearchScope) => {
+    if (scope === 'ONLINE_SOURCES' && searchScope === 'MY_SONGS') setLastLocalQuery(searchQuery)
+    setSearchScope(scope)
+  }
+  const clearSearch = () => { setSearchQuery(''); setLastLocalQuery('') }
 
   // Modals
   const [isBackupOpen, setIsBackupOpen] = useState<boolean>(false)
@@ -789,6 +799,9 @@ export const App: React.FC = () => {
         userProfile={userProfile}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
+        searchScope={searchScope}
+        onSearchScopeChange={handleSearchScopeChange}
+        globalSearchRef={globalSearchRef}
         onToggleMobileDrawer={() => setIsMobileDrawerOpen(!isMobileDrawerOpen)}
         isMobileDrawerOpen={isMobileDrawerOpen}
         searchScopeLabel={searchScopeLabel}
@@ -873,8 +886,8 @@ export const App: React.FC = () => {
               onDeleteSetlist={handleDeleteSetlist}
               onPlaySetlistSong={handlePlaySetlistSong}
               onOpenSetlistManager={handleOpenSetlistManager}
-              searchQuery={searchQuery}
-              onClearSearch={() => setSearchQuery('')}
+              searchQuery={localSearchQuery}
+              onClearSearch={clearSearch}
               onEnterStageSong={handleEnterStageSong}
               onEnterStageSetlist={handleEnterStageSetlist}
             />
@@ -1009,6 +1022,11 @@ export const App: React.FC = () => {
 
       {/* Browse Song Sources Modal */}
       <BrowseSongSourcesModal
+        onSearchOnline={() => {
+          setIsSourcesOpen(false)
+          handleSearchScopeChange('ONLINE_SOURCES')
+          requestAnimationFrame(() => globalSearchRef.current?.focus())
+        }}
         isOpen={isSourcesOpen}
         onClose={() => setIsSourcesOpen(false)}
         songs={songs}

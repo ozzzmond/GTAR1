@@ -241,6 +241,18 @@ test('BROWSE_SONG_SOURCES_MODAL: Accessible modal UI, curated links, custom CRUD
   assert.ok(title)
   assert.match(title.textContent, /Browse Song Sources/i)
 
+  assert.match(container.textContent, /Online provider/)
+  assert.match(container.textContent, /Use Online Sources in the header search/)
+  assert.match(container.textContent, /permission to use/)
+  assert.match(container.textContent, /source and author attribution/)
+  Object.defineProperty(global.navigator, 'onLine', { configurable: true, value: false })
+  await act(async () => { window.dispatchEvent(new window.Event('offline')) })
+  assert.match(container.textContent, /You are offline/)
+  assert.match(container.textContent, /Local Songbook, Stage, and paste or file import remain available/)
+  Object.defineProperty(global.navigator, 'onLine', { configurable: true, value: true })
+  await act(async () => { window.dispatchEvent(new window.Event('online')) })
+  assert.match(container.textContent, /Use Online Sources in the header search/)
+
   // Verify curated sources are displayed
   const textContent = container.textContent
   assert.match(textContent, /SongSelect/i)

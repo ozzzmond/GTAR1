@@ -34,6 +34,8 @@ import {
   type SourceProviderMetadata,
   MAX_IMPORT_BYTES,
 } from '../utils/songSources'
+import { useSongSourceProvider } from '../hooks/useSongSourceProvider'
+import { SONG_SOURCE_PROVIDERS } from '../utils/songSourceProviders'
 import { syncCanonicalDirectives } from '../utils/chordProMetadata'
 import { parseChordProLine } from '../utils/songParser'
 import { generateUUID } from '../utils/uuid'
@@ -47,6 +49,7 @@ export interface BrowseSongSourcesModalProps {
   songs?: SongEntity[]
   onSelectSong?: (song: SongEntity) => void
   initialTab?: 'browse' | 'import'
+  onSearchOnline?: () => void
 }
 
 const SAMPLE_CHORDPRO = `{title: Amazing Grace}
@@ -68,7 +71,10 @@ export const BrowseSongSourcesModal: React.FC<BrowseSongSourcesModalProps> = ({
   songs = [],
   onSelectSong,
   initialTab = 'browse',
+  onSearchOnline,
 }) => {
+  const { provider, selectProvider, preferenceNotice } = useSongSourceProvider()
+  const [online, setOnline] = useState(() => navigator.onLine !== false)
   const [activeTab, setActiveTab] = useState<'browse' | 'import'>(initialTab)
 
   // Phase A - Browse Tab State
@@ -111,6 +117,18 @@ export const BrowseSongSourcesModal: React.FC<BrowseSongSourcesModalProps> = ({
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const modalContentRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (!isOpen) return
+    const update = () => setOnline(navigator.onLine !== false)
+    update()
+    window.addEventListener('online', update)
+    window.addEventListener('offline', update)
+    return () => {
+      window.removeEventListener('online', update)
+      window.removeEventListener('offline', update)
+    }
+  }, [isOpen])
 
   // Load custom shortcuts when modal opens
   useEffect(() => {
@@ -298,8 +316,8 @@ export const BrowseSongSourcesModal: React.FC<BrowseSongSourcesModalProps> = ({
   }
 
   // --- Phase B Handlers ---
-  const handleSwitchToImportWithUrl = (url: string) => {
-    setImportUrl(url)
+  const handleManualImport = () => {
+    setImportUrl('')
     setActiveTab('import')
   }
 
@@ -548,6 +566,19 @@ export const BrowseSongSourcesModal: React.FC<BrowseSongSourcesModalProps> = ({
           {/* ==================== TAB 1: BROWSE WEBSITES ==================== */}
           {activeTab === 'browse' && (
             <div id="sources-tabpanel-browse" role="tabpanel" aria-labelledby="sources-tab-browse" className="space-y-5">
+              <section aria-labelledby="public-search-heading" className="rounded-xl border border-app-border bg-app-base p-4 space-y-2">
+                <h3 id="public-search-heading" className="text-sm font-bold text-app-heading">Online provider</h3>
+                <label htmlFor="online-source-provider" className="sr-only">Provider</label>
+                <select id="online-source-provider" value={provider.id} onChange={event => selectProvider(event.target.value)}
+                  className="min-h-[44px] w-full rounded-xl border border-app-border bg-app-surface px-3 text-xs text-app-text focus-visible:outline-2 focus-visible:outline-app-action">
+                  {SONG_SOURCE_PROVIDERS.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+                </select>
+                <p className="text-xs text-app-muted">Use Online Sources in the header search. {provider.capabilities.externalSearch ? 'Results open on the provider website.' : 'Direct search link unavailable; opens its homepage instead.'}</p>
+                {onSearchOnline && <button type="button" onClick={onSearchOnline} className="min-h-[44px] rounded-xl border border-app-border px-3 text-xs font-semibold text-app-action">Use header search</button>}
+                <p className="text-xs text-app-muted">Import charts you own or have permission to use with <button type="button" onClick={() => setActiveTab('import')} className="underline text-app-action">Import &amp; Preview</button> to keep them local and available offline. Keep source and author attribution.</p>
+                {!online && <p role="status" className="text-xs text-app-muted">You are offline. Local Songbook, Stage, and paste or file import remain available.</p>}
+                {preferenceNotice && <p role="status" className="text-xs text-app-muted">{preferenceNotice}</p>}
+              </section>
               {/* Section 1: Direct URL Entry */}
               <section aria-labelledby="direct-url-heading" className="space-y-2">
                 <label
@@ -637,11 +668,11 @@ export const BrowseSongSourcesModal: React.FC<BrowseSongSourcesModalProps> = ({
                         <div className="flex items-center gap-1.5 shrink-0">
                           <button
                             type="button"
-                            onClick={() => handleSwitchToImportWithUrl(src.url)}
+                            onClick={handleManualImport}
                             className="px-2 py-1 rounded-lg bg-app-surface hover:bg-app-base border border-app-border text-app-text font-medium transition-colors"
-                            title={`Import from ${src.name}`}
+                            title={`Paste or upload a permitted chart from ${src.name}`}
                           >
-                            Import
+                            Manual import
                           </button>
                           <a
                             href={src.url}

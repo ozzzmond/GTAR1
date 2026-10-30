@@ -1,4 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
+import { useSongSourceProvider } from '../hooks/useSongSourceProvider'
+import { SONG_SOURCE_PROVIDERS } from '../utils/songSourceProviders'
+import { searchOnlineSongSource } from '../utils/songSources'
 import { GTAR1_VERSION } from '../types/gtar'
 import type { LocalUserProfile } from '../utils/localProfile'
 import { getInitials, DEFAULT_AVATAR_PATH } from '../utils/localProfile'
@@ -16,6 +19,8 @@ import {
   Terminal,
 } from 'lucide-react'
 
+export type SearchScope = 'MY_SONGS' | 'ONLINE_SOURCES'
+
 export type ActiveTab = 'SONGS' | 'SETLISTS' | 'VIEWER' | 'EDITOR' | 'STAGE'
 
 export interface HeaderProps {
@@ -32,6 +37,9 @@ export interface HeaderProps {
   onToggleMobileDrawer: () => void
   isMobileDrawerOpen: boolean
   searchScopeLabel?: string
+  searchScope?: SearchScope
+  onSearchScopeChange?: (scope: SearchScope) => void
+  globalSearchRef?: React.RefObject<HTMLInputElement | null>
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -48,15 +56,29 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleMobileDrawer,
   isMobileDrawerOpen,
   searchScopeLabel = 'All Songs',
+  searchScope = 'MY_SONGS',
+  onSearchScopeChange,
+  globalSearchRef,
 }) => {
   const [isSearchActive, setIsSearchActive] = useState(false)
-  const searchInputRef = useRef<HTMLInputElement>(null)
+  const ownSearchRef = useRef<HTMLInputElement>(null)
+  const searchInputRef = globalSearchRef || ownSearchRef
+  const { provider, selectProvider, preferenceNotice } = useSongSourceProvider()
+  const [searchFeedback, setSearchFeedback] = useState<{ success: boolean; message: string } | null>(null)
+  useEffect(() => { setSearchFeedback(null) }, [searchQuery, searchScope, provider.id])
+  const onlineScope = searchScope === 'ONLINE_SOURCES'
+  const submitSearch = (event: React.FormEvent) => {
+    event.preventDefault()
+    if (onlineScope) setSearchFeedback(searchOnlineSongSource(provider.id, searchQuery))
+  }
   const [showAvatarMenu, setShowAvatarMenu] = useState(false)
   const avatarMenuRef = useRef<HTMLDivElement>(null)
 
   // Handle escape to close search or clear
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && e.nativeEvent.isComposing) { e.preventDefault(); return }
     if (e.key === 'Escape') {
+      setSearchFeedback(null)
       if (searchQuery) {
         onSearchChange('')
       } else {
@@ -79,7 +101,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header className="bg-app-header border-b border-app-border sticky top-0 z-40 px-3 py-2.5">
-      <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 sm:gap-4">
+      <div className="max-w-7xl mx-auto flex flex-wrap lg:flex-nowrap items-center justify-between gap-2 sm:gap-4">
         {/* Left: Mobile Drawer Toggle & App Branding */}
         <div className="flex items-center gap-2 sm:gap-3">
           <button
@@ -121,33 +143,41 @@ export const Header: React.FC<HeaderProps> = ({
           </span>
         </div>
 
-        {/* Center: Search Box */}
-        <div className="flex-1 max-w-md mx-1 sm:mx-2">
-          <div className="relative flex items-center">
-            <Search className="w-4 h-4 header-neutral-icon absolute left-3 pointer-events-none" />
-            <input
-              ref={searchInputRef}
-              type="text"
-              value={searchQuery}
-              onChange={(e) => onSearchChange(e.target.value)}
-              onKeyDown={handleKeyDown}
-              onFocus={() => setIsSearchActive(true)}
-              onBlur={() => setIsSearchActive(false)}
-              placeholder={`Search ${searchScopeLabel}... (Esc to clear)`}
-              className="header-search-input w-full pl-9 pr-8 py-1.5 rounded-xl bg-app-surface border border-app-border text-xs text-app-text placeholder:text-app-muted focus:outline-none focus:border-app-accent focus:ring-1 focus:ring-app-accent transition-colors"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => onSearchChange('')}
-                aria-label="Clear search query"
-                className="absolute right-2.5 p-0.5 header-neutral-icon hover:text-app-heading rounded"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
+        {/* One primary search input. Online navigation requires explicit submit. */}
+        <form onSubmit={submitSearch} role="search" aria-label="Global song search" className="order-last lg:order-none w-full lg:w-auto lg:flex-1 lg:min-w-0 lg:max-w-lg space-y-1.5">
+          <div className="flex min-w-0 gap-1.5">
+            <select aria-label="Search scope" value={searchScope} onChange={event => onSearchScopeChange?.(event.target.value as SearchScope)}
+              className="min-h-[44px] w-[8.5rem] shrink-0 rounded-xl border border-app-border bg-app-surface px-2 text-xs text-app-text focus-visible:outline-2 focus-visible:outline-app-action">
+              <option value="MY_SONGS">My Songs</option><option value="ONLINE_SOURCES">Online Sources</option>
+            </select>
+            <div className="relative flex min-w-0 flex-1 items-center">
+              <Search className="w-4 h-4 header-neutral-icon absolute left-3 pointer-events-none" />
+              <input ref={searchInputRef} type="text" aria-label="Global search" value={searchQuery}
+                onChange={event => onSearchChange(event.target.value)} onKeyDown={handleKeyDown}
+                onFocus={() => setIsSearchActive(true)} onBlur={() => setIsSearchActive(false)}
+                placeholder={onlineScope ? 'Song or artist on website' : `Search ${searchScopeLabel}... (Esc to clear)`}
+                aria-describedby={onlineScope ? 'global-online-help' : undefined}
+                aria-invalid={searchFeedback?.success === false}
+                className="header-search-input min-h-[44px] min-w-0 w-full pl-9 pr-10 rounded-xl bg-app-surface border border-app-border text-xs text-app-text placeholder:text-app-muted focus:outline-none focus:border-app-accent focus:ring-1 focus:ring-app-accent transition-colors" />
+              {searchQuery && <button type="button" onClick={() => { onSearchChange(''); searchInputRef.current?.focus() }} aria-label="Clear search query"
+                className="absolute right-0 min-h-[44px] min-w-[36px] flex items-center justify-center header-neutral-icon hover:text-app-heading rounded"><X className="w-3.5 h-3.5" /></button>}
+            </div>
           </div>
-        </div>
+          {onlineScope && <>
+            <div className="flex gap-1.5">
+              <select aria-label="Online provider" value={provider.id} onChange={event => selectProvider(event.target.value)}
+                className="min-h-[44px] min-w-0 flex-1 rounded-xl border border-app-border bg-app-surface px-2 text-xs text-app-text focus-visible:outline-2 focus-visible:outline-app-action">
+                {SONG_SOURCE_PROVIDERS.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+              </select>
+              <button type="submit" className="min-h-[44px] rounded-xl bg-app-action px-3 text-xs font-bold text-app-on-action flex items-center gap-1.5 hover:brightness-110">
+                <Globe className="w-3.5 h-3.5" />{provider.capabilities.externalSearch ? 'Search Online' : 'Open Website'}
+              </button>
+            </div>
+            <p id="global-online-help" className="text-[11px] text-app-muted">{provider.capabilities.externalSearch ? 'Results open on the provider website in a new tab.' : 'Opens the provider homepage; search or browse there.'}</p>
+            {preferenceNotice && <p role="status" className="text-xs text-app-muted">{preferenceNotice}</p>}
+          </>}
+          {searchFeedback && <p role={searchFeedback.success ? 'status' : 'alert'} className={`text-xs ${searchFeedback.success ? 'text-app-muted' : 'text-red-400'}`}>{searchFeedback.message}</p>}
+        </form>
 
         {/* Right Actions */}
         <div className="flex items-center gap-1.5 sm:gap-2">
