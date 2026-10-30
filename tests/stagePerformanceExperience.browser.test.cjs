@@ -72,9 +72,9 @@ async function launchBrowser() {
 
 // Generate long song content with multiple sections to force real scrolling
 function makeLongSongContent() {
-  let content = `{title: Hotel California Long}\n{artist: Eagles}\n{key: Bm}\n\n`
+  let content = `{title: Desert Highway Song Long}\n{artist: Desert Echoes}\n{key: Bm}\n\n`
   for (let i = 1; i <= 25; i++) {
-    content += `[Verse ${i}]\n[Bm]On a dark desert highway [F#7]cool wind in my hair\n[A]Warm smell of colitas [E7]rising up through the air\n[G]Up ahead in the distance [D]I saw a shimmering light\n[Em]My head grew heavy and my sight grew dim [F#]I had to stop for the night\n\n`
+    content += `[Verse ${i}]\n[Bm]Riding on an open highway [F#7]cool wind in the night\n[A]Desert canyons drifting [E7]softly in the evening light\n[G]Up ahead in the distance [D]signals guiding us along\n[Em]Finding steady shelter [F#]while we play another song\n\n`
   }
   return content
 }
@@ -120,8 +120,8 @@ test('BROWSER_LEVEL_REGRESSION: Playwright real-layout validation of Stage, Touc
         // Song 1: Long chart
         songStore.put({
           id: 'song-long-1',
-          title: 'Hotel California Long',
-          artist: 'Eagles',
+          title: 'Desert Highway Song Long',
+          artist: 'Desert Echoes',
           key: 'Bm',
           rawContent: songContent,
           updatedAt: Date.now(),
@@ -131,10 +131,10 @@ test('BROWSER_LEVEL_REGRESSION: Playwright real-layout validation of Stage, Touc
         // Song 2: Short chart
         songStore.put({
           id: 'song-short-2',
-          title: 'Desperado',
-          artist: 'Eagles',
+          title: 'Western Horizon',
+          artist: 'Desert Echoes',
           key: 'G',
-          rawContent: '{title: Desperado}\n{artist: Eagles}\n{key: G}\n\n[Verse 1]\n[G]Desperado, [G7]why don\'t you [C]come to your senses?\n',
+          rawContent: '{title: Western Horizon}\n{artist: Desert Echoes}\n{key: G}\n\n[Verse 1]\n[G]Western Horizon, [G7]watching all the [C]desert stars above\n',
           updatedAt: Date.now(),
           createdAt: Date.now(),
         })
@@ -157,7 +157,7 @@ test('BROWSER_LEVEL_REGRESSION: Playwright real-layout validation of Stage, Touc
     await page.goto(BASE_URL, { waitUntil: 'networkidle' })
 
     // Step 1: Wait for songbook list and verify Explorer loaded
-    const songCard = page.locator('text=Hotel California Long').first()
+    const songCard = page.locator('text=Desert Highway Song Long').first()
     await songCard.waitFor({ timeout: 10000 })
     assert.ok(await songCard.isVisible(), 'Song card must be visible in Explorer')
 
@@ -273,7 +273,7 @@ test('BROWSER_LEVEL_REGRESSION: Playwright real-layout validation of Stage, Touc
     await page.keyboard.press(']')
     await page.waitForTimeout(150)
     const currentSongTitle = await page.locator('header[role="banner"] h1').innerText()
-    assert.strictEqual(currentSongTitle.trim(), 'Hotel California Long', 'Individual song must remain standalone without navigating to unrelated songs')
+    assert.strictEqual(currentSongTitle.trim(), 'Desert Highway Song Long', 'Individual song must remain standalone without navigating to unrelated songs')
 
     // Step 10: R5 — Keyboard Contract: PgUp/PgDn navigate sections; Up/Down scroll chart
 
@@ -568,7 +568,7 @@ test('BROWSER_LEVEL_REGRESSION: Playwright real-layout validation of Stage, Touc
       // Normal reload restored Explorer cleanly!
       assert.ok(await page.locator('main[data-explorer-canvas="true"]').isVisible())
       // Re-enter Stage
-      const card = page.locator('text=Hotel California Long').first()
+      const card = page.locator('text=Desert Highway Song Long').first()
       await card.click()
       const stgBtn = page.locator('button:has-text("Stage"), button[aria-label*="Stage"]').first()
       if (await stgBtn.isVisible()) await stgBtn.click()
@@ -607,7 +607,7 @@ test('BROWSER_LEVEL_REGRESSION: Playwright real-layout validation of Stage, Touc
         assert.strictEqual(song2Counter.trim(), '2/2', 'Setlist queue must advance to 2/2')
 
         const song2Title = await page.locator('header[role="banner"] h1').innerText()
-        assert.strictEqual(song2Title.trim(), 'Desperado', 'Setlist queue must display Desperado')
+        assert.strictEqual(song2Title.trim(), 'Western Horizon', 'Setlist queue must display Western Horizon')
 
         // Exit back to Explorer in one action
         const setlistExit = page.locator('header[role="banner"] button[aria-label*="Exit Stage"]').first()

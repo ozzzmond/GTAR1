@@ -6,10 +6,10 @@ const path = require('path')
 // Test 1: Explorer Selection & Scope filtering logic
 test('EXPLORER_NAVIGATION_AND_SCOPE_FILTERING', () => {
   const songs = [
-    { id: 's1', title: 'Hotel California', artist: 'Eagles', key: 'Bm', bpm: '75', tags: ['rock', 'acoustic'] },
-    { id: 's2', title: 'Wonderwall', artist: 'Oasis', key: 'Em', tags: ['acoustic', '90s'] },
+    { id: 's1', title: 'Desert Highway Song', artist: 'Desert Echoes', key: 'Bm', bpm: '75', tags: ['rock', 'acoustic'] },
+    { id: 's2', title: 'Acoustic Horizon', artist: 'Meadow Sound', key: 'Em', tags: ['acoustic', '90s'] },
     { id: 's3', title: 'Autumn Leaves', artist: 'Miles Davis', key: 'Gm', bpm: '120', tags: ['jazz'] },
-    { id: 's4', title: 'Blackbird', artist: 'The Beatles', key: 'G', tags: ['acoustic'] },
+    { id: 's4', title: 'Mountain Songbird', artist: 'Pine Ridge Band', key: 'G', tags: ['acoustic'] },
   ]
 
   // Filter by tag 'acoustic'
@@ -22,7 +22,7 @@ test('EXPLORER_NAVIGATION_AND_SCOPE_FILTERING', () => {
   assert.equal(jazzSongs[0].title, 'Autumn Leaves')
 
   // Search filtering within acoustic scope
-  const q = 'oasis'
+  const q = 'meadow'
   const searchedInAcoustic = acousticSongs.filter(s =>
     s.title.toLowerCase().includes(q) || s.artist.toLowerCase().includes(q)
   )
@@ -39,7 +39,7 @@ test('SETLIST_MEMBERSHIP_AND_SEARCH', () => {
       folderId: 'f1',
       songs: [
         { id: 's1', title: 'Amazing Grace', artist: 'Hymn', position: 0 },
-        { id: 's2', title: 'Way Maker', artist: 'Sinach', position: 1 },
+        { id: 's2', title: 'Beacon of Light', artist: 'Valley Voices', position: 1 },
       ],
     },
     {
@@ -47,13 +47,13 @@ test('SETLIST_MEMBERSHIP_AND_SEARCH', () => {
       name: 'Friday Acoustic Gig',
       folderId: null,
       songs: [
-        { id: 's3', title: 'Wonderwall', artist: 'Oasis', position: 0 },
+        { id: 's3', title: 'Acoustic Horizon', artist: 'Meadow Sound', position: 0 },
       ],
     },
   ]
 
   // Search setlist by matching track inside setlist
-  const q = 'sinach'
+  const q = 'valley'
   const matchingSetlists = setlists.filter(sl =>
     sl.name.toLowerCase().includes(q) ||
     sl.songs.some(s => s.title.toLowerCase().includes(q) || s.artist.toLowerCase().includes(q))

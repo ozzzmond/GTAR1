@@ -84,14 +84,14 @@ function renderComponent(element) {
 // Sample test song
 const sampleSong = {
   id: 'song_hotel_california',
-  title: 'Hotel California',
-  artist: 'Eagles',
+  title: 'Desert Highway Song',
+  artist: 'Desert Echoes',
   key: 'Bm',
   originalKey: 'Bm',
   confirmedChartKey: 'Bm',
   bpm: '75',
-  rawContent: `{title: Hotel California}
-{artist: Eagles}
+  rawContent: `{title: Desert Highway Song}
+{artist: Desert Echoes}
 {key: Bm}
 
 [Intro]
@@ -99,23 +99,23 @@ Bm F# A E G D Em F#
 
 [Verse 1]
 Bm                      F#
-On a dark desert highway, cool wind in my hair
+Riding on an open highway underneath the evening stars
 A                       E
-Warm smell of colitas, rising up through the air
+Cool desert breezes drifting through the vintage cars
 G                       D
-Up ahead in the distance, I saw a shimmering light
+Up ahead in the valley glowing signs along the way
 Em                      F#
-My head grew heavy and my sight grew dim, I had to stop for the night [to Chorus]
+Finding our shelter before the break of dawn and day [to Chorus]
 
 [Chorus]
 G                       D
-Welcome to the Hotel California
+Welcome to the desert highway open sky
 Em                      Bm
-Such a lovely place, such a lovely face
+Singing through the night as travelers go by
 G                       D
-Plenty of room at the Hotel California
+Gather around the desert highway open sky
 Em                      F#
-Any time of year, you can find it here
+Any time of year under stars so high
 
 [Outro]
 Bm F# A E G D Em F#
@@ -149,7 +149,7 @@ test('R1_STAGE_ENTRY_AND_RETURN_NAVIGATION: mounts StageView, verifies title, ke
   // Verify song title in top bar
   const heading = container.querySelector('h1')
   assert.ok(heading, 'Heading must exist')
-  assert.equal(heading.textContent, 'Hotel California')
+  assert.equal(heading.textContent, 'Desert Highway Song')
 
   // Verify key chip shows Bm
   const keyBtn = container.querySelector('button[aria-label*="Key: Bm"]')
@@ -172,8 +172,8 @@ test('R1_STAGE_ENTRY_AND_RETURN_NAVIGATION: mounts StageView, verifies title, ke
 test('R2_SETLIST_QUEUE_TRAVERSAL_AND_INDEPENDENT_TRANSPOSE: queue traversal, boundary checks, and per-occurrence transpose', () => {
   const songB = {
     ...sampleSong,
-    id: 'song_desperado',
-    title: 'Desperado',
+    id: 'song_western_horizon',
+    title: 'Western Horizon',
     key: 'G',
     originalKey: 'G',
   }
@@ -213,7 +213,7 @@ test('R2_SETLIST_QUEUE_TRAVERSAL_AND_INDEPENDENT_TRANSPOSE: queue traversal, bou
   act(() => {
     window.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'ArrowRight' }))
   })
-  assert.equal(currentIndex, 1, 'ArrowRight advances queue to index 1 (Desperado)')
+  assert.equal(currentIndex, 1, 'ArrowRight advances queue to index 1 (Western Horizon)')
 
   // Transpose button in fixed transport
   const plusBtn = container.querySelector('button[aria-label="Transpose up one semitone"]')

@@ -1,0 +1,48 @@
+GTAR1
+Copyright 2026 GTAR1 Contributors
+
+This product includes software developed under the Apache License, Version 2.0.
+
+===============================================================================
+BRANDING, LOGO, AND ARTWORK NOTICE
+===============================================================================
+
+The names "GTAR", "GTAR1", project logos, mascots, and related visual branding
+are reserved by the project owner to the extent protectable under applicable law.
+The Apache License Version 2.0 grants permissions specifically for the software
+code and accompanying documentation; it does NOT grant permission to use the trade
+names, trademarks, service marks, or product names of the project, except for
+reasonable, customary, and nominative identification of the software's origin.
+
+Mascot and Avatar Artwork Provenance:
+- Bebegirl1 (green default avatar / mascot)
+- Bebegirl2 (yellow dev mascot)
+- Bebeboy (red prod mascot)
+
+The project mascot and avatar image files located under `public/mascots/` and
+`public/avatars/` are AI-generated artwork produced using ChatGPT (OpenAI) and
+curated/selected by the project owner for the GTAR1 project. No claim of exclusive
+statutory copyright protection or registered trademark status is made over the
+raw AI-generated imagery; however, rights to associate these character assets
+with the GTAR1 project, its official releases, and branding identity are expressly
+reserved by the project owner. Redistribution of the code does not grant rights
+to rebrand other products under these visual identities.
+
+===============================================================================
+THIRD-PARTY DEPENDENCIES AND CODE PROVENANCE
+===============================================================================
+
+This project incorporates or links against open-source software libraries under
+their respective licenses:
+
+1. React, ReactDOM (MIT License) - Copyright (c) Meta Platforms, Inc. and affiliates.
+2. Lucide React (ISC License) - Copyright (c) Lucide Contributors.
+3. Tailwind CSS (MIT License) - Copyright (c) Tailwind Labs, Inc.
+4. Vite (MIT License) - Copyright (c) 2019-present Evan You & Vite Contributors.
+5. vite-plugin-pwa / Workbox (MIT License) - Copyright (c) Anthony Fu and Google LLC.
+
+Portions of ChordPro parsing and musical utilities (`src/utils/musicalKey.ts`,
+`src/utils/chordParser.ts`, `src/utils/enharmonicPolicy.ts`,
+`src/utils/chordTransposer.ts`, `src/utils/chordProMetadata.ts`,
+`src/utils/chordLyricLayout.ts`, `src/utils/songParser.ts`) were ported from
+`ozzzmond/GTAR` (commit `45ce8442859b66843f4755733e7f9a66984df51a`).

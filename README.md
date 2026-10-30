@@ -2,6 +2,12 @@
 
 GTAR1 is a standalone, local-first chord chart and setlist manager built with React, Vite, TypeScript, and Progressive Web App (PWA) offline capabilities.
 
+## License & Branding
+
+- **Software Code**: Licensed under the [Apache License, Version 2.0](LICENSE). Free for personal and commercial use without registration or fees.
+- **Branding & Mascot Assets**: The names "GTAR", "GTAR1", logos, and character mascots (`Bebegirl1`, `Bebegirl2`, `Bebeboy`) are reserved by the project owner to the extent legally protectable. The mascots are AI-generated artwork produced via ChatGPT (OpenAI) and selected by the project owner. See [NOTICE](NOTICE) for complete details.
+- **Privacy & Data Storage**: GTAR1 operates local-first using IndexedDB and localStorage. See [PRIVACY.md](PRIVACY.md) for full disclosure on offline behavior and optional external fonts.
+
 ## Architecture & Guarantees
 
 1. **Local-First & Offline**: Completely usable offline with 0 network calls on startup.
