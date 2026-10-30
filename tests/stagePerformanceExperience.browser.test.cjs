@@ -112,6 +112,7 @@ test('BROWSER_LEVEL_REGRESSION: Playwright real-layout validation of Stage, Touc
       }
       req.onsuccess = (e) => {
         const db = e.target.result
+        db.onversionchange = () => db.close()
         const tx = db.transaction(['songs', 'setlists'], 'readwrite')
         const songStore = tx.objectStore('songs')
         const setlistStore = tx.objectStore('setlists')
@@ -323,7 +324,7 @@ test('BROWSER_LEVEL_REGRESSION: Playwright real-layout validation of Stage, Touc
     // Step 14: CODEX_R1 — Real IndexedDB readback after rapid A+1 / B+2 updates
     const idbResult = await page.evaluate(async () => {
       const DB_NAME = 'gtar_revamp_local_v1'
-      const DB_VERSION = 2
+      const DB_VERSION = 3
 
       const getSetlist = () =>
         new Promise((resolve) => {

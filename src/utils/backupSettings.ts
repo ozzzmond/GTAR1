@@ -945,7 +945,7 @@ export function readBackupSettings(storage?: Pick<Storage, 'getItem'>): BackupSe
   return data
 }
 
-export function restoreBackupSettings(settings: BackupSettings, storage?: Pick<Storage, 'setItem' | 'getItem'>) {
+export function restoreBackupSettings(settings: BackupSettings, storage?: Pick<Storage, 'setItem' | 'getItem'>, notify = true) {
   const store = storage || (typeof localStorage !== 'undefined' ? localStorage : null)
   if (!store) return
   // Validate the whole object first; never write a valid prefix of malformed settings.
@@ -972,7 +972,7 @@ export function restoreBackupSettings(settings: BackupSettings, storage?: Pick<S
   for (const [key, value] of Object.entries(settings.stageSettings ?? {})) {
     store.setItem(SETTINGS_KEYS[key as keyof typeof settings.stageSettings], String(value))
   }
-  if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+  if (notify && typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
     const Evt = typeof window.Event === 'function' ? window.Event : Event
     window.dispatchEvent(new Evt(SETTINGS_CHANGED))
   }

@@ -4,12 +4,19 @@ import App from './App'
 import './index.css'
 import { applyThemeRuntime, hydrateThemeSettings } from './components/ThemeModal'
 
-// Pre-render hydration: apply saved or default theme before React mount to prevent cold start flash
-const initialTheme = hydrateThemeSettings()
-applyThemeRuntime(initialTheme.mode, initialTheme.standalone)
+import { openRevampDB } from './utils/storage'
 
-ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-)
+// Recover an interrupted settings restore before any component reads appearance.
+async function start() {
+  try {
+    await openRevampDB()
+    const initialTheme = hydrateThemeSettings()
+    applyThemeRuntime(initialTheme.mode, initialTheme.standalone)
+    ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
+      <React.StrictMode><App /></React.StrictMode>
+    )
+  } catch (error) {
+    document.getElementById('root')!.textContent = `Local storage unavailable: ${(error as Error).message}. Reload to retry recovery.`
+  }
+}
+void start()

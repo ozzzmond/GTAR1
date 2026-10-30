@@ -1,6 +1,11 @@
+import { recoverRestoreSettings } from './utils/restoreSettings'
+import { restoreLibrary, type RestoreMode, type LibraryImage } from './utils/restoreLibrary'
+import type { BackupSettings } from './utils/backupSettings'
 import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import type { SongEntity, WebSetlist, SetlistFolder, ActiveSongState } from './types/gtar'
 import {
+  openRevampDB,
+  STORES,
   loadAllSongs,
   loadAllSetlists,
   loadAllFolders,
@@ -11,8 +16,6 @@ import {
   saveFolder,
   deleteFolder,
   saveAllSongs,
-  saveAllSetlists,
-  saveAllFolders,
 } from './utils/storage'
 import { Header, type ActiveTab } from './components/Header'
 import { SongbookHomeView } from './components/SongbookHomeView'
@@ -130,7 +133,11 @@ export const App: React.FC = () => {
         e.key === SETTINGS_KEYS.factoryThemeOverrides ||
         e.key === STANDALONE_PALETTE_KEY
       ) {
-        handleRehydrate()
+        // Storage events can arrive while another tab's restore is uncommitted.
+        // Recovery takes the same cross-tab lock before publishing appearance.
+        if (!window.navigator.locks) { handleRehydrate(); return }
+        void openRevampDB().then(db => recoverRestoreSettings(db, STORES.RESTORE))
+          .then(handleRehydrate).catch(error => setLoadError((error as Error).message))
       }
     }
 
@@ -411,16 +418,19 @@ export const App: React.FC = () => {
 
   // JSON Import handler
   const handleImport = async (
-    importedSongs: SongEntity[],
-    importedSetlists: WebSetlist[],
-    importedFolders: SetlistFolder[]
+    importedSongs: SongEntity[], importedSetlists: WebSetlist[], importedFolders: SetlistFolder[],
+    mode: RestoreMode, expected: LibraryImage, settings?: BackupSettings
   ) => {
-    await saveAllSongs(importedSongs)
-    await saveAllSetlists(importedSetlists)
-    await saveAllFolders(importedFolders)
-    setSongs(importedSongs)
-    setSetlists(importedSetlists)
-    setFolders(importedFolders)
+    await setlistSaveQueueRef.current
+    const restored = await restoreLibrary({ songs: importedSongs, setlists: importedSetlists, folders: importedFolders }, mode, expected, settings)
+    setSongs(restored.songs)
+    setSetlists(restored.setlists)
+    setFolders(restored.folders)
+    setSelectedSong(null)
+    setEditingSong(null)
+    setStageQueue([])
+    setActiveTab('SONGS')
+    setCurrentNavTarget({ type: 'ALL_SONGS' })
   }
 
   const handleSelectSong = (song: SongEntity) => {
