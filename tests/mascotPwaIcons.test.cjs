@@ -1,4 +1,4 @@
-﻿const test = require('node:test')
+const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
@@ -89,4 +89,18 @@ test('VITE_PWA_CONFIG_ENV_ISOLATION: builds DEV with yellow Bebegirl2 and PROD w
     assert.equal(manifest.icons[0].sizes, '192x192', 'First icon is 192x192')
     assert.equal(manifest.icons[1].sizes, '512x512', 'Second icon is 512x512')
   }
+})
+
+// 4. Header mascot logo rendering
+test('HEADER_MASCOT_LOGO_RENDERING: renders mascot icon and eliminates legacy blue G', () => {
+  const headerPath = path.join(projectRoot, 'src/components/Header.tsx')
+  const headerContent = fs.readFileSync(headerPath, 'utf8')
+
+  // Header must use the offline bundled PWA mascot icon
+  assert.match(headerContent, /src="\/pwa-192x192\.png"/, 'Header must render /pwa-192x192.png mascot icon')
+  assert.match(headerContent, /alt="GTAR application logo"/, 'Header must have accessible alt label')
+
+  // Header must not contain the legacy hardcoded blue G square
+  assert.ok(!headerContent.includes('bg-sky-600 flex items-center justify-center font-black text-white text-base shadow-sm group-hover:bg-sky-500'), 'Header must not contain legacy blue G styles')
+  assert.ok(!headerContent.match(/<div[^>]*bg-sky-600[^>]*>\s*G\s*<\/div>/), 'Header must not render legacy blue G')
 })
