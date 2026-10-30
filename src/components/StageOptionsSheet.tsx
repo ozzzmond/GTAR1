@@ -163,30 +163,30 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
       />
 
       {/* Sheet / Modal Container */}
-      <div className="relative w-full sm:max-w-xl max-h-[88dvh] bg-slate-900 border border-slate-700 sm:rounded-3xl rounded-t-3xl shadow-2xl z-10 flex flex-col overflow-hidden animate-slide-up sm:animate-scale-in">
+      <div className="relative w-full sm:max-w-xl max-h-[88dvh] bg-app-surface border border-app-border sm:rounded-3xl rounded-t-3xl shadow-2xl z-10 flex flex-col overflow-hidden animate-slide-up sm:animate-scale-in text-app-text">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800 bg-slate-900/90 sticky top-0 z-10">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-app-border bg-app-base sticky top-0 z-10">
           <div className="flex items-center gap-2">
-            <Sliders className="w-5 h-5 text-sky-400" />
-            <h2 className="text-base font-bold text-white tracking-tight">Stage Options</h2>
+            <Sliders className="w-5 h-5 text-app-accent" />
+            <h2 className="text-base font-bold text-app-heading tracking-tight">Stage Options</h2>
           </div>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close options"
-            className="min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors"
+            className="min-w-[44px] min-h-[44px] flex items-center justify-center text-app-muted hover:text-app-heading hover:bg-app-base rounded-xl transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Scrollable Content */}
-        <div className="overflow-y-auto overscroll-contain p-5 space-y-6 text-xs text-slate-200">
+        <div className="overflow-y-auto overscroll-contain p-5 space-y-6 text-xs text-app-text">
           {/* Autoscroll Speed */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <span className="font-semibold text-slate-300">Auto-Scroll Speed</span>
-              <span className="font-mono font-bold text-sky-400 text-sm">
+              <span className="font-semibold text-app-heading">Auto-Scroll Speed</span>
+              <span className="font-mono font-bold text-app-accent text-sm">
                 {Math.round(autoScrollSpeed)} px/s
               </span>
             </div>
@@ -195,7 +195,7 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
                 type="button"
                 onClick={() => onAutoScrollSpeedChange(Math.max(5, autoScrollSpeed - 5))}
                 aria-label="Decrease auto-scroll speed by 5"
-                className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold"
+                className="ui-button min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-app-button hover:brightness-110 text-app-button-text font-bold border border-app-border"
               >
                 -5
               </button>
@@ -207,13 +207,13 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
                 value={autoScrollSpeed}
                 onChange={(e) => onAutoScrollSpeedChange(Number(e.target.value))}
                 aria-label="Auto-scroll speed slider"
-                className="flex-1 accent-sky-500 cursor-pointer h-2 bg-slate-800 rounded-lg"
+                className="flex-1 accent-app-accent cursor-pointer h-2 bg-app-base border border-app-border rounded-lg"
               />
               <button
                 type="button"
                 onClick={() => onAutoScrollSpeedChange(Math.min(180, autoScrollSpeed + 5))}
                 aria-label="Increase auto-scroll speed by 5"
-                className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold"
+                className="ui-button min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-app-button hover:brightness-110 text-app-button-text font-bold border border-app-border"
               >
                 +5
               </button>
@@ -222,15 +222,15 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
 
           {/* Notation Mode: Chords vs Numbers */}
           <div className="space-y-2">
-            <span className="font-semibold text-slate-300">Notation Mode</span>
+            <span className="font-semibold text-app-heading">Notation Mode</span>
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => onNotationChange('chords')}
                 className={`min-h-[44px] py-2 px-3 rounded-xl font-bold transition-all border flex items-center justify-center ${
                   notation === 'chords'
-                    ? 'bg-sky-600 border-sky-400 text-white shadow-md'
-                    : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750'
+                    ? 'bg-app-action border-app-action text-app-on-action shadow-md'
+                    : 'ui-button bg-app-button border-app-border text-app-button-text hover:brightness-110'
                 }`}
               >
                 Chords (Letters)
@@ -240,8 +240,8 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
                 onClick={() => onNotationChange('numbers')}
                 className={`min-h-[44px] py-2 px-3 rounded-xl font-bold transition-all border flex items-center justify-center ${
                   notation === 'numbers'
-                    ? 'bg-amber-500 border-amber-400 text-slate-900 shadow-md'
-                    : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750'
+                    ? 'bg-app-action border-app-action text-app-on-action shadow-md'
+                    : 'ui-button bg-app-button border-app-border text-app-button-text hover:brightness-110'
                 }`}
               >
                 Numbers (NNS)
@@ -252,8 +252,8 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
           {/* Typography: Font Size */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <span className="font-semibold text-slate-300">Font Size</span>
-              <span className="text-slate-400 font-mono">{fontSize}px</span>
+              <span className="font-semibold text-app-heading">Font Size</span>
+              <span className="text-app-muted font-mono">{fontSize}px</span>
             </div>
             <div className="grid grid-cols-4 gap-2">
               {STAGE_SIZE_PRESETS.map((p) => (
@@ -263,8 +263,8 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
                   onClick={() => onFontSizeChange(p.value)}
                   className={`py-2 rounded-xl font-bold transition-all border ${
                     fontSize === p.value
-                      ? 'bg-sky-600 border-sky-400 text-white shadow-sm'
-                      : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750'
+                      ? 'bg-app-action border-app-action text-app-on-action shadow-sm'
+                      : 'ui-button bg-app-button border-app-border text-app-button-text hover:brightness-110'
                   }`}
                 >
                   {p.label} ({p.value})
@@ -275,7 +275,7 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
 
           {/* Typography: Chord Scaling */}
           <div className="space-y-2">
-            <span className="font-semibold text-slate-300">Chord Scale</span>
+            <span className="font-semibold text-app-heading">Chord Scale</span>
             <div className="grid grid-cols-4 gap-2">
               {CHORD_SCALE_PRESETS.map((p) => (
                 <button
@@ -284,8 +284,8 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
                   onClick={() => onChordScaleChange(p.value)}
                   className={`py-2 rounded-xl font-bold transition-all border ${
                     chordScale === p.value
-                      ? 'bg-sky-600 border-sky-400 text-white shadow-sm'
-                      : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750'
+                      ? 'bg-app-action border-app-action text-app-on-action shadow-sm'
+                      : 'ui-button bg-app-button border-app-border text-app-button-text hover:brightness-110'
                   }`}
                 >
                   {p.label}
@@ -297,7 +297,7 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
           {/* Typography: Font Weight & Line Spacing */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <span className="font-semibold text-slate-300">Font Weight</span>
+              <span className="font-semibold text-app-heading">Font Weight</span>
               <div className="grid grid-cols-3 gap-1.5">
                 {FONT_WEIGHT_PRESETS.map((p) => (
                   <button
@@ -306,8 +306,8 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
                     onClick={() => onFontWeightChange(p.value)}
                     className={`py-1.5 rounded-lg font-medium text-[11px] transition-all border ${
                       fontWeight === p.value
-                        ? 'bg-sky-600 border-sky-400 text-white'
-                        : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750'
+                        ? 'bg-app-action border-app-action text-app-on-action'
+                        : 'ui-button bg-app-button border-app-border text-app-button-text hover:brightness-110'
                     }`}
                   >
                     {p.label}
@@ -317,7 +317,7 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
             </div>
 
             <div className="space-y-2">
-              <span className="font-semibold text-slate-300">Line Spacing</span>
+              <span className="font-semibold text-app-heading">Line Spacing</span>
               <div className="grid grid-cols-3 gap-1.5">
                 {LINE_SPACING_PRESETS.map((p) => (
                   <button
@@ -326,8 +326,8 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
                     onClick={() => onLineSpacingChange(p.value)}
                     className={`py-1.5 rounded-lg font-medium text-[11px] transition-all border ${
                       lineSpacing === p.value
-                        ? 'bg-sky-600 border-sky-400 text-white'
-                        : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750'
+                        ? 'bg-app-action border-app-action text-app-on-action'
+                        : 'ui-button bg-app-button border-app-border text-app-button-text hover:brightness-110'
                     }`}
                   >
                     {p.label}
@@ -339,7 +339,7 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
 
           {/* Font Family */}
           <div className="space-y-2">
-            <span className="font-semibold text-slate-300">Font Style</span>
+            <span className="font-semibold text-app-heading">Font Style</span>
             <div className="grid grid-cols-3 gap-2">
               {FONT_FAMILY_PRESETS.map((p) => (
                 <button
@@ -348,8 +348,8 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
                   onClick={() => onFontFamilyChange(p.value)}
                   className={`py-2 rounded-xl font-medium transition-all border ${
                     fontFamily === p.value
-                      ? 'bg-sky-600 border-sky-400 text-white shadow-sm'
-                      : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750'
+                      ? 'bg-app-action border-app-action text-app-on-action shadow-sm'
+                      : 'ui-button bg-app-button border-app-border text-app-button-text hover:brightness-110'
                   }`}
                 >
                   {p.label}
@@ -359,16 +359,16 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
           </div>
 
           {/* Reading Layout & Behavior Toggles */}
-          <div className="space-y-3 pt-2 border-t border-slate-800">
-            <span className="font-semibold text-slate-300">Reading & Performance Features</span>
+          <div className="space-y-3 pt-2 border-t border-app-border">
+            <span className="font-semibold text-app-heading">Reading & Performance Features</span>
 
             {/* Two-Column Mode (User-Controlled opt-in) */}
-            <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-800/60 border border-slate-700/60">
+            <div className="flex items-center justify-between p-3 rounded-2xl bg-app-base border border-app-border">
               <div className="flex items-center gap-2.5">
-                <Columns2 className="w-4 h-4 text-sky-400" />
+                <Columns2 className="w-4 h-4 text-app-accent" />
                 <div>
-                  <div className="font-semibold text-slate-100">Two-Column Layout</div>
-                  <div className="text-[11px] text-slate-400">
+                  <div className="font-semibold text-app-heading">Two-Column Layout</div>
+                  <div className="text-[11px] text-app-muted">
                     Split song across two reading columns on widescreen displays
                   </div>
                 </div>
@@ -379,11 +379,11 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
                 aria-checked={isTwoColumn}
                 aria-label="Two-Column Layout"
                 onClick={() => onToggleTwoColumn(!isTwoColumn)}
-                className="min-w-[44px] min-h-[44px] inline-flex items-center justify-center p-1 rounded-full cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+                className="min-w-[44px] min-h-[44px] inline-flex items-center justify-center p-1 rounded-full cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-app-accent"
               >
                 <div
-                  className={`w-11 h-6 rounded-full transition-colors relative p-0.5 ${
-                    isTwoColumn ? 'bg-sky-600' : 'bg-slate-700'
+                  className={`w-11 h-6 rounded-full transition-colors relative p-0.5 border ${
+                    isTwoColumn ? 'bg-app-action border-app-action' : 'bg-app-button border-app-border'
                   }`}
                 >
                   <div
@@ -396,16 +396,16 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
             </div>
 
             {/* Controls Auto-Hide */}
-            <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-800/60 border border-slate-700/60">
+            <div className="flex items-center justify-between p-3 rounded-2xl bg-app-base border border-app-border">
               <div className="flex items-center gap-2.5">
                 {autoHideControls ? (
-                  <EyeOff className="w-4 h-4 text-emerald-400" />
+                  <EyeOff className="w-4 h-4 text-status-success" />
                 ) : (
-                  <Eye className="w-4 h-4 text-slate-400" />
+                  <Eye className="w-4 h-4 text-app-muted" />
                 )}
                 <div>
-                  <div className="font-semibold text-slate-100">Auto-Hide Controls</div>
-                  <div className="text-[11px] text-slate-400">
+                  <div className="font-semibold text-app-heading">Auto-Hide Controls</div>
+                  <div className="text-[11px] text-app-muted">
                     Fade out bars during auto-scroll or inactivity for full canvas reading
                   </div>
                 </div>
@@ -416,11 +416,11 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
                 aria-checked={autoHideControls}
                 aria-label="Auto-Hide Controls"
                 onClick={() => onToggleAutoHideControls(!autoHideControls)}
-                className="min-w-[44px] min-h-[44px] inline-flex items-center justify-center p-1 rounded-full cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+                className="min-w-[44px] min-h-[44px] inline-flex items-center justify-center p-1 rounded-full cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-app-accent"
               >
                 <div
-                  className={`w-11 h-6 rounded-full transition-colors relative p-0.5 ${
-                    autoHideControls ? 'bg-sky-600' : 'bg-slate-700'
+                  className={`w-11 h-6 rounded-full transition-colors relative p-0.5 border ${
+                    autoHideControls ? 'bg-app-action border-app-action' : 'bg-app-button border-app-border'
                   }`}
                 >
                   <div
@@ -433,12 +433,12 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
             </div>
 
             {/* Draggable Dock on Desktop/Tablet */}
-            <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-800/60 border border-slate-700/60">
+            <div className="flex items-center justify-between p-3 rounded-2xl bg-app-base border border-app-border">
               <div className="flex items-center gap-2.5">
-                <Sliders className="w-4 h-4 text-amber-400" />
+                <Sliders className="w-4 h-4 text-app-accent" />
                 <div>
-                  <div className="font-semibold text-slate-100">Floating Control Dock</div>
-                  <div className="text-[11px] text-slate-400">
+                  <div className="font-semibold text-app-heading">Floating Control Dock</div>
+                  <div className="text-[11px] text-app-muted">
                     Use draggable side dock instead of fixed bottom bar (tablet / desktop)
                   </div>
                 </div>
@@ -449,11 +449,11 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
                 aria-checked={showDock}
                 aria-label="Floating Control Dock"
                 onClick={() => onToggleShowDock(!showDock)}
-                className="min-w-[44px] min-h-[44px] inline-flex items-center justify-center p-1 rounded-full cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+                className="min-w-[44px] min-h-[44px] inline-flex items-center justify-center p-1 rounded-full cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-app-accent"
               >
                 <div
-                  className={`w-11 h-6 rounded-full transition-colors relative p-0.5 ${
-                    showDock ? 'bg-sky-600' : 'bg-slate-700'
+                  className={`w-11 h-6 rounded-full transition-colors relative p-0.5 border ${
+                    showDock ? 'bg-app-action border-app-action' : 'bg-app-button border-app-border'
                   }`}
                 >
                   <div
@@ -473,58 +473,58 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
                 (!wakeLockActive ? 'disabled' : wakeLockAcquired ? 'active' : 'inactive')
 
               return (
-                <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-800/60 border border-slate-700/60">
+                <div className="flex items-center justify-between p-3 rounded-2xl bg-app-base border border-app-border">
                   <div className="flex items-center gap-2.5">
                     <Sun
                       className={`w-4 h-4 ${
                         effectiveStatus === 'active'
-                          ? 'text-amber-400'
+                          ? 'text-app-accent'
                           : effectiveStatus === 'acquiring'
-                          ? 'text-sky-400 animate-pulse'
+                          ? 'text-app-action animate-pulse'
                           : effectiveStatus === 'inactive'
-                          ? 'text-amber-300/70'
+                          ? 'text-app-muted'
                           : effectiveStatus === 'denied'
-                          ? 'text-red-400'
+                          ? 'text-status-error'
                           : effectiveStatus === 'unsupported'
-                          ? 'text-amber-300/80'
-                          : 'text-slate-400'
+                          ? 'text-status-warning'
+                          : 'text-app-muted'
                       }`}
                     />
                     <div>
-                      <div className="font-semibold text-slate-100 flex items-center gap-2">
+                      <div className="font-semibold text-app-heading flex items-center gap-2">
                         <span>Keep Screen Awake</span>
                         {effectiveStatus === 'active' && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-950/70 text-emerald-400 border border-emerald-800/60 font-mono">
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-status-success/20 text-status-success border border-status-success/40 font-mono">
                             Active
                           </span>
                         )}
                         {effectiveStatus === 'acquiring' && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-sky-950/70 text-sky-400 border border-sky-800/60 font-mono">
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-app-action/20 text-app-action border border-app-action/40 font-mono">
                             Acquiring
                           </span>
                         )}
                         {effectiveStatus === 'inactive' && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-950/70 text-amber-300 border border-amber-800/60 font-mono">
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-app-base text-app-muted border border-app-border font-mono">
                             Inactive
                           </span>
                         )}
                         {effectiveStatus === 'denied' && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-950/70 text-red-400 border border-red-800/60 font-mono">
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-status-error/20 text-status-error border border-status-error/40 font-mono">
                             Denied
                           </span>
                         )}
                         {effectiveStatus === 'unsupported' && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-950/70 text-amber-400 border border-amber-800/60 font-mono">
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-status-warning/20 text-status-warning border border-status-warning/40 font-mono">
                             Unsupported
                           </span>
                         )}
                         {effectiveStatus === 'disabled' && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700 font-mono">
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-app-surface text-app-muted border border-app-border font-mono">
                             Disabled
                           </span>
                         )}
                       </div>
-                      <div className="text-[11px] text-slate-400">
+                      <div className="text-[11px] text-app-muted">
                         {effectiveStatus === 'active'
                           ? 'Screen Wake Lock active'
                           : effectiveStatus === 'acquiring'
@@ -545,11 +545,11 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
                     aria-checked={wakeLockActive}
                     aria-label="Keep Screen Awake"
                     onClick={onToggleWakeLock}
-                    className="min-w-[44px] min-h-[44px] inline-flex items-center justify-center p-1 rounded-full cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+                    className="min-w-[44px] min-h-[44px] inline-flex items-center justify-center p-1 rounded-full cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-app-accent"
                   >
                     <div
-                      className={`w-11 h-6 rounded-full transition-colors relative p-0.5 ${
-                        wakeLockActive ? 'bg-amber-500' : 'bg-slate-700'
+                      className={`w-11 h-6 rounded-full transition-colors relative p-0.5 border ${
+                        wakeLockActive ? 'bg-app-accent border-app-accent' : 'bg-app-button border-app-border'
                       }`}
                     >
                       <div
@@ -564,16 +564,16 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
             })()}
 
             {/* Fullscreen Toggle */}
-            <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-800/60 border border-slate-700/60">
+            <div className="flex items-center justify-between p-3 rounded-2xl bg-app-base border border-app-border">
               <div className="flex items-center gap-2.5">
                 {isFullscreen ? (
-                  <Minimize className="w-4 h-4 text-sky-400" />
+                  <Minimize className="w-4 h-4 text-app-accent" />
                 ) : (
-                  <Maximize className="w-4 h-4 text-slate-400" />
+                  <Maximize className="w-4 h-4 text-app-muted" />
                 )}
                 <div>
-                  <div className="font-semibold text-slate-100">Fullscreen Mode</div>
-                  <div className="text-[11px] text-slate-400">
+                  <div className="font-semibold text-app-heading">Fullscreen Mode</div>
+                  <div className="text-[11px] text-app-muted">
                     {isFullscreenSupported
                       ? 'Toggle native fullscreen viewing'
                       : 'iOS distraction-free reading mode'}
@@ -584,10 +584,10 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
                 type="button"
                 onClick={onToggleFullscreen}
                 aria-label={isFullscreen ? 'Exit Fullscreen Mode' : 'Enter Fullscreen Mode'}
-                className={`min-h-[44px] min-w-[72px] px-4 py-2 rounded-xl font-bold transition-colors flex items-center justify-center ${
+                className={`min-h-[44px] min-w-[72px] px-4 py-2 rounded-xl font-bold transition-colors flex items-center justify-center border ${
                   isFullscreen
-                    ? 'bg-sky-600 text-white'
-                    : 'bg-slate-700 hover:bg-slate-600 text-slate-200'
+                    ? 'bg-app-action text-app-on-action border-app-action'
+                    : 'ui-button bg-app-button hover:brightness-110 text-app-button-text border-app-border'
                 }`}
               >
                 {isFullscreen ? 'Exit' : 'Enter'}
@@ -597,12 +597,12 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
 
           {/* Setlist Quick-Jump (if in setlist queue) */}
           {queueSongs && queueSongs.length > 1 && (
-            <div className="space-y-2 pt-2 border-t border-slate-800">
-              <div className="flex items-center gap-2 text-slate-300 font-semibold">
-                <ListMusic className="w-4 h-4 text-sky-400" />
+            <div className="space-y-2 pt-2 border-t border-app-border">
+              <div className="flex items-center gap-2 text-app-heading font-semibold">
+                <ListMusic className="w-4 h-4 text-app-action" />
                 <span>Setlist Quick-Jump ({setlistName || 'Active Setlist'})</span>
               </div>
-              <div className="max-h-48 overflow-y-auto space-y-1 rounded-2xl bg-slate-950/60 p-2 border border-slate-800">
+              <div className="max-h-48 overflow-y-auto space-y-1 rounded-2xl bg-app-base p-2 border border-app-border">
                 {queueSongs.map((item, idx) => (
                   <button
                     key={item.entryId || `${item.song.id}_${idx}`}
@@ -613,8 +613,8 @@ export const StageOptionsSheet: React.FC<StageOptionsSheetProps> = ({
                     }}
                     className={`w-full flex items-center justify-between p-2 rounded-xl text-left transition-colors ${
                       currentQueueIndex === idx
-                        ? 'bg-sky-600 text-white font-bold'
-                        : 'hover:bg-slate-800 text-slate-300'
+                        ? 'bg-app-action text-app-on-action font-bold'
+                        : 'hover:bg-app-surface text-app-text'
                     }`}
                   >
                     <div className="flex items-center gap-2 truncate">

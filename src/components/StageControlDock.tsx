@@ -315,7 +315,7 @@ export const StageControlDock: React.FC<StageControlDockProps> = ({
       data-stage-dock="true"
       onPointerMove={handlePointerMove}
       className={`fixed z-40 select-none touch-none flex flex-col items-center gap-2 p-2 rounded-full
-                 bg-slate-900/90 backdrop-blur-md border border-slate-700 shadow-2xl transition-opacity duration-300 ${
+                 bg-app-surface/95 backdrop-blur-md border border-app-border shadow-2xl transition-opacity duration-300 ${
                    visible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
                  }`}
       style={{
@@ -332,7 +332,7 @@ export const StageControlDock: React.FC<StageControlDockProps> = ({
         onDoubleClick={handleResetDefaultPosition}
         aria-label="Reposition stage control dock"
         title="Drag to reposition, double-click to reset"
-        className="w-full flex items-center justify-center py-1 cursor-grab active:cursor-grabbing text-slate-400 hover:text-sky-400 transition-colors"
+        className="w-full flex items-center justify-center py-1 cursor-grab active:cursor-grabbing text-app-muted hover:text-app-accent transition-colors"
       >
         <GripVertical className="w-4 h-4 rotate-90" />
       </div>
@@ -346,8 +346,8 @@ export const StageControlDock: React.FC<StageControlDockProps> = ({
         onPointerCancel={handlePointerEnd}
         className={`w-14 h-14 min-w-[56px] min-h-[56px] rounded-full flex items-center justify-center transition-all cursor-pointer select-none active:scale-90 ${
           canPrevSection
-            ? 'bg-slate-800/90 border border-slate-700 text-slate-100 hover:text-sky-400 hover:border-sky-500/60 shadow-md'
-            : 'bg-slate-800/40 border border-slate-800/30 text-slate-600 cursor-not-allowed'
+            ? 'bg-app-button border border-app-border text-app-button-text hover:text-app-accent hover:border-app-accent shadow-md'
+            : 'bg-app-button/40 border border-app-border/30 text-app-muted/40 cursor-not-allowed'
         }`}
         aria-label="Jump to previous section"
       >
@@ -362,8 +362,8 @@ export const StageControlDock: React.FC<StageControlDockProps> = ({
         onPointerCancel={handlePointerEnd}
         className={`w-15 h-15 min-w-[60px] min-h-[60px] rounded-full flex items-center justify-center shadow-xl transition-all active:scale-95 cursor-pointer select-none border-2 ${
           isAutoScrolling
-            ? 'bg-red-600 border-red-500/70 text-white hover:bg-red-700 shadow-red-900/50'
-            : 'bg-sky-600 border-sky-400/70 text-white hover:bg-sky-500 shadow-slate-900/60'
+            ? 'bg-status-error border-status-error/70 text-white hover:brightness-110 shadow-lg'
+            : 'bg-app-action border-app-action/70 text-app-on-action hover:brightness-110 shadow-lg'
         }`}
         aria-label={
           isAutoScrolling
@@ -387,8 +387,8 @@ export const StageControlDock: React.FC<StageControlDockProps> = ({
         onPointerCancel={handlePointerEnd}
         className={`w-14 h-14 min-w-[56px] min-h-[56px] rounded-full flex items-center justify-center transition-all cursor-pointer select-none active:scale-90 ${
           canNextSection
-            ? 'bg-slate-800/90 border border-slate-700 text-slate-100 hover:text-sky-400 hover:border-sky-500/60 shadow-md'
-            : 'bg-slate-800/40 border border-slate-800/30 text-slate-600 cursor-not-allowed'
+            ? 'bg-app-button border border-app-border text-app-button-text hover:text-app-accent hover:border-app-accent shadow-md'
+            : 'bg-app-button/40 border border-app-border/30 text-app-muted/40 cursor-not-allowed'
         }`}
         aria-label="Jump to next section"
       >

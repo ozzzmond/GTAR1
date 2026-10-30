@@ -295,34 +295,34 @@ export const SetlistManager: React.FC<SetlistManagerProps> = ({
         {/* Left Sidebar: Folders & Setlists */}
         <div className="w-full md:w-72 flex-shrink-0 space-y-4">
           {/* Folders Section */}
-          <div className="bg-slate-850 p-3 rounded-2xl border border-slate-800">
+          <div className="bg-app-surface p-3 rounded-2xl border border-app-border text-app-text">
             <div className="flex items-center justify-between mb-2">
-              <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+              <h4 className="text-xs font-bold text-app-heading uppercase tracking-wider">
                 Folders ({folders.length})
               </h4>
               <button
                 onClick={() => setIsCreatingFolder(true)}
-                className="text-[11px] text-sky-400 hover:text-sky-300 font-semibold"
+                className="text-[11px] text-app-action hover:underline font-semibold"
               >
                 + New Folder
               </button>
             </div>
 
             {isCreatingFolder && (
-              <form onSubmit={handleCreateFolder} className="mb-3 p-2 bg-slate-900 rounded-xl border border-slate-700">
+              <form onSubmit={handleCreateFolder} className="mb-3 p-2 bg-app-base rounded-xl border border-app-border">
                 <input
                   type="text"
                   value={newFolderName}
                   onChange={(e) => setNewFolderName(e.target.value)}
                   placeholder="Folder name..."
                   autoFocus
-                  className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-white mb-1.5 focus:outline-none focus:border-sky-500"
+                  className="w-full bg-app-surface border border-app-border rounded px-2 py-1 text-xs text-app-text mb-1.5 focus:outline-none focus:border-app-accent"
                 />
                 {folders.length > 0 && (
                   <select
                     value={newFolderParentId}
                     onChange={(e) => setNewFolderParentId(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-[11px] text-slate-300 mb-2 focus:outline-none"
+                    className="w-full bg-app-surface border border-app-border rounded px-2 py-1 text-[11px] text-app-text mb-2 focus:outline-none"
                   >
                     <option value="">Top Level (Root)</option>
                     {folders.map((f) => (
@@ -336,13 +336,13 @@ export const SetlistManager: React.FC<SetlistManagerProps> = ({
                   <button
                     type="button"
                     onClick={() => setIsCreatingFolder(false)}
-                    className="px-2 py-0.5 text-xs text-slate-400 hover:text-white"
+                    className="px-2 py-0.5 text-xs text-app-muted hover:text-app-heading"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-2 py-0.5 text-xs bg-emerald-600 hover:bg-emerald-500 text-white rounded font-medium"
+                    className="px-2 py-0.5 text-xs bg-app-action hover:brightness-110 text-app-on-action rounded font-medium"
                   >
                     Create
                   </button>
@@ -352,18 +352,18 @@ export const SetlistManager: React.FC<SetlistManagerProps> = ({
 
             {/* Folder Edit Modal/Row */}
             {editingFolderId && (
-              <div className="mb-3 p-2 bg-slate-900 rounded-xl border border-sky-500">
-                <div className="text-[11px] font-semibold text-slate-300 mb-1">Edit / Move Folder</div>
+              <div className="mb-3 p-2 bg-app-base rounded-xl border border-app-accent">
+                <div className="text-[11px] font-semibold text-app-heading mb-1">Edit / Move Folder</div>
                 <input
                   type="text"
                   value={editFolderName}
                   onChange={(e) => setEditFolderName(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-white mb-1.5 focus:outline-none"
+                  className="w-full bg-app-surface border border-app-border rounded px-2 py-1 text-xs text-app-text mb-1.5 focus:outline-none"
                 />
                 <select
                   value={editFolderParentId}
                   onChange={(e) => setEditFolderParentId(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-[11px] text-slate-300 mb-2 focus:outline-none"
+                  className="w-full bg-app-surface border border-app-border rounded px-2 py-1 text-[11px] text-app-text mb-2 focus:outline-none"
                 >
                   <option value="">Top Level (Root)</option>
                   {folders
@@ -378,14 +378,14 @@ export const SetlistManager: React.FC<SetlistManagerProps> = ({
                   <button
                     type="button"
                     onClick={() => setEditingFolderId(null)}
-                    className="px-2 py-0.5 text-xs text-slate-400 hover:text-white"
+                    className="px-2 py-0.5 text-xs text-app-muted hover:text-app-heading"
                   >
                     Cancel
                   </button>
                   <button
                     type="button"
                     onClick={handleSaveEditFolder}
-                    className="px-2 py-0.5 text-xs bg-emerald-600 hover:bg-emerald-500 text-white rounded font-medium"
+                    className="px-2 py-0.5 text-xs bg-app-action hover:brightness-110 text-app-on-action rounded font-medium"
                   >
                     Save
                   </button>
@@ -399,8 +399,8 @@ export const SetlistManager: React.FC<SetlistManagerProps> = ({
                 onClick={() => setSelectedFolderFilter('ALL')}
                 className={`w-full text-left px-2 py-1.5 rounded-lg font-medium flex items-center justify-between ${
                   selectedFolderFilter === 'ALL'
-                    ? 'bg-sky-600/30 text-sky-300 border border-sky-600/50'
-                    : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                    ? 'bg-app-action/20 text-app-action border border-app-action/50'
+                    : 'text-app-muted hover:bg-app-base hover:text-app-text'
                 }`}
               >
                 <span>📁 All Setlists</span>
@@ -411,8 +411,8 @@ export const SetlistManager: React.FC<SetlistManagerProps> = ({
                 onClick={() => setSelectedFolderFilter('UNFILED')}
                 className={`w-full text-left px-2 py-1.5 rounded-lg font-medium flex items-center justify-between ${
                   selectedFolderFilter === 'UNFILED'
-                    ? 'bg-sky-600/30 text-sky-300 border border-sky-600/50'
-                    : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                    ? 'bg-app-action/20 text-app-action border border-app-action/50'
+                    : 'text-app-muted hover:bg-app-base hover:text-app-text'
                 }`}
               >
                 <span>📄 Unfiled</span>
@@ -429,8 +429,8 @@ export const SetlistManager: React.FC<SetlistManagerProps> = ({
                     key={folder.id}
                     className={`flex items-center justify-between px-2 py-1 rounded-lg group ${
                       isSelected
-                        ? 'bg-sky-600/30 text-sky-300 border border-sky-600/50'
-                        : 'text-slate-300 hover:bg-slate-800'
+                        ? 'bg-app-action/20 text-app-action border border-app-action/50'
+                        : 'text-app-text hover:bg-app-base'
                     }`}
                   >
                     <button
@@ -447,14 +447,14 @@ export const SetlistManager: React.FC<SetlistManagerProps> = ({
                           setEditFolderName(folder.name)
                           setEditFolderParentId(folder.parentId || '')
                         }}
-                        className="text-[10px] text-slate-400 hover:text-white px-1"
+                        className="text-[10px] text-app-muted hover:text-app-heading px-1"
                         title="Edit / Move"
                       >
                         ✎
                       </button>
                       <button
                         onClick={() => handleDeleteFolder(folder.id)}
-                        className="text-[10px] text-slate-400 hover:text-red-300 px-1"
+                        className="text-[10px] text-app-muted hover:text-status-error px-1"
                         title="Delete folder"
                       >
                         ✕
@@ -467,32 +467,32 @@ export const SetlistManager: React.FC<SetlistManagerProps> = ({
           </div>
 
           {/* Setlists List Section */}
-          <div className="bg-slate-850 p-3 rounded-2xl border border-slate-800">
+          <div className="bg-app-surface p-3 rounded-2xl border border-app-border text-app-text">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-bold text-white">Setlists</h3>
+              <h3 className="text-sm font-bold text-app-heading">Setlists</h3>
               <button
                 onClick={() => setIsCreatingSetlist(true)}
-                className="px-2.5 py-1 text-xs bg-sky-600 hover:bg-sky-500 rounded-lg text-white font-semibold transition-colors"
+                className="px-2.5 py-1 text-xs bg-app-action hover:brightness-110 rounded-lg text-app-on-action font-semibold transition-colors"
               >
                 + New Setlist
               </button>
             </div>
 
             {isCreatingSetlist && (
-              <form onSubmit={handleCreateSetlist} className="mb-4 p-3 bg-slate-900 rounded-xl border border-slate-700">
+              <form onSubmit={handleCreateSetlist} className="mb-4 p-3 bg-app-base rounded-xl border border-app-border">
                 <input
                   type="text"
                   value={newSetName}
                   onChange={(e) => setNewSetName(e.target.value)}
                   placeholder="Setlist name..."
                   autoFocus
-                  className="w-full bg-slate-850 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-sky-500 mb-2"
+                  className="w-full bg-app-surface border border-app-border rounded-lg px-2.5 py-1.5 text-xs text-app-text focus:outline-none focus:border-app-accent mb-2"
                 />
                 {folders.length > 0 && (
                   <select
                     value={newSetFolderId}
                     onChange={(e) => setNewSetFolderId(e.target.value)}
-                    className="w-full bg-slate-850 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-300 focus:outline-none mb-2"
+                    className="w-full bg-app-surface border border-app-border rounded-lg px-2 py-1 text-xs text-app-text focus:outline-none mb-2"
                   >
                     <option value="">Folder: Unfiled</option>
                     {folders.map((f) => (
@@ -506,13 +506,13 @@ export const SetlistManager: React.FC<SetlistManagerProps> = ({
                   <button
                     type="button"
                     onClick={() => setIsCreatingSetlist(false)}
-                    className="px-2 py-1 text-xs text-slate-400 hover:text-white"
+                    className="px-2 py-1 text-xs text-app-muted hover:text-app-heading"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-2.5 py-1 text-xs bg-emerald-600 hover:bg-emerald-500 text-white rounded font-medium"
+                    className="px-2.5 py-1 text-xs bg-app-action hover:brightness-110 text-app-on-action rounded font-medium"
                   >
                     Create
                   </button>
@@ -522,7 +522,7 @@ export const SetlistManager: React.FC<SetlistManagerProps> = ({
 
             <div className="space-y-1.5">
               {displayedSetlists.length === 0 ? (
-                <div className="p-4 text-center text-xs text-slate-500 bg-slate-900/60 rounded-xl border border-slate-800">
+                <div className="p-4 text-center text-xs text-app-muted bg-app-base/60 rounded-xl border border-app-border">
                   {setlists.length === 0
                     ? 'No setlists yet. Create one above!'
                     : 'No setlists in this folder.'}
@@ -535,10 +535,10 @@ export const SetlistManager: React.FC<SetlistManagerProps> = ({
                       setSelectedSetlistId(sl.id)
                       setEditingName(false)
                     }}
-                    className={`w-full text-left px-3 py-2 rounded-xl text-sm font-medium transition-colors flex items-center justify-between ${
+                    className={`w-full text-left px-3 py-2 rounded-xl text-sm font-medium transition-colors flex items-center justify-between border ${
                       selectedSetlistId === sl.id
-                        ? 'bg-sky-600 text-white shadow-sm'
-                        : 'bg-slate-900 hover:bg-slate-800 text-slate-300'
+                        ? 'bg-app-action text-app-on-action border-app-action shadow-sm'
+                        : 'bg-app-base hover:bg-app-surface text-app-text border-app-border/40'
                     }`}
                   >
                     <span className="truncate">{sl.name}</span>
@@ -555,9 +555,9 @@ export const SetlistManager: React.FC<SetlistManagerProps> = ({
         {/* Right Main Pane: Selected Setlist Detail */}
         <div className="flex-1 min-w-0">
           {currentSetlist ? (
-            <div className="bg-slate-850 p-6 rounded-2xl border border-slate-800">
+            <div className="ui-setlist-card bg-app-surface p-6 rounded-2xl border border-app-border text-app-text">
               {/* Header */}
-              <div className="flex flex-wrap items-center justify-between gap-3 pb-4 mb-6 border-b border-slate-800">
+              <div className="flex flex-wrap items-center justify-between gap-3 pb-4 mb-6 border-b border-app-border">
                 {editingName ? (
                   <div className="flex items-center gap-2">
                     <input
@@ -565,30 +565,30 @@ export const SetlistManager: React.FC<SetlistManagerProps> = ({
                       value={nameInput}
                       onChange={(e) => setNameInput(e.target.value)}
                       autoFocus
-                      className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-base font-bold text-white focus:outline-none focus:border-sky-500"
+                      className="bg-app-base border border-app-border rounded-lg px-3 py-1.5 text-base font-bold text-app-heading focus:outline-none focus:border-app-accent"
                     />
                     <button
                       onClick={handleRename}
-                      className="px-3 py-1.5 text-xs bg-emerald-600 text-white rounded-lg font-medium"
+                      className="px-3 py-1.5 text-xs bg-app-action text-app-on-action rounded-lg font-medium"
                     >
                       Save
                     </button>
                     <button
                       onClick={() => setEditingName(false)}
-                      className="px-2 py-1.5 text-xs text-slate-400 hover:text-white"
+                      className="px-2 py-1.5 text-xs text-app-muted hover:text-app-heading"
                     >
                       Cancel
                     </button>
                   </div>
                 ) : (
                   <div className="flex items-center gap-3">
-                    <h2 className="text-xl font-bold text-white">{currentSetlist.name}</h2>
+                    <h2 className="ui-primary-text text-xl font-bold text-app-heading">{currentSetlist.name}</h2>
                     <button
                       onClick={() => {
                         setNameInput(currentSetlist.name)
                         setEditingName(true)
                       }}
-                      className="text-xs text-slate-400 hover:text-sky-400"
+                      className="text-xs text-app-muted hover:text-app-action"
                     >
                       Rename
                     </button>
@@ -597,12 +597,12 @@ export const SetlistManager: React.FC<SetlistManagerProps> = ({
 
                 <div className="flex items-center gap-3">
                   {/* Folder Assignment Selector */}
-                  <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                  <div className="flex items-center gap-1.5 text-xs text-app-muted">
                     <span>Folder:</span>
                     <select
                       value={currentSetlist.folderId || '__UNFILED__'}
                       onChange={(e) => handleChangeSetlistFolder(e.target.value)}
-                      className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-slate-200 focus:outline-none"
+                      className="bg-app-base border border-app-border rounded-lg px-2.5 py-1 text-xs text-app-text focus:outline-none"
                     >
                       <option value="__UNFILED__">Unfiled</option>
                       {folders.map((f) => (
@@ -617,7 +617,7 @@ export const SetlistManager: React.FC<SetlistManagerProps> = ({
                     <button
                       type="button"
                       onClick={() => onEnterStageSetlist(currentSetlist, 0)}
-                      className="px-3 py-1.5 text-xs text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg font-bold transition-colors flex items-center gap-1.5 shadow-sm"
+                      className="px-3 py-1.5 text-xs text-app-on-action bg-app-action hover:brightness-110 rounded-lg font-bold transition-colors flex items-center gap-1.5 shadow-sm"
                     >
                       ▶ Play Setlist in Stage
                     </button>
@@ -625,7 +625,7 @@ export const SetlistManager: React.FC<SetlistManagerProps> = ({
 
                   <button
                     onClick={handleDeleteSetlist}
-                    className="px-3 py-1.5 text-xs text-red-300 hover:text-red-200 bg-red-950/40 hover:bg-red-950 border border-red-900/60 rounded-lg transition-colors"
+                    className="px-3 py-1.5 text-xs text-status-error hover:bg-status-error/20 bg-status-error/10 border border-status-error/30 rounded-lg transition-colors"
                   >
                     Delete Setlist
                   </button>
@@ -633,11 +633,11 @@ export const SetlistManager: React.FC<SetlistManagerProps> = ({
               </div>
 
               {/* Add Song Shortcut to Setlist */}
-              <div className="flex flex-wrap items-center gap-2 mb-6 p-3 bg-slate-900 rounded-xl border border-slate-800">
+              <div className="flex flex-wrap items-center gap-2 mb-6 p-3 bg-app-base rounded-xl border border-app-border">
                 <select
                   value={selectedSongToAdd}
                   onChange={(e) => setSelectedSongToAdd(e.target.value)}
-                  className="flex-1 min-w-[200px] bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-sky-500"
+                  className="flex-1 min-w-[200px] bg-app-surface border border-app-border rounded-lg px-3 py-1.5 text-xs text-app-text focus:outline-none focus:border-app-accent"
                 >
                   <option value="">Select a canonical song to add shortcut...</option>
                   {allSongs.map((s) => (
@@ -650,13 +650,13 @@ export const SetlistManager: React.FC<SetlistManagerProps> = ({
                 <button
                   onClick={handleAddSong}
                   disabled={!selectedSongToAdd}
-                  className="px-4 py-1.5 bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors"
+                  className="px-4 py-1.5 bg-app-action hover:brightness-110 disabled:opacity-40 text-app-on-action text-xs font-semibold rounded-lg transition-colors"
                 >
                   + Add Shortcut
                 </button>
 
                 {statusMessage && (
-                  <span className="text-xs text-emerald-400 font-medium ml-2">
+                  <span className="text-xs text-status-success font-medium ml-2">
                     {statusMessage}
                   </span>
                 )}
@@ -664,7 +664,7 @@ export const SetlistManager: React.FC<SetlistManagerProps> = ({
 
               {/* Setlist Song Shortcuts List with Reordering & Per-entry Transpose */}
               {currentSetlist.songs.length === 0 ? (
-                <div className="py-12 text-center text-slate-500 text-sm">
+                <div className="py-12 text-center text-app-muted text-sm">
                   This setlist has no songs. Add song shortcuts above.
                 </div>
               ) : (
@@ -678,21 +678,21 @@ export const SetlistManager: React.FC<SetlistManagerProps> = ({
                         key={songRef.entryId || `${songRef.id}-${index}`}
                         className={`p-3 rounded-xl border flex items-center justify-between gap-3 group transition-colors ${
                           isMissing
-                            ? 'bg-red-950/20 border-red-900/50 hover:bg-red-950/30'
-                            : 'bg-slate-900 hover:bg-slate-800 border-slate-800'
+                            ? 'bg-status-error/10 border-status-error/30 hover:bg-status-error/20'
+                            : 'bg-app-base hover:bg-app-surface border-app-border'
                         }`}
                       >
                         <div className="flex items-center gap-3 min-w-0">
-                          <span className="w-6 text-center text-xs font-mono font-bold text-slate-500">
+                          <span className="w-6 text-center text-xs font-mono font-bold text-app-muted">
                             {index + 1}
                           </span>
                           <div className="min-w-0">
                             {isMissing ? (
                               <div>
-                                <span className="font-bold text-red-300 text-sm line-through block truncate">
+                                <span className="font-bold text-status-error text-sm line-through block truncate">
                                   {songRef.title} (Deleted from Songbook)
                                 </span>
-                                <span className="text-[11px] text-red-400">
+                                <span className="text-[11px] text-status-error/80">
                                   Source song ID {songRef.id} not found in canonical library
                                 </span>
                               </div>
@@ -700,19 +700,19 @@ export const SetlistManager: React.FC<SetlistManagerProps> = ({
                               <div>
                                 <button
                                   onClick={() => onPlaySong(songRef.id, songRef.transposeOffset)}
-                                  className="text-left font-bold text-slate-100 hover:text-sky-300 text-sm truncate block"
+                                  className="text-left font-bold text-app-heading hover:text-app-link text-sm truncate block"
                                 >
                                   {songRef.title}
                                 </button>
-                                <div className="text-[11px] text-slate-400 flex items-center gap-2">
+                                <div className="text-[11px] text-app-muted flex items-center gap-2">
                                   {songRef.artist && <span>{songRef.artist}</span>}
                                   {songRef.key && (
-                                    <span className="font-mono text-amber-400">
+                                    <span className="font-mono text-app-accent">
                                       Key: {songRef.key}
                                     </span>
                                   )}
                                   {typeof songRef.transposeOffset === 'number' && songRef.transposeOffset !== 0 && (
-                                    <span className="bg-amber-950/70 border border-amber-700/60 text-amber-300 px-1.5 py-0.2 rounded font-mono text-[10px]">
+                                    <span className="bg-app-surface border border-app-border text-app-accent px-1.5 py-0.2 rounded font-mono text-[10px]">
                                       {songRef.transposeOffset > 0 ? `+${songRef.transposeOffset}` : songRef.transposeOffset}
                                     </span>
                                   )}
@@ -725,20 +725,20 @@ export const SetlistManager: React.FC<SetlistManagerProps> = ({
                         {/* Reorder & Action Controls */}
                         <div className="flex items-center gap-1.5">
                           {/* Transpose +/- Controls */}
-                          <div className="flex items-center bg-slate-800 rounded-lg p-0.5 border border-slate-700 mr-2 text-[11px]">
+                          <div className="flex items-center bg-app-surface rounded-lg p-0.5 border border-app-border mr-2 text-[11px]">
                             <button
                               onClick={() => handleAdjustTranspose(index, -1)}
-                              className="px-1.5 py-0.5 text-slate-400 hover:text-white"
+                              className="px-1.5 py-0.5 text-app-muted hover:text-app-heading"
                               title="Transpose -1 half-step"
                             >
                               ♭-
                             </button>
-                            <span className="px-1 font-mono text-slate-300">
+                            <span className="px-1 font-mono text-app-text">
                               {songRef.transposeOffset || 0}
                             </span>
                             <button
                               onClick={() => handleAdjustTranspose(index, 1)}
-                              className="px-1.5 py-0.5 text-slate-400 hover:text-white"
+                              className="px-1.5 py-0.5 text-app-muted hover:text-app-heading"
                               title="Transpose +1 half-step"
                             >
                               ♯+
@@ -748,7 +748,7 @@ export const SetlistManager: React.FC<SetlistManagerProps> = ({
                           <button
                             onClick={() => handleMoveSong(index, 'UP')}
                             disabled={index === 0}
-                            className="p-1 text-slate-400 hover:text-white disabled:opacity-20 hover:bg-slate-700 rounded text-xs"
+                            className="p-1 text-app-muted hover:text-app-heading disabled:opacity-20 hover:bg-app-base rounded text-xs"
                             title="Move Up"
                           >
                             ▲
@@ -756,7 +756,7 @@ export const SetlistManager: React.FC<SetlistManagerProps> = ({
                           <button
                             onClick={() => handleMoveSong(index, 'DOWN')}
                             disabled={index === currentSetlist.songs.length - 1}
-                            className="p-1 text-slate-400 hover:text-white disabled:opacity-20 hover:bg-slate-700 rounded text-xs"
+                            className="p-1 text-app-muted hover:text-app-heading disabled:opacity-20 hover:bg-app-base rounded text-xs"
                             title="Move Down"
                           >
                             ▼
@@ -764,7 +764,7 @@ export const SetlistManager: React.FC<SetlistManagerProps> = ({
                           {!isMissing && (
                             <button
                               onClick={() => onPlaySong(songRef.id, songRef.transposeOffset)}
-                              className="px-2.5 py-1 text-xs bg-slate-800 hover:bg-sky-600 text-slate-300 hover:text-white rounded-lg transition-colors ml-2"
+                              className="ui-button px-2.5 py-1 text-xs bg-app-button hover:brightness-110 text-app-button-text border border-app-border rounded-lg transition-colors ml-2"
                             >
                               View
                             </button>
@@ -772,7 +772,7 @@ export const SetlistManager: React.FC<SetlistManagerProps> = ({
                           {!isMissing && onEnterStageSetlist && (
                             <button
                               onClick={() => onEnterStageSetlist(currentSetlist, index)}
-                              className="px-2.5 py-1 text-xs bg-emerald-700/80 hover:bg-emerald-600 text-white rounded-lg transition-colors ml-1 font-semibold"
+                              className="px-2.5 py-1 text-xs bg-app-action hover:brightness-110 text-app-on-action rounded-lg transition-colors ml-1 font-semibold"
                               title="Play in Stage Performance"
                             >
                               Stage
@@ -780,7 +780,7 @@ export const SetlistManager: React.FC<SetlistManagerProps> = ({
                           )}
                           <button
                             onClick={() => handleRemoveSong(index)}
-                            className="p-1 text-slate-500 hover:text-red-400 hover:bg-slate-800 rounded text-xs ml-1"
+                            className="p-1 text-app-muted hover:text-status-error hover:bg-app-base rounded text-xs ml-1"
                             title="Remove shortcut from setlist"
                           >
                             ✕
@@ -793,7 +793,7 @@ export const SetlistManager: React.FC<SetlistManagerProps> = ({
               )}
             </div>
           ) : (
-            <div className="py-20 text-center text-slate-500 text-sm bg-slate-850 rounded-2xl border border-slate-800">
+            <div className="py-20 text-center text-app-muted text-sm bg-app-surface rounded-2xl border border-app-border">
               Select or create a setlist to view song shortcuts.
             </div>
           )}

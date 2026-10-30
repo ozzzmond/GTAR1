@@ -278,7 +278,7 @@ export const ExplorerNavigation: React.FC<ExplorerNavigationProps> = ({
                 <button
                   type="button"
                   onClick={() => setEditingFolderId(null)}
-                  className="p-0.5 text-slate-400 hover:text-white"
+                  className="p-0.5 text-app-muted hover:text-app-heading"
                   aria-label="Cancel folder rename"
                 >
                   <X className="w-3.5 h-3.5" />
@@ -421,7 +421,7 @@ export const ExplorerNavigation: React.FC<ExplorerNavigationProps> = ({
 
             {subfolders.length === 0 && folderSetlists.length === 0 && (
               <div
-                className="py-1 text-[11px] text-slate-500 italic"
+                className="py-1 text-[11px] text-app-muted italic"
                 style={{ paddingLeft: `${24 + depth * 14}px` }}
               >
                 Folder is empty
@@ -527,7 +527,7 @@ export const ExplorerNavigation: React.FC<ExplorerNavigationProps> = ({
               {tagsExpanded && (
                 <div className="space-y-0.5 pl-3">
                   {allTags.length === 0 ? (
-                    <div className="text-[11px] text-slate-500 py-1 pl-2 italic">
+                    <div className="text-[11px] text-app-muted py-1 pl-2 italic">
                       No tags assigned yet
                     </div>
                   ) : (
