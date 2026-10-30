@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
+import { Search, ListPlus } from 'lucide-react'
+import { MultiSongSetlistPicker } from './MultiSongSetlistPicker'
 import type { SongEntity, WebSetlist, WebSetlistSongRef, SetlistFolder } from '../types/gtar'
 import { generateUUID } from '../utils/uuid'
 import { validateFolderParentChange } from '../utils/folders'
@@ -59,8 +61,38 @@ export const SetlistManager: React.FC<SetlistManagerProps> = ({
   const [nameInput, setNameInput] = useState<string>('')
   const [selectedSongToAdd, setSelectedSongToAdd] = useState<string>('')
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
+  const [isSearchPickerOpen, setIsSearchPickerOpen] = useState<boolean>(false)
+  const searchTriggerRef = useRef<HTMLButtonElement>(null)
+
+
 
   const currentSetlist = setlists.find((s) => s.id === selectedSetlistId) || null
+
+  // Scoped keyboard shortcut: Ctrl+K or Alt+S to open/focus multi-song search picker
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isCtrlK = (e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'k'
+      const isAltS = e.altKey && !e.ctrlKey && !e.metaKey && e.key.toLowerCase() === 's'
+      const isCtrlShiftK = (e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'k'
+
+      if (!isCtrlK && !isAltS && !isCtrlShiftK) return
+      if (!currentSetlist) return
+
+      // Do not hijack if user is in an active input/textarea outside the picker
+      const target = e.target as HTMLElement | null
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        if (target.id !== 'multi-song-search-input') {
+          return
+        }
+      }
+
+      e.preventDefault()
+      setIsSearchPickerOpen((prev) => !prev)
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [currentSetlist])
 
   // Fast song lookup map
   const songMap = new Map<string, SongEntity>()
@@ -204,6 +236,33 @@ export const SetlistManager: React.FC<SetlistManagerProps> = ({
       updatedAt: Date.now(),
     }
     await onSaveSetlist(updated)
+  }
+
+  
+  // Bulk Add Songs to Setlist
+  const handleBulkAddSongs = async (songsToAdd: SongEntity[]) => {
+    if (!currentSetlist || songsToAdd.length === 0) return
+
+    const startIndex = currentSetlist.songs.length
+    const newSongRefs: WebSetlistSongRef[] = songsToAdd.map((song, idx) => ({
+      entryId: generateUUID(),
+      id: song.id,
+      title: song.title,
+      artist: song.artist,
+      key: song.key,
+      position: startIndex + idx,
+      transposeOffset: 0,
+    }))
+
+    const updated: WebSetlist = {
+      ...currentSetlist,
+      songs: [...currentSetlist.songs, ...newSongRefs],
+      updatedAt: Date.now(),
+    }
+
+    await onSaveSetlist(updated)
+    setStatusMessage(`Added ${newSongRefs.length} ${newSongRefs.length === 1 ? 'song' : 'songs'} to setlist`)
+    setTimeout(() => setStatusMessage(null), 3000)
   }
 
   // Add Song Reference (Shortcut) to Setlist
@@ -640,6 +699,41 @@ export const SetlistManager: React.FC<SetlistManagerProps> = ({
                     Delete Setlist
                   </button>
                 </div>
+              </div>
+
+              {/* Multi-Song Search Picker Bar & Panel */}
+              <div className="mb-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                  <div className="flex items-center gap-2">
+                    <button
+                      ref={searchTriggerRef}
+                      type="button"
+                      onClick={() => setIsSearchPickerOpen((prev) => !prev)}
+                      aria-expanded={isSearchPickerOpen}
+                      aria-keyshortcuts="Control+k Alt+s"
+                      className="px-3.5 py-2 bg-app-action hover:brightness-110 text-app-on-action rounded-xl font-bold text-xs flex items-center gap-2 shadow-sm transition-all cursor-pointer"
+                      title="Search & bulk add songs (Ctrl+K or Alt+S)"
+                    >
+                      <Search className="w-4 h-4" />
+                      <span>Search Songs (Outlook-style Picker)</span>
+                      <kbd className="hidden sm:inline-block font-mono text-[10px] bg-black/20 px-1.5 py-0.5 rounded">
+                        Ctrl+K
+                      </kbd>
+                    </button>
+                    <span className="text-[11px] text-app-muted hidden md:inline">
+                      Add multiple songs in one action
+                    </span>
+                  </div>
+                </div>
+
+                <MultiSongSetlistPicker
+                  isOpen={isSearchPickerOpen}
+                  onClose={() => setIsSearchPickerOpen(false)}
+                  currentSetlist={currentSetlist}
+                  allSongs={allSongs}
+                  onAddSongs={handleBulkAddSongs}
+                  triggerRef={searchTriggerRef}
+                />
               </div>
 
               {/* Add Song Shortcut to Setlist */}
