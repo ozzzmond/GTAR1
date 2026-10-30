@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import type { SongEntity, WebSetlist, WebSetlistSongRef, SetlistFolder } from '../types/gtar'
 import { generateUUID } from '../utils/uuid'
 import { validateFolderParentChange } from '../utils/folders'
@@ -8,6 +8,7 @@ export interface SetlistManagerProps {
   folders: SetlistFolder[]
   allSongs: SongEntity[]
   initialSelectedSetlistId?: string
+  onSelectedSetlistChange?: (id: string | undefined) => void
   onSaveSetlist: (setlist: WebSetlist) => Promise<void>
   onDeleteSetlist: (id: string) => Promise<void>
   onSaveFolder: (folder: SetlistFolder) => Promise<void>
@@ -21,6 +22,7 @@ export const SetlistManager: React.FC<SetlistManagerProps> = ({
   folders,
   allSongs,
   initialSelectedSetlistId,
+  onSelectedSetlistChange,
   onSaveSetlist,
   onDeleteSetlist,
   onSaveFolder,
@@ -28,9 +30,17 @@ export const SetlistManager: React.FC<SetlistManagerProps> = ({
   onPlaySong,
   onEnterStageSetlist,
 }) => {
-  const [selectedSetlistId, setSelectedSetlistId] = useState<string | null>(
+  const [localSelectedSetlistId, setLocalSelectedSetlistId] = useState<string | null>(
     initialSelectedSetlistId || setlists[0]?.id || null
   )
+  const selectedSetlistId = initialSelectedSetlistId ?? localSelectedSetlistId
+  const setSelectedSetlistId = (id: string | null) => {
+    setLocalSelectedSetlistId(id)
+    onSelectedSetlistChange?.(id || undefined)
+  }
+  useEffect(() => {
+    if (!initialSelectedSetlistId && localSelectedSetlistId) onSelectedSetlistChange?.(localSelectedSetlistId)
+  }, [initialSelectedSetlistId, localSelectedSetlistId, onSelectedSetlistChange])
   const [selectedFolderFilter, setSelectedFolderFilter] = useState<string | 'ALL' | 'UNFILED'>('ALL')
   const [isCreatingSetlist, setIsCreatingSetlist] = useState<boolean>(false)
   const [newSetName, setNewSetName] = useState<string>('')
