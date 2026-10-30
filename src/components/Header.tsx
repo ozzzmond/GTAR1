@@ -1,9 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
 import styles from './Header.module.css'
-import { SearchHelp } from './SearchHelp'
-import { useSongSourceProvider } from '../hooks/useSongSourceProvider'
-import { SONG_SOURCE_PROVIDERS } from '../utils/songSourceProviders'
-import { searchOnlineSongSource } from '../utils/songSources'
 import { GTAR1_VERSION } from '../types/gtar'
 import type { LocalUserProfile } from '../utils/localProfile'
 import { getInitials, DEFAULT_AVATAR_PATH } from '../utils/localProfile'
@@ -21,8 +17,6 @@ import {
   Terminal,
 } from 'lucide-react'
 
-export type SearchScope = 'MY_SONGS' | 'FAVORITES' | 'ONLINE_SOURCES'
-
 export type ActiveTab = 'SONGS' | 'SETLISTS' | 'VIEWER' | 'EDITOR' | 'STAGE'
 
 export interface HeaderProps {
@@ -39,8 +33,6 @@ export interface HeaderProps {
   onToggleMobileDrawer: () => void
   isMobileDrawerOpen: boolean
   searchScopeLabel?: string
-  searchScope?: SearchScope
-  onSearchScopeChange?: (scope: SearchScope) => void
   globalSearchRef?: React.RefObject<HTMLInputElement | null>
 }
 
@@ -58,21 +50,11 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleMobileDrawer,
   isMobileDrawerOpen,
   searchScopeLabel = 'All Songs',
-  searchScope = 'MY_SONGS',
-  onSearchScopeChange,
   globalSearchRef,
 }) => {
   const [isSearchActive, setIsSearchActive] = useState(false)
   const ownSearchRef = useRef<HTMLInputElement>(null)
   const searchInputRef = globalSearchRef || ownSearchRef
-  const { provider, selectProvider, preferenceNotice } = useSongSourceProvider()
-  const [searchFeedback, setSearchFeedback] = useState<{ success: boolean; message: string } | null>(null)
-  useEffect(() => { setSearchFeedback(null) }, [searchQuery, searchScope, provider.id])
-  const onlineScope = searchScope === 'ONLINE_SOURCES'
-  const submitSearch = (event: React.FormEvent) => {
-    event.preventDefault()
-    if (onlineScope) setSearchFeedback(searchOnlineSongSource(provider.id, searchQuery))
-  }
   const [showAvatarMenu, setShowAvatarMenu] = useState(false)
   const avatarMenuRef = useRef<HTMLDivElement>(null)
 
@@ -80,7 +62,6 @@ export const Header: React.FC<HeaderProps> = ({
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && e.nativeEvent.isComposing) { e.preventDefault(); return }
     if (e.key === 'Escape') {
-      setSearchFeedback(null)
       if (searchQuery) {
         onSearchChange('')
       } else {
@@ -145,38 +126,18 @@ export const Header: React.FC<HeaderProps> = ({
           </span>
         </div>
 
-        {/* One primary search input. Online navigation requires explicit submit. */}
-        <form onSubmit={submitSearch} role="search" aria-label="Global song search" className={styles.search}>
-          <div className={`${styles.controls} ${onlineScope ? styles.online : ''}`}>
-            <select aria-label="Search scope" value={searchScope} onChange={event => onSearchScopeChange?.(event.target.value as SearchScope)}
-              className="min-h-[44px] w-[8.5rem] shrink-0 rounded-xl border border-app-border bg-app-surface px-2.5 text-xs text-app-text focus-visible:outline-2 focus-visible:outline-app-action">
-              <option value="MY_SONGS">My Songs</option><option value="FAVORITES">Favorites</option><option value="ONLINE_SOURCES">Online Sources</option>
-            </select>
-            {onlineScope && <select aria-label="Online provider" value={provider.id} onChange={event => selectProvider(event.target.value)}
-              className="min-h-[44px] min-w-0 rounded-xl border border-app-border bg-app-surface px-2.5 text-xs text-app-text focus-visible:outline-2 focus-visible:outline-app-action">
-              {SONG_SOURCE_PROVIDERS.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-            </select>}
-            <div className={`relative flex min-w-0 flex-1 items-center ${styles.query}`}>
-              <Search className="w-4 h-4 header-neutral-icon absolute left-3 pointer-events-none" />
-              <input ref={searchInputRef} type="text" aria-label="Global search" value={searchQuery}
-                onChange={event => onSearchChange(event.target.value)} onKeyDown={handleKeyDown}
-                onFocus={() => setIsSearchActive(true)} onBlur={() => setIsSearchActive(false)}
-                placeholder={onlineScope ? 'Song or artist on website' : `Search ${searchScope === 'FAVORITES' ? 'Favorites' : searchScopeLabel}... (Esc to clear)`}
-                aria-describedby={onlineScope ? 'global-online-help' : undefined}
-                aria-invalid={searchFeedback?.success === false}
-                className="header-search-input min-h-[44px] min-w-0 w-full pl-9 pr-10 rounded-xl bg-app-surface border border-app-border text-xs text-app-text placeholder:text-app-muted focus:outline-none focus:border-app-accent focus:ring-1 focus:ring-app-accent transition-colors" />
-              {searchQuery && <button type="button" onClick={() => { onSearchChange(''); searchInputRef.current?.focus() }} aria-label="Clear search query"
-                className="absolute right-0 min-h-[44px] min-w-[36px] flex items-center justify-center header-neutral-icon hover:text-app-heading rounded"><X className="w-3.5 h-3.5" /></button>}
-            </div>
-            {onlineScope && <>
-              <button type="submit" className="min-h-[44px] shrink-0 whitespace-nowrap rounded-xl bg-app-action px-3 text-xs font-bold text-app-on-action flex items-center justify-center gap-1.5 hover:brightness-110">
-                <Globe className="w-3.5 h-3.5" />{provider.capabilities.externalSearch ? 'Search Online' : 'Open Website'}
-              </button>
-              <SearchHelp>{provider.capabilities.externalSearch ? 'Results open on the provider website in a new tab.' : 'Opens the provider homepage; search or browse there.'}</SearchHelp>
-            </>}
+        {/* Center: compact local search, as in the original PROD toolbar. */}
+        <form onSubmit={event => event.preventDefault()} role="search" aria-label="Global song search" className={styles.search}>
+          <div className="relative flex min-w-0 items-center">
+            <Search className="w-4 h-4 header-neutral-icon absolute left-3 pointer-events-none" />
+            <input ref={searchInputRef} type="text" aria-label="Global search" value={searchQuery}
+              onChange={event => onSearchChange(event.target.value)} onKeyDown={handleKeyDown}
+              onFocus={() => setIsSearchActive(true)} onBlur={() => setIsSearchActive(false)}
+              placeholder={`Search ${searchScopeLabel}... (Esc to clear)`}
+              className="header-search-input min-h-[36px] min-w-0 w-full pl-9 pr-8 rounded-xl bg-app-surface border border-app-border text-xs text-app-text placeholder:text-app-muted focus:outline-none focus:border-app-accent focus:ring-1 focus:ring-app-accent transition-colors" />
+            {searchQuery && <button type="button" onClick={() => { onSearchChange(''); searchInputRef.current?.focus() }} aria-label="Clear search query"
+              className="absolute right-0 min-h-[36px] min-w-[32px] flex items-center justify-center header-neutral-icon hover:text-app-heading rounded"><X className="w-3.5 h-3.5" /></button>}
           </div>
-          {onlineScope && preferenceNotice && <p role="status" className="text-xs text-app-muted">{preferenceNotice}</p>}
-          {searchFeedback && <p role={searchFeedback.success ? 'status' : 'alert'} className={`text-xs ${searchFeedback.success ? 'text-app-muted' : 'text-red-400'}`}>{searchFeedback.message}</p>}
         </form>
 
         {/* Right Actions */}

@@ -27,6 +27,7 @@ import {
   loadCustomSongSources,
   saveCustomSongSources,
   getHostnameFallback,
+  searchOnlineSongSource,
   getProviderForUrl,
   retrieveSongSource,
   parseImportedChordContent,
@@ -49,7 +50,7 @@ export interface BrowseSongSourcesModalProps {
   songs?: SongEntity[]
   onSelectSong?: (song: SongEntity) => void
   initialTab?: 'browse' | 'import'
-  onSearchOnline?: () => void
+  searchQuery?: string
 }
 
 const SAMPLE_CHORDPRO = `{title: Amazing Grace}
@@ -71,9 +72,11 @@ export const BrowseSongSourcesModal: React.FC<BrowseSongSourcesModalProps> = ({
   songs = [],
   onSelectSong,
   initialTab = 'browse',
-  onSearchOnline,
+  searchQuery = '',
 }) => {
   const { provider, selectProvider, preferenceNotice } = useSongSourceProvider()
+  const [searchFeedback, setSearchFeedback] = useState<{ success: boolean; message: string } | null>(null)
+  useEffect(() => { setSearchFeedback(null) }, [searchQuery, provider.id, isOpen])
   const [online, setOnline] = useState(() => navigator.onLine !== false)
   const [activeTab, setActiveTab] = useState<'browse' | 'import'>(initialTab)
 
@@ -583,8 +586,12 @@ export const BrowseSongSourcesModal: React.FC<BrowseSongSourcesModalProps> = ({
                   className="min-h-[44px] w-full rounded-xl border border-app-border bg-app-surface px-3 text-xs text-app-text focus-visible:outline-2 focus-visible:outline-app-action">
                   {SONG_SOURCE_PROVIDERS.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
                 </select>
-                <p className="text-xs text-app-muted">Use Online Sources in the header search. {provider.capabilities.externalSearch ? 'Results open on the provider website.' : 'Direct search link unavailable; opens its homepage instead.'}</p>
-                {onSearchOnline && <button type="button" onClick={onSearchOnline} className="min-h-[44px] rounded-xl border border-app-border px-3 text-xs font-semibold text-app-action">Use header search</button>}
+                <p className="text-xs text-app-muted">Search using the current header query. {provider.capabilities.externalSearch ? 'Results open on the provider website.' : 'Direct search link unavailable; opens its homepage instead.'}</p>
+                <button type="button" onClick={() => setSearchFeedback(searchOnlineSongSource(provider.id, searchQuery))}
+                  className="min-h-[44px] rounded-xl border border-app-border px-3 text-xs font-semibold text-app-action">
+                  {provider.capabilities.externalSearch ? 'Search Online' : 'Open Website'}
+                </button>
+                {searchFeedback && <p role={searchFeedback.success ? 'status' : 'alert'} className="text-xs text-app-muted">{searchFeedback.message}</p>}
                 <p className="text-xs text-app-muted">Import charts you own or have permission to use with <button type="button" onClick={() => setActiveTab('import')} className="underline text-app-action">Import &amp; Preview</button> to keep them local and available offline. Keep source and author attribution.</p>
                 {!online && <p role="status" className="text-xs text-app-muted">You are offline. Local Songbook, Stage, and paste or file import remain available.</p>}
                 {preferenceNotice && <p role="status" className="text-xs text-app-muted">{preferenceNotice}</p>}
