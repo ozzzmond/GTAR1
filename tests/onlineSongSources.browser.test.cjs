@@ -126,6 +126,8 @@ test('unified search: local filtering, explicit provider navigation, shared sett
       await page.getByRole('tab', { name:'Browse Websites', exact:true }).click()
       await dialog.getByRole('button', { name:'Use header search', exact:true }).click()
       assert.equal(await query.inputValue(), term)
+      // App restores focus on the next animation frame; CI may assert before it runs.
+      await page.waitForFunction(el => document.activeElement === el, await query.elementHandle(), { timeout:5000 })
       assert.equal(await query.evaluate(el => el === document.activeElement), true)
       await query.fill('Beta')
       await scope.selectOption('MY_SONGS')
