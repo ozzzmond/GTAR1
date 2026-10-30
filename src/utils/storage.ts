@@ -1,3 +1,4 @@
+import { recoverRestoreSettings } from './restoreSettings'
 /**
  * GTAR1 — Isolated IndexedDB Local Storage
  * Database Namespace: 'gtar_revamp_local_v1'
@@ -16,13 +17,15 @@ import { normalizeTags } from './tags'
 import { generateUUID } from './uuid'
 
 export const DB_NAME = 'gtar_revamp_local_v1'
-export const DB_VERSION = 2
+export const DB_VERSION = 3
 export const STORES = {
   SONGS: 'songs',
   SETLISTS: 'setlists',
   FOLDERS: 'folders',
+  RESTORE: 'restoreJournal',
 } as const
 
+let opening: Promise<IDBDatabase> | null = null
 let dbInstance: IDBDatabase | null = null
 
 export function openRevampDB(): Promise<IDBDatabase> {
@@ -30,7 +33,8 @@ export function openRevampDB(): Promise<IDBDatabase> {
     return Promise.resolve(dbInstance)
   }
 
-  return new Promise((resolve, reject) => {
+  if (opening) return opening
+  opening = new Promise<IDBDatabase>((resolve, reject) => {
     if (typeof indexedDB === 'undefined') {
       reject(new Error('IndexedDB is not supported in this environment'))
       return
@@ -41,6 +45,8 @@ export function openRevampDB(): Promise<IDBDatabase> {
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result
       const oldVersion = event.oldVersion
+
+      if (!db.objectStoreNames.contains(STORES.RESTORE)) db.createObjectStore(STORES.RESTORE, { keyPath: 'id' })
 
       // Version 1 stores: songs, setlists
       if (!db.objectStoreNames.contains(STORES.SONGS)) {
@@ -58,7 +64,7 @@ export function openRevampDB(): Promise<IDBDatabase> {
       // Schema migration: if upgrading from v1 or earlier, ensure data normalization
       // IndexedDB upgrade transaction automatically has access to existing object stores
       const tx = (event.target as IDBOpenDBRequest).transaction
-      if (tx && oldVersion < 2) {
+      if (tx && oldVersion < 3) {
         // Upgrade existing songs: ensure tags array exists
         try {
           const songStore = tx.objectStore(STORES.SONGS)
@@ -121,17 +127,20 @@ export function openRevampDB(): Promise<IDBDatabase> {
     }
 
     request.onsuccess = () => {
-      dbInstance = request.result
-      dbInstance.onclose = () => {
-        dbInstance = null
-      }
-      resolve(dbInstance)
+      const db = request.result
+      recoverRestoreSettings(db, STORES.RESTORE).then(() => {
+        dbInstance = db
+        db.onclose = () => { dbInstance = null }
+        db.onversionchange = () => { db.close(); dbInstance = null }
+        resolve(db)
+      }, error => { db.close(); reject(error) })
     }
 
     request.onerror = () => {
       reject(request.error || new Error('Failed to open GTAR1 IndexedDB'))
     }
   })
+  return opening.finally(() => { opening = null })
 }
 
 export const openGtar1DB = openRevampDB

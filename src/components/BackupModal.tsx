@@ -1,7 +1,9 @@
+import { planLibraryRestore, type RestoreMode, type LibraryImage } from '../utils/restoreLibrary'
+import { MAX_BACKUP_BYTES } from '../utils/backupValidation'
 import React, { useState, useMemo } from 'react'
 import type { SongEntity, WebSetlist, SetlistFolder } from '../types/gtar'
 import { createBackupPayload, parseBackupJson } from '../utils/jsonBackup'
-import { restoreBackupSettings, type BackupSettings } from '../utils/backupSettings'
+import { type BackupSettings } from '../utils/backupSettings'
 import {
   Download,
   Upload,
@@ -22,7 +24,8 @@ export interface BackupModalProps {
   onImport: (
     importedSongs: SongEntity[],
     importedSetlists: WebSetlist[],
-    importedFolders: SetlistFolder[]
+    importedFolders: SetlistFolder[],
+    mode: RestoreMode, expected: LibraryImage, settings?: BackupSettings
   ) => Promise<void>
   onClose: () => void
 }
@@ -45,6 +48,9 @@ export const BackupModal: React.FC<BackupModalProps> = ({
     themeSettings?: BackupSettings
     error?: string
   } | null>(null)
+  const [restoreMode, setRestoreMode] = useState<RestoreMode>('MERGE')
+  const [previewBaseline, setPreviewBaseline] = useState<LibraryImage>({ songs, setlists, folders })
+  const [partialImport, setPartialImport] = useState(false)
   const [isImporting, setIsImporting] = useState<boolean>(false)
 
   const backupJsonString = useMemo(() => {
@@ -87,6 +93,10 @@ export const BackupModal: React.FC<BackupModalProps> = ({
     const file = e.target.files?.[0]
     if (!file) return
 
+    if (file.size > MAX_BACKUP_BYTES) {
+      setImportPreview({ valid: false, songs: [], setlists: [], folders: [], error: 'Backup exceeds 20 MiB limit' })
+      return
+    }
     const reader = new FileReader()
     reader.onload = (event) => {
       const content = event.target?.result as string
@@ -98,6 +108,8 @@ export const BackupModal: React.FC<BackupModalProps> = ({
 
   const validateImportPayload = (text: string) => {
     const result = parseBackupJson(text)
+    setPreviewBaseline(structuredClone({ songs, setlists, folders }))
+    setPartialImport(!!result.partial)
     if (result.isValid) {
       setImportPreview({
         valid: true,
@@ -122,14 +134,9 @@ export const BackupModal: React.FC<BackupModalProps> = ({
 
     setIsImporting(true)
     try {
-      if (importPreview.themeSettings) {
-        try {
-          restoreBackupSettings(importPreview.themeSettings)
-        } catch (themeErr) {
-          console.warn('Could not restore theme settings from backup', themeErr)
-        }
-      }
-      await onImport(importPreview.songs, importPreview.setlists, importPreview.folders)
+      if (partialImport && restoreMode === 'REPLACE') throw new Error('Song-only imports support Merge only. Use a complete backup for Replace.')
+      if (restoreMode === 'REPLACE' && !window.confirm(`Replace the entire local library (${songs.length} songs, ${setlists.length} setlists, ${folders.length} folders) with this backup? Local records absent from the backup will be removed.`)) return
+      await onImport(importPreview.songs, importPreview.setlists, importPreview.folders, restoreMode, previewBaseline, importPreview.themeSettings)
       alert(
         `Successfully restored ${importPreview.songs.length} canonical songs, ${importPreview.setlists.length} setlists, and ${importPreview.folders.length} folders!`
       )
@@ -141,13 +148,28 @@ export const BackupModal: React.FC<BackupModalProps> = ({
     }
   }
 
+  let planError = ''
+  let planSummary = ''
+  if (importPreview?.valid) {
+    try {
+      if (partialImport && restoreMode === 'REPLACE') throw new Error('Song-only imports require Merge.')
+      const planned = planLibraryRestore(previewBaseline, { songs: importPreview.songs, setlists: importPreview.setlists, folders: importPreview.folders }, restoreMode)
+      const beforeCount = previewBaseline.songs.length + previewBaseline.setlists.length + previewBaseline.folders.length
+      const incomingCount = importPreview.songs.length + importPreview.setlists.length + importPreview.folders.length
+      const afterCount = planned.songs.length + planned.setlists.length + planned.folders.length
+      planSummary = restoreMode === 'MERGE'
+        ? `${afterCount - beforeCount} records added; ${incomingCount - (afterCount - beforeCount)} unchanged; 0 local records removed.`
+        : `${beforeCount} local records replaced by ${afterCount} backup records.`
+    } catch (error) { planError = (error as Error).message }
+  }
+
   return (
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby="backup-modal-title"
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in"
-      onClick={onClose}
+      onClick={() => { if (!isImporting) onClose() }}
     >
       <div
         className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col text-slate-100 shadow-2xl overflow-hidden"
@@ -169,7 +191,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
             </div>
           </div>
           <button
-            onClick={onClose}
+            onClick={() => { if (!isImporting) onClose() }}
             aria-label="Close backup modal"
             className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
           >
@@ -267,10 +289,10 @@ export const BackupModal: React.FC<BackupModalProps> = ({
                 <Info className="w-4 h-4 shrink-0 text-amber-400 mt-0.5" />
                 <div className="space-y-1">
                   <div className="font-semibold text-amber-300">
-                    Safe Restoration Guarantee
+                    Restore safety and scope
                   </div>
                   <p className="text-[11px] text-amber-300/90 leading-relaxed">
-                    This parser validates schema integrity, sanitizes tag lists, preserves folder hierarchies without cycles, and protects existing canonical IDs. Smart Merge and Cloud Sync are not claimed in this standalone release.
+                    Merge keeps local records and rejects conflicting IDs. Replace removes the local library and restores the backup exactly. Both validate the graph and verify all stores before atomic commit. Appearance and stage settings in the backup are restored with interruption recovery. The local profile is kept. Unsupported backup sections are rejected.
                   </p>
                 </div>
               </div>
@@ -282,6 +304,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
                 <input
                   type="file"
                   accept=".json,application/json"
+                  disabled={isImporting}
                   onChange={handleFileSelect}
                   className="w-full text-xs text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-sky-300 hover:file:bg-slate-700 file:cursor-pointer"
                 />
@@ -292,6 +315,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
                   Or Paste Raw Backup JSON
                 </label>
                 <textarea
+                  disabled={isImporting}
                   value={pasteText}
                   onChange={(e) => {
                     setPasteText(e.target.value)
@@ -338,17 +362,26 @@ export const BackupModal: React.FC<BackupModalProps> = ({
                 </div>
               )}
 
+              <label className="block text-xs text-slate-300">
+                Restore behavior
+                <select aria-label="Restore behavior" value={restoreMode} disabled={isImporting} onChange={e => setRestoreMode(e.target.value as RestoreMode)} className="block w-full bg-slate-950 p-2 mt-1">
+                  <option value="MERGE">Merge — keep local records; reject conflicting IDs</option>
+                  <option value="REPLACE">Replace — remove local library, restore this backup</option>
+                </select>
+              </label>
+              {planSummary && <p className="text-xs text-slate-300">{planSummary}</p>}
+              {planError && <p role="alert" className="text-xs text-red-300">{planError}</p>}
               <div className="flex items-center justify-end gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={onClose}
+                  onClick={() => { if (!isImporting) onClose() }}
                   className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
-                  disabled={!importPreview?.valid || isImporting}
+                  disabled={!importPreview?.valid || !!planError || isImporting}
                   onClick={handleExecuteImport}
                   className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-600 text-white text-xs font-semibold transition-colors shadow-sm flex items-center gap-1.5"
                 >
