@@ -110,11 +110,17 @@ export const App: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('')
   const [searchScope, setSearchScope] = useState<SearchScope>('MY_SONGS')
   const [lastLocalQuery, setLastLocalQuery] = useState('')
+  const [lastLocalScope, setLastLocalScope] = useState<SearchScope>('MY_SONGS')
   const globalSearchRef = useRef<HTMLInputElement>(null)
-  // Online edits never change the visible local filter until My Songs is selected.
-  const localSearchQuery = searchScope === 'MY_SONGS' ? searchQuery : lastLocalQuery
+  // Online edits preserve the last local query and favorites filter.
+  const localSearchQuery = searchScope === 'ONLINE_SOURCES' ? lastLocalQuery : searchQuery
+  const localSearchScope = searchScope === 'ONLINE_SOURCES' ? lastLocalScope : searchScope
+  const searchSongs = useMemo(() => localSearchScope === 'FAVORITES' ? songs.filter(song => song.isFavorite) : songs, [songs, localSearchScope])
   const handleSearchScopeChange = (scope: SearchScope) => {
-    if (scope === 'ONLINE_SOURCES' && searchScope === 'MY_SONGS') setLastLocalQuery(searchQuery)
+    if (scope === 'ONLINE_SOURCES' && searchScope !== 'ONLINE_SOURCES') {
+      setLastLocalQuery(searchQuery)
+      setLastLocalScope(searchScope)
+    }
     setSearchScope(scope)
   }
   const clearSearch = () => { setSearchQuery(''); setLastLocalQuery('') }
@@ -869,7 +875,7 @@ export const App: React.FC = () => {
         >
           {activeTab === 'SONGS' && (
             <SongbookHomeView
-              songs={songs}
+              songs={searchSongs}
               setlists={setlists}
               folders={folders}
               currentNavTarget={currentNavTarget}

@@ -1,3 +1,5 @@
+// Vite compiles CSS modules; these DOM tests need only their class names.
+require.extensions['.css'] = module => { module.exports = { __esModule: true, default: new Proxy({}, { get: (_, key) => key }) } }
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
