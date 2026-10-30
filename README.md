@@ -31,6 +31,34 @@ GTAR1 is a standalone, local-first chord chart and setlist manager built with Re
   - `src/utils/chordLyricLayout.ts`: Word-wrapped chord-lyric segment anchoring.
   - `src/utils/songParser.ts`: ChordPro bracket parsing, directive extraction, section header detection, key auto-detection.
 
+## DEV diagnostics (Issue #41)
+
+The existing GTAR1 app environment controls diagnostics at compile time: only
+`development` includes the **DEV diagnostics** button. Standard builds retain the
+repository's DEV default, including the DEV PWA. Set `GTAR_ENV=production` or use
+`--mode production-pwa` for PROD. Either explicit production environment setting
+or production-pwa mode disables diagnostics even with a conflicting DEV override. Unknown
+environment names disable diagnostics. No runtime flag can enable them in PROD.
+
+The buffer holds at most 20 fixed events, evicting the oldest first. It lives only
+in memory for the current tab session. Closing the panel preserves events; reload,
+tab close, or **Clear logs** discards them. No localStorage or IndexedDB is used,
+so storage denial and quota exhaustion cannot prevent diagnostics exports.
+
+Events cover startup, library load failure, audio start failures, browser
+online/offline reports, and export failure. Only predefined event codes and fixed
+messages are accepted; raw exceptions and caller-supplied content are discarded.
+Severity, area, and UTC time accompany each event. No global console, network,
+URL, song, profile, backup, token, or stack-trace capture occurs.
+
+**Export logs** manually downloads a schema-versioned plain-text `.log`, capped at
+16 KiB, with capture/export UTC times and app version. The filename includes a
+coarse browser-reported platform/browser/device class, UTC time, and fresh random
+suffix with a session counter. Unknown profiles fall back to `unknown`. This
+estimate can be spoofed and is not verified device identity. No raw user-agent or
+stable device identifier is retained. Export works locally without network access
+or uploads. Review exported files before sharing them.
+
 ## Versioning Scheme
 
 - **Semantic Versioning** without `v` prefix.

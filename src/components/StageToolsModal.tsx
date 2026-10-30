@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { Gauge, Sliders, Volume2, X } from 'lucide-react'
 import { MetronomeEngine } from '../utils/metronome'
 import { GuitarReferenceTuner, GUITAR_STRINGS } from '../utils/guitarTuner'
+import { recordDiagnostic } from '../diagnostics/runtime'
 
 /** Local-only panels for metronome and guitar reference tuner; GTAR1 sheet conventions. */
 export function StageToolsModal({ onClose, initialBpm }: { onClose: () => void; initialBpm?: number }) {
@@ -103,14 +104,20 @@ export function StageToolsModal({ onClose, initialBpm }: { onClose: () => void; 
             <button type="button" className={`${buttonClass} w-full`} onClick={() => {
               setError('')
               if (metro.isRunning) metronome.stop()
-              else void metronome.start().catch(error => setError(error instanceof Error ? error.message : 'Audio could not start.'))
+              else void metronome.start().catch(error => {
+                recordDiagnostic('METRONOME_START_FAILED')
+                setError(error instanceof Error ? error.message : 'Audio could not start.')
+              })
             }}>{metro.isRunning ? 'Stop Metronome' : 'Start Metronome'}</button>
           </div> : <div className="space-y-4">
             <h3 className="text-center text-app-text text-sm">Guitar reference tones</h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
               {GUITAR_STRINGS.map(string => <button type="button" key={string.name} aria-pressed={activeString === string.name} className={`${buttonClass} flex flex-col items-center gap-1 ${activeString === string.name ? 'aria-pressed:bg-app-action aria-pressed:text-app-on-action aria-pressed:border-app-action' : ''}`} onClick={() => {
                 setError('')
-                void tuner.play(string.name).catch(error => setError(error instanceof Error ? error.message : 'Audio could not start.'))
+                void tuner.play(string.name).catch(error => {
+                  recordDiagnostic('TUNER_START_FAILED')
+                  setError(error instanceof Error ? error.message : 'Audio could not start.')
+                })
               }}><Volume2 className="w-4 h-4" /><span>{string.name}</span><span className="text-xs font-mono">{string.freq.toFixed(1)} Hz</span></button>)}
             </div>
             <button type="button" className={`${buttonClass} w-full`} onClick={() => tuner.stop()}>Stop reference tone</button>

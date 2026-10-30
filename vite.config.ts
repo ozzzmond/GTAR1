@@ -50,6 +50,13 @@ export default defineConfig(({ mode }) => {
   })
 
   return {
+    define: {
+      'import.meta.env.GTAR1_DEV_DIAGNOSTICS': JSON.stringify(
+        appEnv === 'development' && mode !== 'production-pwa'
+        && process.env.GTAR_ENV !== 'production' && process.env.VITE_APP_ENV !== 'production'
+      ),
+      'import.meta.env.GTAR1_APP_VERSION': JSON.stringify(JSON.parse(fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf8')).version),
+    },
     plugins: [
       tailwindcss(),
       react(),
