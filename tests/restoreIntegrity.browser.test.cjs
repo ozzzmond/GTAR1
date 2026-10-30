@@ -260,6 +260,52 @@ test('Real IndexedDB: baseline R1/R2/R6 and adversarial restore verification in 
     });
     assert.equal(journalAfter, null, 'Pending restore journal cleared upon explicit resolution');
     assert.equal(await page.evaluate(() => localStorage.getItem('gtar_stage_font_size')), '42', 'Settings retained after explicit resolution');
+
+    // Failure safety check: inject transaction abort during conflict resolution
+    await page.evaluate(async () => {
+      const storage = await import('/src/utils/storage.ts');
+      const settings = await import('/src/utils/restoreSettings.ts');
+      const beforeImg = settings.captureSettings();
+      const afterImg = settings.planSettings(beforeImg, { themeMode: 'e-ink-paper' });
+      const db = await storage.openRevampDB();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(storage.STORES.RESTORE, 'readwrite');
+        tx.objectStore(storage.STORES.RESTORE).put({ id: 'pending-restore', settingsBefore: beforeImg, settingsAfter: afterImg });
+        tx.oncomplete = resolve;
+        tx.onerror = reject;
+      });
+      storage.closeRevampDB();
+      localStorage.setItem('gtar_stage_font_size', '99');
+    });
+    await page.reload();
+    await page.getByRole('dialog').waitFor({ state: 'visible' });
+
+    // Inject IDBObjectStore.prototype.delete failure during resolution transaction
+    await page.evaluate(() => {
+      window.originalJournalDelete = IDBObjectStore.prototype.delete;
+      IDBObjectStore.prototype.delete = function(key) {
+        if (this.name === 'restoreJournal') {
+          this.transaction.abort();
+          throw new DOMException('Injected conflict resolution delete failure', 'AbortError');
+        }
+        return window.originalJournalDelete.call(this, key);
+      };
+    });
+
+    // Attempt resolution; should fail safely without destroying recovery evidence or active settings
+    await page.getByLabel(/Roll back to pre-restore baseline/i).check();
+    await page.getByRole('button', { name: /Apply Resolution & Continue/i }).click();
+    await page.waitForFunction(() => document.body.innerText.includes('Resolution failed') || document.body.innerText.includes('Injected'));
+    assert.equal(await page.evaluate(() => localStorage.getItem('gtar_stage_font_size')), '99', 'Active settings preserved when resolution transaction fails');
+
+    // Restore delete implementation and verify retry succeeds
+    await page.evaluate(() => {
+      IDBObjectStore.prototype.delete = window.originalJournalDelete;
+    });
+    await page.getByLabel(/Keep newer active settings/i).check();
+    await page.getByRole('button', { name: /Apply Resolution & Continue/i }).click();
+    await page.getByRole('dialog').waitFor({ state: 'hidden' });
+    assert.equal(await page.evaluate(() => localStorage.getItem('gtar_stage_font_size')), '99', 'Retry resolution succeeds and retains musician active settings');
     t.diagnostic('A12 real modal preview/cancel settings unchanged; failed restore publishes no UI; successful restore publishes committed library')
     await context.close()
   } finally { if (browser) await browser.close(); await server.close() }
