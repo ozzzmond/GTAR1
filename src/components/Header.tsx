@@ -91,8 +91,14 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={() => setActiveTab('SONGS')}
             className="flex items-center gap-2 text-left group"
           >
-            <div className="w-8 h-8 rounded-lg bg-sky-600 flex items-center justify-center font-black text-white text-base shadow-sm group-hover:bg-sky-500 transition-colors">
-              G
+            <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center shadow-sm shrink-0 group-hover:opacity-90 transition-opacity">
+              <img
+                src="/pwa-192x192.png"
+                alt="GTAR application logo"
+                className="w-full h-full object-cover select-none"
+                loading="eager"
+                decoding="sync"
+              />
             </div>
             <div className="hidden sm:block">
               <span className="text-base font-extrabold header-primary-text tracking-tight group-hover:text-app-link transition-colors">
