@@ -33,29 +33,28 @@ test('Real IndexedDB: recovery snapshot, verification marker, quota, crash/reloa
       await context.close()
     }
 
-    // 2. Real IndexedDB quota exhaustion fails closed (no snapshot, no partial library).
+    // 2. Low storage headroom fails closed before any write (IndexedDB QuotaExceededError
+    //    during the commit itself is covered by scenario R2 and restoreIntegrity A6).
+    //    CDP quota overrides are not honoured in headless Chromium, so the estimate is stubbed.
     {
       const context = await browser.newContext(), page = await context.newPage()
       await page.goto(`${origin}/recovery-fixture`)
-      const seeded = await page.evaluate(async () => {
+      const quota = await page.evaluate(async () => {
         const storage = await import('/src/utils/storage.ts'), restore = await import('/src/utils/restoreLibrary.ts')
         await storage.saveSong({ id: 'q1', title: 'Quota local', rawContent: 'Synthetic', format: 'PLAIN', tags: [], createdAt: 1, updatedAt: 1 })
-        return { digest: restore.libraryDigest(await restore.readLibraryImage()), usage: (await navigator.storage.estimate()).usage }
-      })
-      const cdp = await context.newCDPSession(page)
-      await cdp.send('Storage.overrideQuotaForOrigin', { origin, quotaSize: seeded.usage + 64 * 1024 })
-      const quota = await page.evaluate(async before => {
-        const restore = await import('/src/utils/restoreLibrary.ts')
-        const big = 'x'.repeat(4000)
-        const songs = Array.from({ length: 300 }, (_, i) => ({ id: `big${i}`, title: `Large synthetic ${i}`, rawContent: big, format: 'PLAIN', tags: [], createdAt: 1, updatedAt: 1 }))
+        const before = restore.libraryDigest(await restore.readLibraryImage())
+        const estimate = StorageManager.prototype.estimate
+        StorageManager.prototype.estimate = async () => ({ quota: 200 * 1024, usage: 150 * 1024 })
+        const songs = Array.from({ length: 100 }, (_, i) => ({ id: `big${i}`, title: `Large synthetic ${i}`, rawContent: 'x'.repeat(1000), format: 'PLAIN', tags: [], createdAt: 1, updatedAt: 1 }))
         let error
         try { await restore.restoreLibraryWithStatus({ songs, setlists: [], folders: [] }, 'REPLACE', await restore.readLibraryImage()) } catch (err) { error = `${err.name}: ${err.message}` }
+        finally { StorageManager.prototype.estimate = estimate }
         return { error, unchanged: restore.libraryDigest(await restore.readLibraryImage()) === before, info: await restore.getLastRestoreInfo() }
-      }, seeded.digest)
-      assert.match(quota.error || '', /quota|storage/i, 'quota exhaustion must reject the restore')
+      })
+      assert.match(quota.error || '', /QuotaExceededError/, 'insufficient storage must reject the restore')
       assert.equal(quota.unchanged, true, 'quota failure leaves library unchanged')
       assert.equal(quota.info, null, 'quota failure writes no snapshot or marker')
-      t.diagnostic(`real quota fail-closed PASS (${quota.error})`)
+      t.diagnostic(`storage headroom fail-closed PASS (${quota.error})`)
       await context.close()
     }
 
@@ -106,6 +105,7 @@ test('Real IndexedDB: recovery snapshot, verification marker, quota, crash/reloa
       // Crash after commit, before verification; another edit lands before reload.
       const unverified = await page.evaluate(async incoming => {
         const storage = await import('/src/utils/storage.ts'), restore = await import('/src/utils/restoreLibrary.ts')
+        const baseline = await restore.readLibraryImage()
         const getAll = IDBObjectStore.prototype.getAll
         let reads = 0
         IDBObjectStore.prototype.getAll = function (...args) {
@@ -114,7 +114,7 @@ test('Real IndexedDB: recovery snapshot, verification marker, quota, crash/reloa
           return req
         }
         let result
-        try { result = await restore.restoreLibraryWithStatus(incoming, 'MERGE', await restore.readLibraryImage()) } finally { IDBObjectStore.prototype.getAll = getAll }
+        try { result = await restore.restoreLibraryWithStatus(incoming, 'MERGE', baseline) } finally { IDBObjectStore.prototype.getAll = getAll }
         await storage.saveSong({ id: 'u1', title: 'Edited after interrupted restore', rawContent: 'Synthetic', format: 'PLAIN', tags: [], createdAt: 1, updatedAt: 2 })
         return result.status
       }, { songs: [{ id: 'ui2', title: 'Interrupted incoming', rawContent: '', format: 'PLAIN', createdAt: 1, updatedAt: 1 }], setlists: [], folders: [] })
