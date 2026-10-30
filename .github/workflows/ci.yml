@@ -19,6 +19,10 @@ jobs:
     name: Test and build
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # PR code still runs during build/tests: keep this job read-only and secret-free.
+    # Disable dependency lifecycle hooks and pre/post hooks around explicit scripts.
+    env:
+      NPM_CONFIG_IGNORE_SCRIPTS: 'true'
     steps:
       - name: Check out repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -30,12 +34,11 @@ jobs:
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24.20.0'
-          cache: npm
-          cache-dependency-path: package-lock.json
+          # No shared Actions cache is restored or saved by this untrusted-code job.
 
       - name: Validate dependencies from committed lockfile
         id: dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       # The existing browser suite serves dist/, so build before running npm test.
       - name: TypeScript and production PWA build
