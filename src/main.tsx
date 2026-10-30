@@ -24,6 +24,14 @@ async function start() {
   } catch (error) {
     recordDiagnostic('INITIAL_LOAD_FAILED')
     document.getElementById('root')!.textContent = `Local storage unavailable: ${(error as Error).message}. Reload to retry recovery.`
+    if (import.meta.env.GTAR1_DEV_DIAGNOSTICS) {
+      const button = document.createElement('button')
+      button.textContent = 'Debug Logs'
+      button.dataset.debugLogsOpener = ''
+      button.className = 'm-4 min-h-[44px] rounded-xl border px-4'
+      button.onclick = () => window.dispatchEvent(new Event('gtar1:debug-logs'))
+      document.getElementById('root')!.appendChild(button)
+    }
   }
 }
 void start()
