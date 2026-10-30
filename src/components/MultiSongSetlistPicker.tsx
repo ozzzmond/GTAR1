@@ -8,7 +8,6 @@ import {
   Plus,
   Music,
   AlertCircle,
-  CornerDownLeft,
 } from 'lucide-react'
 import type { SongEntity, WebSetlist } from '../types/gtar'
 
@@ -19,6 +18,214 @@ export interface MultiSongSetlistPickerProps {
   allSongs: SongEntity[]
   onAddSongs: (songsToAdd: SongEntity[]) => Promise<void> | void
   triggerRef?: React.RefObject<HTMLButtonElement | null>
+}
+
+/**
+ * Escapes regex special characters in a string.
+ */
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/**
+ * Checks if a song matches a given search phrase across title, artist, key, or tags.
+ */
+export function songMatchesPhrase(song: SongEntity, phrase: string): boolean {
+  const p = phrase.trim().toLowerCase()
+  if (!p) return false
+
+  const titleLower = (song.title || '').toLowerCase()
+  const artistLower = (song.artist || '').toLowerCase()
+  const keyLower = (song.key || '').toLowerCase()
+  const tags = Array.isArray(song.tags) ? song.tags.map((t) => t.toLowerCase()) : []
+
+  // Explicit field prefixes
+  if (p.startsWith('key:')) {
+    const targetKey = p.slice(4).trim()
+    return keyLower === targetKey || keyLower.includes(targetKey)
+  }
+  if (p.startsWith('artist:')) {
+    const targetArtist = p.slice(7).trim()
+    return artistLower.includes(targetArtist)
+  }
+  if (p.startsWith('title:')) {
+    const targetTitle = p.slice(6).trim()
+    return titleLower.includes(targetTitle)
+  }
+
+  // Direct substring matching
+  if (
+    titleLower.includes(p) ||
+    artistLower.includes(p) ||
+    keyLower === p ||
+    tags.some((t) => t.includes(p))
+  ) {
+    return true
+  }
+
+  // Multi-word phrase matching across metadata (e.g. "Hallelujah Jeff" -> title Hallelujah, artist Jeff)
+  const words = p.split(/\s+/).filter(Boolean)
+  if (words.length > 1) {
+    const allWordsMatch = words.every(
+      (w) =>
+        titleLower.includes(w) ||
+        artistLower.includes(w) ||
+        keyLower === w ||
+        tags.some((t) => t.includes(w))
+    )
+    if (allWordsMatch) return true
+  }
+
+  return false
+}
+
+/**
+ * Deterministically extracts search phrases from a space-separated segment
+ * using the local song catalog to identify complete titles/artists without
+ * splitting multiword song titles into separate words.
+ */
+export function segmentSpaceSeparatedTitles(
+  segment: string,
+  allSongs: SongEntity[]
+): string[] {
+  const trimmed = segment.trim()
+  if (!trimmed) return []
+
+  // If the segment as a whole directly matches any song, check if it's a single phrase
+  const directMatches = allSongs.some((song) => songMatchesPhrase(song, trimmed))
+  if (directMatches) {
+    // Check if trimmed contains multiple non-overlapping full catalog titles
+    const fullTitlesPresent = allSongs.filter(
+      (song) =>
+        song.title &&
+        song.title.trim().length > 1 &&
+        new RegExp(`(^|\\s)${escapeRegex(song.title.trim())}(?=\\s|$)`, 'i').test(trimmed)
+    )
+
+    // If 0 or 1 full title is matched, preserve as a single phrase (e.g. "Goodness of God", "Goodness of")
+    if (fullTitlesPresent.length <= 1) {
+      return [trimmed]
+    }
+  }
+
+  // Build sorted list of catalog phrases (titles and artists) to identify complete phrases
+  const catalogPhrasesSet = new Set<string>()
+  for (const song of allSongs) {
+    if (song.title && song.title.trim().length > 1) {
+      catalogPhrasesSet.add(song.title.trim())
+    }
+    if (song.artist && song.artist.trim().length > 1) {
+      catalogPhrasesSet.add(song.artist.trim())
+    }
+  }
+
+  const sortedCatalogPhrases = Array.from(catalogPhrasesSet).sort(
+    (a, b) => b.length - a.length
+  )
+
+  interface MatchSpan {
+    start: number
+    end: number
+    phrase: string
+  }
+
+  const spans: MatchSpan[] = []
+
+  // Identify spans for known catalog phrases bounded by word boundaries or edges
+  for (const phrase of sortedCatalogPhrases) {
+    const regex = new RegExp(`(^|\\s)${escapeRegex(phrase)}(?=\\s|$)`, 'gi')
+    let match: RegExpExecArray | null
+    while ((match = regex.exec(trimmed)) !== null) {
+      const leadingSpace = match[1] ? match[1].length : 0
+      const start = match.index + leadingSpace
+      const end = start + phrase.length
+
+      // Check if this span is already strictly contained inside an existing longer matched span
+      const isSubSpan = spans.some((s) => start >= s.start && end <= s.end)
+      if (!isSubSpan) {
+        spans.push({ start, end, phrase: trimmed.slice(start, end) })
+      }
+    }
+  }
+
+  // If no catalog phrases were identified in the text, return trimmed as a single phrase
+  if (spans.length === 0) {
+    return [trimmed]
+  }
+
+  // Sort spans by start index
+  spans.sort((a, b) => a.start - b.start || b.end - a.end)
+
+  // Extract phrases along with any non-whitespace gaps (e.g. user currently typing a partial title)
+  const resultPhrases: string[] = []
+  let lastIndex = 0
+
+  for (const span of spans) {
+    if (span.start < lastIndex) {
+      // Overlapping ambiguous title: keep phrase if not already present
+      if (!resultPhrases.some((p) => p.toLowerCase() === span.phrase.toLowerCase())) {
+        resultPhrases.push(span.phrase)
+      }
+      lastIndex = Math.max(lastIndex, span.end)
+      continue
+    }
+
+    if (span.start > lastIndex) {
+      const gap = trimmed.slice(lastIndex, span.start).trim()
+      if (gap.length > 0 && !resultPhrases.some((p) => p.toLowerCase() === gap.toLowerCase())) {
+        resultPhrases.push(gap)
+      }
+    }
+
+    if (!resultPhrases.some((p) => p.toLowerCase() === span.phrase.toLowerCase())) {
+      resultPhrases.push(span.phrase)
+    }
+    lastIndex = Math.max(lastIndex, span.end)
+  }
+
+  if (lastIndex < trimmed.length) {
+    const trailingGap = trimmed.slice(lastIndex).trim()
+    if (trailingGap.length > 0 && !resultPhrases.some((p) => p.toLowerCase() === trailingGap.toLowerCase())) {
+      resultPhrases.push(trailingGap)
+    }
+  }
+
+  return resultPhrases.length > 0 ? resultPhrases : [trimmed]
+}
+
+/**
+ * Parses raw search input into independent search phrases, supporting comma-separated
+ * and space-separated multi-song searches without splitting ordinary multiword titles.
+ */
+export function parseSearchPhrases(rawInput: string, allSongs: SongEntity[]): string[] {
+  const trimmed = rawInput.trim()
+  if (!trimmed) return []
+
+  // If input contains commas, comma is the explicit delimiter between phrases
+  if (rawInput.includes(',')) {
+    const commaSegments = rawInput
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0)
+
+    if (commaSegments.length === 0) {
+      return []
+    }
+
+    const phrases: string[] = []
+    for (const segment of commaSegments) {
+      const subPhrases = segmentSpaceSeparatedTitles(segment, allSongs)
+      for (const sp of subPhrases) {
+        if (!phrases.some((p) => p.toLowerCase() === sp.toLowerCase())) {
+          phrases.push(sp)
+        }
+      }
+    }
+    return phrases
+  }
+
+  // No comma: resolve space-separated titles against local catalog
+  return segmentSpaceSeparatedTitles(trimmed, allSongs)
 }
 
 export const MultiSongSetlistPicker: React.FC<MultiSongSetlistPickerProps> = ({
@@ -60,33 +267,42 @@ export const MultiSongSetlistPicker: React.FC<MultiSongSetlistPickerProps> = ({
     return counts
   }, [currentSetlist])
 
-  // Filter songs by query chips and current input
-  const filteredSongs = useMemo(() => {
-    const activeTerms = [
-      ...queryChips.map((c) => c.trim().toLowerCase()),
-      ...(inputValue.trim() ? [inputValue.trim().toLowerCase()] : []),
+  // Reactively parse active search phrases from input and any query chips
+  const activeSearchPhrases = useMemo(() => {
+    const phrasesFromInput = parseSearchPhrases(inputValue, allSongs)
+    const combined = [
+      ...queryChips.map((c) => c.trim()).filter(Boolean),
+      ...phrasesFromInput,
     ]
+    const unique: string[] = []
+    for (const p of combined) {
+      if (!unique.some((u) => u.toLowerCase() === p.toLowerCase())) {
+        unique.push(p)
+      }
+    }
+    return unique
+  }, [inputValue, queryChips, allSongs])
 
-    if (activeTerms.length === 0) {
+  // Filter songs reactively: independent search phrases combined with duplicate deduplication
+  const filteredSongs = useMemo(() => {
+    if (activeSearchPhrases.length === 0) {
       return allSongs
     }
 
-    return allSongs.filter((song) => {
-      const titleLower = song.title.toLowerCase()
-      const artistLower = (song.artist || '').toLowerCase()
-      const keyLower = (song.key || '').toLowerCase()
-      const tags = Array.isArray(song.tags) ? song.tags.map((t) => t.toLowerCase()) : []
+    const matchedSongs: SongEntity[] = []
+    const seenIds = new Set<string>()
 
-      // Match all query terms (each term must match title, artist, key, or tags)
-      return activeTerms.every(
-        (term) =>
-          titleLower.includes(term) ||
-          artistLower.includes(term) ||
-          keyLower.includes(term) ||
-          tags.some((t) => t.includes(term))
-      )
-    })
-  }, [allSongs, queryChips, inputValue])
+    for (const phrase of activeSearchPhrases) {
+      for (const song of allSongs) {
+        if (!seenIds.has(song.id) && songMatchesPhrase(song, phrase)) {
+          seenIds.add(song.id)
+          matchedSongs.push(song)
+        }
+      }
+    }
+
+    return matchedSongs
+  }, [allSongs, activeSearchPhrases])
 
   // Selected song entities preserved in selection order
   const selectedSongsInOrder = useMemo(() => {
@@ -182,12 +398,12 @@ export const MultiSongSetlistPicker: React.FC<MultiSongSetlistPickerProps> = ({
         // Toggle highlighted song
         const song = filteredSongs[activeHighlightIndex]
         handleToggleSong(song.id)
-      } else if (inputValue.trim()) {
-        // Turn typed text into a query chip
-        handleAddChip(inputValue)
       } else if (selectedSongIds.length > 0 && !isSubmitting) {
         // Add selected songs
         void handleAddSelected()
+      } else if (filteredSongs.length === 1) {
+        // Single match auto-toggle for fast keyboard workflow
+        handleToggleSong(filteredSongs[0].id)
       }
     } else if (e.key === 'Backspace' && inputValue === '') {
       if (queryChips.length > 0) {
@@ -258,7 +474,7 @@ export const MultiSongSetlistPicker: React.FC<MultiSongSetlistPickerProps> = ({
         </div>
       </div>
 
-      {/* Outlook-style Search Bar with Chips and Input */}
+      {/* Outlook-style Search Bar with Selected Song Chips and Reactive Input */}
       <div className="space-y-1.5">
         <label htmlFor="multi-song-search-input" className="block text-xs font-semibold text-app-heading">
           Search local songbook (by title, artist, or musical key):
@@ -267,7 +483,7 @@ export const MultiSongSetlistPicker: React.FC<MultiSongSetlistPickerProps> = ({
           onClick={() => inputRef.current?.focus()}
           className="min-h-[46px] w-full bg-app-surface border border-app-border rounded-xl p-2 flex flex-wrap items-center gap-1.5 focus-within:border-app-accent focus-within:ring-2 focus-within:ring-app-accent/20 cursor-text transition-all"
         >
-          {/* Query Filter Chips */}
+          {/* Query Filter Chips (if any) */}
           {queryChips.map((chip, idx) => (
             <span
               key={`query-chip-${idx}`}
@@ -323,22 +539,26 @@ export const MultiSongSetlistPicker: React.FC<MultiSongSetlistPickerProps> = ({
             }}
             onKeyDown={handleInputKeyDown}
             placeholder={
-              queryChips.length > 0 || selectedSongIds.length > 0
-                ? 'Type to filter more, or press Enter to add filter chip...'
-                : 'Type song title, artist, or key (Press Enter to add filter chip)...'
+              selectedSongIds.length > 0
+                ? 'Type to search more songs (separate multiple titles with commas or spaces)...'
+                : 'Search titles, artists, or keys (e.g. "Goodness of God, Great Are You Lord")...'
             }
             className="flex-1 min-w-[160px] bg-transparent text-xs text-app-text placeholder:text-app-muted/60 focus:outline-none py-1 px-1"
           />
 
-          {inputValue.trim() && (
+          {inputValue.length > 0 && (
             <button
               type="button"
-              onClick={() => handleAddChip(inputValue)}
-              className="text-[11px] text-app-action hover:underline flex items-center gap-1 font-semibold px-1 py-0.5"
-              title="Add as query chip (Enter)"
+              onClick={(e) => {
+                e.stopPropagation()
+                setInputValue('')
+                inputRef.current?.focus()
+              }}
+              className="text-app-muted hover:text-app-heading p-1 transition-colors"
+              title="Clear search input"
+              aria-label="Clear search input"
             >
-              <span>+ Chip</span>
-              <CornerDownLeft className="w-3 h-3" />
+              <X className="w-3.5 h-3.5" />
             </button>
           )}
         </div>
@@ -434,7 +654,7 @@ export const MultiSongSetlistPicker: React.FC<MultiSongSetlistPickerProps> = ({
             <AlertCircle className="w-6 h-6 mx-auto mb-2 opacity-50" />
             <p className="font-semibold">No songs match your search.</p>
             <p className="text-[11px] mt-1">
-              Try searching by song title, artist, or musical key (e.g., "G", "Amazing", "Newton").
+              Try searching by song title, artist, or musical key (e.g., "Goodness of God, Great Are You Lord").
             </p>
           </div>
         ) : (
