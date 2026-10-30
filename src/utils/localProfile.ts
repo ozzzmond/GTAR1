@@ -10,6 +10,8 @@ export interface LocalUserProfile {
   updatedAt: number
 }
 
+export const DEFAULT_AVATAR_PATH = '/avatars/default-avatar.png'
+
 const PROFILE_STORAGE_KEY = 'gtar1_local_profile'
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024 // 2MB limit
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
