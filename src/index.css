@@ -34,6 +34,7 @@
   --font-stage-serif: "Georgia", "Cambria", "Times New Roman", Times, serif;
 }
 
+/* GTAR1 Base & Stacking Root */
 :root {
   color-scheme: dark;
 }
@@ -636,3 +637,73 @@ body.theme-custom :is(input[type="checkbox"], input[type="range"]) { accent-colo
 body.theme-custom :is(button, a, input, select, textarea):focus-visible { outline: 2px solid var(--custom-control-accent); outline-offset: 2px; }
 body.theme-custom :is(button, input, select, textarea):disabled { opacity: .45; }
 body.theme-custom ::selection { background-color: var(--custom-selectionColor); color: var(--custom-selection-foreground); }
+
+
+/* ========================================================================== */
+/* Reusable Modal & Dialog Sizing, Scroll Containment & Stacking Layer Rules  */
+/* ========================================================================== */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem;
+  background-color: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+}
+@media (min-width: 640px) {
+  .modal-overlay {
+    padding: 1rem;
+  }
+}
+
+.modal-dialog-compact {
+  width: 100%;
+  max-width: 28rem; /* 448px */
+  max-height: calc(100dvh - 2rem);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 1rem;
+  background-color: var(--custom-stage-surface);
+  border: 1px solid var(--custom-card-border);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+}
+
+.modal-dialog-medium {
+  width: 100%;
+  max-width: 42rem; /* 672px */
+  max-height: calc(100dvh - 2rem);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 1rem;
+  background-color: var(--custom-stage-surface);
+  border: 1px solid var(--custom-card-border);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+}
+
+.modal-dialog-wide {
+  width: 100%;
+  max-width: 56rem; /* 896px */
+  max-height: calc(100dvh - 2rem);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 1rem;
+  background-color: var(--custom-stage-surface);
+  border: 1px solid var(--custom-card-border);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+}
+
+.modal-scroll-body {
+  flex: 1 1 0%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}

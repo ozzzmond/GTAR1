@@ -192,6 +192,16 @@ export const BrowseSongSourcesModal: React.FC<BrowseSongSourcesModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isOpen, showForm, parsedPreview, onClose])
 
+  // Scroll containment: Lock background body scrolling while modal is open
+  useEffect(() => {
+    if (!isOpen) return
+    const originalOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = originalOverflow
+    }
+  }, [isOpen])
+
   if (!isOpen) return null
 
   const showToast = (msg: string) => {
@@ -482,7 +492,7 @@ export const BrowseSongSourcesModal: React.FC<BrowseSongSourcesModalProps> = ({
       <div
         ref={modalContentRef}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-2xl rounded-2xl bg-app-surface border border-app-border shadow-2xl overflow-hidden flex flex-col max-h-[92vh]"
+        className="w-full max-w-4xl rounded-2xl bg-app-surface border border-app-border shadow-2xl overflow-hidden flex flex-col max-h-[90dvh] animate-scale-in"
       >
         {/* Header */}
         <div className="px-5 py-3.5 border-b border-app-border flex items-center justify-between bg-app-base/60">
@@ -551,7 +561,7 @@ export const BrowseSongSourcesModal: React.FC<BrowseSongSourcesModalProps> = ({
         </div>
 
         {/* Scrollable Content */}
-        <div className="p-4 sm:p-5 overflow-y-auto space-y-5 flex-1 text-app-text">
+        <div className="p-4 sm:p-5 overflow-y-auto overscroll-contain space-y-5 flex-1 text-app-text">
           {/* Toast Notification */}
           {toastMessage && (
             <div

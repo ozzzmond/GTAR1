@@ -117,7 +117,7 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={() => setActiveTab('SONGS')}
             className="flex items-center gap-2 text-left group"
           >
-            <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center shadow-sm shrink-0 group-hover:opacity-90 transition-opacity">
+            <div className="w-9 h-9 rounded-lg overflow-hidden flex items-center justify-center shadow-sm shrink-0 group-hover:opacity-90 transition-opacity">
               <img
                 src="/pwa-192x192.png"
                 alt="GTAR application logo"
@@ -145,9 +145,9 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* One primary search input. Online navigation requires explicit submit. */}
         <form onSubmit={submitSearch} role="search" aria-label="Global song search" className="order-last lg:order-none w-full lg:w-auto lg:flex-1 lg:min-w-0 lg:max-w-lg space-y-1.5">
-          <div className="flex min-w-0 gap-1.5">
+          <div className="flex min-w-0 gap-1.5 items-center">
             <select aria-label="Search scope" value={searchScope} onChange={event => onSearchScopeChange?.(event.target.value as SearchScope)}
-              className="min-h-[44px] w-[8.5rem] shrink-0 rounded-xl border border-app-border bg-app-surface px-2 text-xs text-app-text focus-visible:outline-2 focus-visible:outline-app-action">
+              className="min-h-[44px] w-[8.5rem] shrink-0 rounded-xl border border-app-border bg-app-surface px-2.5 text-xs text-app-text focus-visible:outline-2 focus-visible:outline-app-action">
               <option value="MY_SONGS">My Songs</option><option value="ONLINE_SOURCES">Online Sources</option>
             </select>
             <div className="relative flex min-w-0 flex-1 items-center">
@@ -164,9 +164,9 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
           {onlineScope && <>
-            <div className="flex gap-1.5">
+            <div className="flex gap-1.5 items-center">
               <select aria-label="Online provider" value={provider.id} onChange={event => selectProvider(event.target.value)}
-                className="min-h-[44px] min-w-0 flex-1 rounded-xl border border-app-border bg-app-surface px-2 text-xs text-app-text focus-visible:outline-2 focus-visible:outline-app-action">
+                className="min-h-[44px] min-w-0 flex-1 rounded-xl border border-app-border bg-app-surface px-2.5 text-xs text-app-text focus-visible:outline-2 focus-visible:outline-app-action">
                 {SONG_SOURCE_PROVIDERS.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
               </select>
               <button type="submit" className="min-h-[44px] rounded-xl bg-app-action px-3 text-xs font-bold text-app-on-action flex items-center gap-1.5 hover:brightness-110">
@@ -182,10 +182,10 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Right Actions */}
         <div className="flex items-center gap-1.5 sm:gap-2">
           {/* Main Views Switcher */}
-          <nav aria-label="Main navigation" className="hidden sm:flex items-center bg-app-surface/80 p-0.5 rounded-xl border border-app-border text-xs font-semibold">
+          <nav aria-label="Main navigation" className="hidden sm:flex items-center bg-app-surface/80 p-0.5 rounded-xl border border-app-border text-xs font-semibold min-h-[36px]">
             <button
               onClick={() => setActiveTab('SONGS')}
-              className={`px-3 py-1 rounded-lg transition-colors flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${
                 activeTab === 'SONGS'
                   ? 'bg-app-action text-app-on-action shadow-sm'
                   : 'text-app-muted hover:text-app-heading'
@@ -196,7 +196,7 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
             <button
               onClick={() => setActiveTab('SETLISTS')}
-              className={`px-3 py-1 rounded-lg transition-colors flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${
                 activeTab === 'SETLISTS'
                   ? 'bg-app-action text-app-on-action shadow-sm'
                   : 'text-app-muted hover:text-app-heading'
@@ -210,7 +210,7 @@ export const Header: React.FC<HeaderProps> = ({
           {/* New Song Button */}
           <button
             onClick={onNewSong}
-            className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-app-action hover:brightness-110 text-app-on-action font-semibold text-xs transition-colors shadow-sm flex items-center gap-1"
+            className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-app-action hover:brightness-110 text-app-on-action font-semibold text-xs transition-colors shadow-sm flex items-center gap-1.5 min-h-[36px]"
           >
             <Plus className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">New Song</span>
@@ -222,7 +222,7 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={onOpenSources}
               title="Browse Song Sources"
               aria-label="Browse Song Sources"
-              className="ui-button px-2 sm:px-2.5 py-1.5 rounded-xl bg-app-button hover:brightness-110 border border-app-border text-app-button-text text-xs font-medium transition-colors flex items-center gap-1"
+              className="ui-button px-2 sm:px-2.5 py-1.5 rounded-xl bg-app-button hover:brightness-110 border border-app-border text-app-button-text text-xs font-medium transition-colors flex items-center gap-1.5 min-h-[36px]"
             >
               <Globe className="w-3.5 h-3.5 text-app-accent" />
               <span className="hidden md:inline">Sources</span>
@@ -234,7 +234,7 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={onOpenBackup}
             title="Backup & Restore (Local JSON)"
             aria-label="Backup and Restore"
-            className="ui-button px-2 sm:px-2.5 py-1.5 rounded-xl bg-app-button hover:brightness-110 border border-app-border text-app-button-text text-xs font-medium transition-colors flex items-center gap-1"
+            className="ui-button px-2 sm:px-2.5 py-1.5 rounded-xl bg-app-button hover:brightness-110 border border-app-border text-app-button-text text-xs font-medium transition-colors flex items-center gap-1.5 min-h-[36px]"
           >
             <Database className="w-3.5 h-3.5 text-app-accent" />
             <span className="hidden md:inline">Backup</span>
@@ -247,7 +247,7 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={() => setShowAvatarMenu(!showAvatarMenu)}
               data-debug-logs-opener
               aria-label={`Musician Profile: ${userProfile.displayName}`}
-              className="w-8 h-8 rounded-full border-2 border-app-border hover:border-app-action transition-colors overflow-hidden flex items-center justify-center bg-app-surface focus:outline-none"
+              className="w-9 h-9 rounded-full border-2 border-app-border hover:border-app-action transition-colors overflow-hidden flex items-center justify-center bg-app-surface focus:outline-none shrink-0"
             >
               <img
                 src={userProfile.avatarBase64 || DEFAULT_AVATAR_PATH}
@@ -258,7 +258,7 @@ export const Header: React.FC<HeaderProps> = ({
 
             {/* Avatar Dropdown Menu */}
             {showAvatarMenu && (
-              <div className="absolute right-0 mt-2 w-56 bg-app-surface border border-app-border rounded-2xl p-2 shadow-2xl z-50 animate-scale-in text-xs text-app-text">
+              <div className="absolute right-0 mt-2 w-60 bg-app-surface border border-app-border rounded-2xl p-2 shadow-2xl z-50 animate-scale-in text-xs text-app-text">
                 <div className="px-3 py-2 border-b border-app-border flex items-center gap-2.5">
                   <div className="w-9 h-9 rounded-full bg-app-base border border-app-border flex items-center justify-center text-app-action font-extrabold text-xs overflow-hidden shrink-0">
                     <img
@@ -341,7 +341,7 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
 
                 <div className="pt-1 border-t border-app-border px-3 py-1.5 text-[10px] text-app-muted">
-                  GTAR1 Standalone Core â€¢ Zero Cloud Sync
+                  GTAR1 Standalone Core • Zero Cloud Sync
                 </div>
               </div>
             )}
