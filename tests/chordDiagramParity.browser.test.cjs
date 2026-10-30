@@ -76,6 +76,7 @@ test('Chord parity browser: real SongViewer/Stage SVG, mouse, keyboard, touch, t
     await page.keyboard.press('Space')
     await visibleSvg('G', preview)
     await page.keyboard.press('Escape')
+    await preview.waitFor({ state: 'hidden' })
     assert.ok(await page.locator('[data-stage-canvas]').isVisible())
     // Narrow portrait and short landscape; popup stays inside viewport after tap.
     for (const viewport of [{ width: 360, height: 667 }, { width: 667, height: 320 }]) {
@@ -99,11 +100,13 @@ test('Chord parity browser: real SongViewer/Stage SVG, mouse, keyboard, touch, t
         assert.ok(Math.abs(Number(await barre.getAttribute('x1')) - 98.8) < 0.001)
       }
       await page.keyboard.press('Escape')
+      await preview.waitFor({ state: 'hidden' })
     }
     await token('Cadd9/E').click()
     assert.match(await preview.textContent(), /Diagram unavailable/)
     assert.equal(await preview.locator('svg[role="img"]').count(), 0)
     await page.keyboard.press('Escape')
+    await preview.waitFor({ state: 'hidden' })
     // Apply persisted theme snapshots through the existing application settings event.
     for (const theme of ['paper-light', 'solarized-dark']) {
       await page.evaluate(theme => {
@@ -121,6 +124,7 @@ test('Chord parity browser: real SongViewer/Stage SVG, mouse, keyboard, touch, t
         await visibleSvg(chord, preview)
         if (process.env.GTAR_CHORD_QA_DIR) await preview.screenshot({ path: path.join(process.env.GTAR_CHORD_QA_DIR, `${theme}-${chord}.png`) })
         await page.keyboard.press('Escape')
+        await preview.waitFor({ state: 'hidden' })
       }
     }
     assert.deepEqual(errors, [])
