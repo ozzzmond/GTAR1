@@ -160,7 +160,7 @@ function renderInteractiveChordLine(
                 id={`stage-chord-${start}-${sIdx}`}
                 tabIndex={isNumbersMode ? undefined : 0}
                 role={isNumbersMode ? undefined : 'button'}
-                onClick={isNumbersMode ? undefined : () => onChordClick?.(cleanSub, typeof document !== 'undefined' ? document.getElementById(`stage-chord-${start}-${sIdx}`) || undefined : undefined)}
+                onClick={isNumbersMode ? undefined : (e) => { e.stopPropagation(); onChordClick?.(cleanSub, e.currentTarget) }}
                 onMouseEnter={isNumbersMode ? undefined : (e) => onChordHover?.(cleanSub, e.currentTarget as HTMLElement)}
                 onMouseLeave={isNumbersMode ? undefined : () => onChordLeave?.(cleanSub)}
                 onKeyDown={
@@ -169,6 +169,7 @@ function renderInteractiveChordLine(
                     : (e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
                           e.preventDefault()
+                          e.stopPropagation()
                           onChordClick?.(cleanSub, e.currentTarget as HTMLElement)
                         }
                       }
@@ -206,7 +207,7 @@ function renderInteractiveChordLine(
               id={`stage-chord-${start}`}
               tabIndex={isNumbersMode ? undefined : 0}
               role={isNumbersMode ? undefined : 'button'}
-              onClick={isNumbersMode ? undefined : () => onChordClick?.(cleanToken, typeof document !== 'undefined' ? document.getElementById(`stage-chord-${start}`) || undefined : undefined)}
+              onClick={isNumbersMode ? undefined : (e) => { e.stopPropagation(); onChordClick?.(cleanToken, e.currentTarget) }}
               onMouseEnter={isNumbersMode ? undefined : (e) => onChordHover?.(cleanToken, e.currentTarget as HTMLElement)}
               onMouseLeave={isNumbersMode ? undefined : () => onChordLeave?.(cleanToken)}
               onKeyDown={
@@ -215,6 +216,7 @@ function renderInteractiveChordLine(
                   : (e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault()
+                          e.stopPropagation()
                         onChordClick?.(cleanToken, e.currentTarget as HTMLElement)
                       }
                     }

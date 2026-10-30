@@ -1,10 +1,9 @@
+import { useChordDiagrams } from './useChordDiagrams'
 import React, { useState } from 'react'
 import type { SongEntity } from '../types/gtar'
 import { parseGtarSong } from '../utils/songParser'
 import { SongLineRenderer } from './SongLineRenderer'
 import { KeyPickerModal } from './KeyPickerModal'
-import { FretboardDiagramModal } from './FretboardDiagramModal'
-import { getChordVoicing } from '../utils/chordDictionary'
 import { transposeContext } from '../utils/songKeySemantics'
 import { Play } from 'lucide-react'
 import {
@@ -25,7 +24,6 @@ export const SongViewer: React.FC<SongViewerProps> = ({ song, onEdit, onBack, on
   const [transposeOffset, setTransposeOffset] = useState<number>(song.transposeOffset || 0)
   const [fontSize, setFontSize] = useState<number>(18)
   const [isKeyPickerOpen, setIsKeyPickerOpen] = useState(false)
-  const [selectedChord, setSelectedChord] = useState<string | null>(null)
   const [notation, setNotation] = useState<StageNotationMode>(() => {
     try {
       const stored = localStorage.getItem(NOTATION_STORAGE_KEY)
@@ -35,6 +33,7 @@ export const SongViewer: React.FC<SongViewerProps> = ({ song, onEdit, onBack, on
     }
   })
 
+  const diagrams = useChordDiagrams(`${song.id}:${transposeOffset}`, notation !== 'numbers')
   const context = transposeContext(song, transposeOffset)
   const parsed = parseGtarSong(song.rawContent, transposeOffset)
   const currentKey = context.performanceKey || parsed.key || '—'
@@ -231,6 +230,9 @@ export const SongViewer: React.FC<SongViewerProps> = ({ song, onEdit, onBack, on
           fontSizePx={fontSize}
           notation={notation}
           referenceKey={trustworthyKey}
+          onChordClick={diagrams.onChordClick}
+          onChordHover={diagrams.onChordHover}
+          onChordLeave={diagrams.onChordLeave}
         />
       </div>
 
@@ -245,6 +247,7 @@ export const SongViewer: React.FC<SongViewerProps> = ({ song, onEdit, onBack, on
           onReset={handleReset}
         />
       )}
+      {diagrams.overlays}
     </div>
   )
 }

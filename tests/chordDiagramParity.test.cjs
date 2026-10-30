@@ -40,6 +40,48 @@ const { ChordQuickPreview } = require('../src/components/ChordQuickPreview.tsx')
 const { FretboardDiagramModal } = require('../src/components/FretboardDiagramModal.tsx')
 const { transposeChordToken } = require('../src/utils/chordTransposer.ts')
 
+test('CDX F2/F5/F6: corrected pitch identities and playable Asus2 alternative', () => {
+  for (const [chord, pitches] of [
+    ['Csus2', ['C', 'D', 'G']], ['Gm6', ['G', 'A#', 'D', 'E']],
+    ['F#6', ['F#', 'A#', 'C#', 'D#']], ['Asus2', ['A', 'B', 'E']],
+  ]) {
+    for (const voicing of getAllChordVoicings(chord)) {
+      assert.deepEqual(getSoundingPitchClasses(voicing).sort(), pitches.sort(), chord)
+      assert.ok(voicing.frets.filter(f => f > 0).every(f => f >= voicing.baseFret && f < voicing.baseFret + 5))
+    }
+  }
+  assert.deepEqual(getChordVoicing('F#6').frets, [2, -1, 1, 3, 2, -1])
+  assert.ok(getAllChordVoicings('Asus2').some(v => v.frets.join(',') === '-1,0,2,4,0,0'))
+})
+
+test('CDX F3: major M stays major; extensions and slash bass never disappear', () => {
+  assert.deepEqual(getChordVoicing('CM7').frets, getChordVoicing('Cmaj7').frets)
+  assert.notDeepEqual(getChordVoicing('CM7').frets, getChordVoicing('Cm7').frets)
+  for (const alias of ['[CM7]', '(CM7)', 'CΔ7', 'Cmajor7']) {
+    assert.deepEqual(getSoundingPitchClasses(getChordVoicing(alias)).sort(), ['B', 'C', 'E', 'G'])
+  }
+  for (const unsupported of ['Cadd9/E', 'Csus4/E', 'Cmadd9', 'Cmaj13', 'CM7/E']) {
+    assert.equal(getChordVoicing(unsupported), null, unsupported)
+    assert.deepEqual(getAllChordVoicings(unsupported), [])
+  }
+  assert.ok(!normalizeChordForVoicingLookup('Csus4/E').includes('C/E'))
+  assert.ok(!normalizeChordForVoicingLookup('Cadd2').includes('Csus2'))
+  assert.ok(getChordVoicing('C6/9'))
+  assert.deepEqual(getChordVoicing('D/Gb').frets, getChordVoicing('D/F#').frets)
+})
+
+test('CDX F4: C9 barre spans G-B-e only, preserving D-string fret 2', () => {
+  const html = renderToStaticMarkup(React.createElement(ChordSvgDiagram, { voicing: getChordVoicing('C9') }))
+  const { JSDOM } = require('jsdom')
+  const doc = new JSDOM(html).window.document
+  const barre = doc.querySelector('[data-barre-fret="3"]')
+  assert.ok(barre)
+  assert.equal(Number(barre.getAttribute('x1')), 97.6)
+  assert.equal(Number(barre.getAttribute('x2')), 140)
+  const f = new JSDOM(renderToStaticMarkup(React.createElement(ChordSvgDiagram, { voicing: getChordVoicing('F') }))).window.document
+  assert.equal(Number(f.querySelector('[data-barre-fret="1"]').getAttribute('x1')), 34)
+})
+
 // ============================================================================
 // 1. STANDARD SIX-STRING GUITAR TUNING & STRING ORDERING
 // ============================================================================
@@ -373,7 +415,7 @@ test('QUICK_PREVIEW_RENDERER: ChordQuickPreview renders anchored popover with of
     React.createElement(ChordQuickPreview, { anchor, voicing: em, onClose: () => {} })
   )
 
-  assert.match(previewHtml, /role="tooltip"/, 'Quick preview must have tooltip role')
+  assert.match(previewHtml, /role="dialog"/, 'Interactive quick preview must have dialog role')
   assert.match(previewHtml, /Em/, 'Quick preview must display chord name')
   assert.match(previewHtml, /aria-label="Dismiss quick preview"/, 'Dismiss button must have accessible label')
 })

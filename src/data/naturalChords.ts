@@ -30,7 +30,7 @@ export const NATURAL_CHORD_VOICINGS: ChordVoicing[] = [
   { chord: 'Cm7b5', baseFret: 1, frets: [-1, 3, 4, 3, 4, -1], fingers: [0, 1, 3, 2, 4, 0] },
 
   // Suspended & Added
-  { chord: 'Csus2', baseFret: 1, frets: [-1, 3, 0, 0, 1, 0], fingers: [0, 3, 0, 0, 1, 0] },
+  { chord: 'Csus2', baseFret: 1, frets: [-1, 3, 0, 0, 3, 3], fingers: [0, 1, 0, 0, 3, 4] },
   { chord: 'Csus4', baseFret: 1, frets: [-1, 3, 3, 0, 1, 1], fingers: [0, 3, 4, 0, 1, 1] },
   { chord: 'C7sus4', baseFret: 1, frets: [-1, 3, 3, 3, 1, 1], fingers: [0, 2, 3, 4, 1, 1], barres: [1] },
   { chord: 'Cadd2', baseFret: 1, frets: [-1, 3, 0, 0, 1, 0], fingers: [0, 3, 0, 0, 1, 0] },
@@ -166,7 +166,7 @@ export const NATURAL_CHORD_VOICINGS: ChordVoicing[] = [
   { chord: 'Gm', baseFret: 3, frets: [3, 5, 5, 3, 3, 3], fingers: [1, 3, 4, 1, 1, 1], barres: [3] },
   { chord: 'G5', baseFret: 1, frets: [3, 5, 5, -1, -1, -1], fingers: [1, 3, 4, 0, 0, 0] },
   { chord: 'G6', baseFret: 1, frets: [3, 2, 0, 0, 0, 0], fingers: [2, 1, 0, 0, 0, 0] },
-  { chord: 'Gm6', baseFret: 1, frets: [3, 5, 3, 3, 5, 3], fingers: [1, 3, 1, 1, 4, 1], barres: [3] },
+  { chord: 'Gm6', baseFret: 1, frets: [3, -1, 2, 3, 3, -1], fingers: [2, 0, 1, 3, 4, 0] },
   { chord: 'Gdim', baseFret: 5, frets: [-1, -1, 5, 6, 5, 6], fingers: [0, 0, 1, 3, 2, 4] },
   { chord: 'Gdim7', baseFret: 5, frets: [-1, -1, 5, 6, 5, 6], fingers: [0, 0, 1, 3, 2, 4] },
   { chord: 'Gaug', baseFret: 1, frets: [3, 2, 1, 0, 0, 3], fingers: [3, 2, 1, 0, 0, 4] },
@@ -214,6 +214,7 @@ export const NATURAL_CHORD_VOICINGS: ChordVoicing[] = [
 
   // Suspended & Added
   { chord: 'Asus2', baseFret: 1, frets: [-1, 0, 2, 2, 0, 0], fingers: [0, 0, 1, 2, 0, 0] },
+  { chord: 'Asus2', baseFret: 1, frets: [-1, 0, 2, 4, 0, 0], fingers: [0, 0, 1, 3, 0, 0] },
   { chord: 'Asus4', baseFret: 1, frets: [-1, 0, 2, 2, 3, 0], fingers: [0, 0, 1, 2, 3, 0] },
   { chord: 'A7sus4', baseFret: 1, frets: [-1, 0, 2, 0, 3, 0], fingers: [0, 0, 2, 0, 3, 0] },
   { chord: 'Aadd9', baseFret: 1, frets: [-1, 0, 2, 4, 2, 0], fingers: [0, 0, 1, 3, 2, 0] },
