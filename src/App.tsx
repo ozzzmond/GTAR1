@@ -42,6 +42,7 @@ import {
 } from './components/ExplorerNavigation'
 import { loadLocalProfile, type LocalUserProfile } from './utils/localProfile'
 import { generateUUID } from './utils/uuid'
+import { resolveNavigation, type NavigationState } from './utils/navigation'
 
 export const App: React.FC = () => {
   const [songs, setSongs] = useState<SongEntity[]>([])
@@ -60,7 +61,12 @@ export const App: React.FC = () => {
   const [stageSetlistName, setStageSetlistName] = useState<string | undefined>(undefined)
   const [stageActiveSetlistId, setStageActiveSetlistId] = useState<string | undefined>(undefined)
 
-  const isExitingStageRef = useRef<boolean>(false)
+  const editorNavigationGuard = useRef<((next: () => void) => void) | null>(null)
+  const navigationRef = useRef<NavigationState | null>(null)
+  const replaceNavigationRef = useRef(false)
+  const historyPositionRef = useRef<number>(Number.isSafeInteger(window.history.state?.gtarPosition) ? window.history.state.gtarPosition : 0)
+  const historyBounceRef = useRef<(() => void) | null>(null)
+  const approvedHistoryPopRef = useRef(false)
   const explorerMainRef = useRef<HTMLElement>(null)
   const explorerScrollRef = useRef<number>(0)
   const isRestoringScrollRef = useRef<boolean>(false)
@@ -185,6 +191,7 @@ export const App: React.FC = () => {
           setSongs(loadedSongs)
           setSetlists(loadedSetlists)
           setFolders(loadedFolders)
+          restoreNavigation(window.history.state?.gtarNavigation, loadedSongs, loadedSetlists, loadedFolders)
           setIsLoading(false)
         }
       } catch (err: any) {
@@ -201,45 +208,93 @@ export const App: React.FC = () => {
     }
   }, [])
 
-  const activeTabRef = useRef<ActiveTab>(activeTab)
-  activeTabRef.current = activeTab
-  const stageQueueRef = useRef<StageQueueItem[]>(stageQueue)
-  stageQueueRef.current = stageQueue
-  const stageReturnTabRef = useRef<'SONGS' | 'SETLISTS' | 'VIEWER'>(stageReturnTab)
-  stageReturnTabRef.current = stageReturnTab
+  function restoreNavigation(value: unknown, library = songs, lists = setlists, groups = folders) {
+    const { state, song, setlist, queue } = resolveNavigation(value, library, lists, groups)
+    navigationRef.current = state
+    replaceNavigationRef.current = true
+    setActiveTab(state.tab)
+    setSelectedSong(song || null)
+    setViewerTransposeOffset(state.transposeOffset ?? song?.transposeOffset ?? 0)
+    setEditingSong(state.tab === 'EDITOR' ? song || null : null)
+    setCurrentNavTarget(state.nav || { type: 'ALL_SONGS' })
+    setActiveSetlistManagerId(state.setlistId)
+    setStageQueue(queue)
+    setStageQueueIndex(state.stage?.index || 0)
+    setStageReturnTab(state.stage?.returnTab || 'SONGS')
+    setStageActiveSetlistId(state.tab === 'STAGE' ? setlist?.id : undefined)
+    setStageSetlistName(state.tab === 'STAGE' ? setlist?.name : undefined)
+  }
 
-  // M2: Normalize browser history state on mount so Explorer is never desynchronized with stale { stage: true }
+  // One history entry per view/context. Queue movement replaces the current Stage entry,
+  // so Back/Exit returns in one action. No content, draft, or private title enters the URL.
   useEffect(() => {
-    if (window.history.state?.stage) {
-      try {
-        window.history.replaceState({ stage: false }, '', window.location.href)
-      } catch {}
+    if (isLoading || loadError) return
+    const nav = currentNavTarget.type === 'TAG' ? undefined : currentNavTarget
+    const state: NavigationState = {
+      version: 1, tab: activeTab, nav,
+      transposeOffset: activeTab === 'VIEWER' ? viewerTransposeOffset : undefined,
+      songId: activeTab === 'EDITOR' ? editingSong?.id : ['VIEWER', 'STAGE'].includes(activeTab) ? selectedSong?.id : undefined,
+      setlistId: activeTab === 'STAGE' ? stageActiveSetlistId : activeSetlistManagerId ?? (activeTab === 'SETLISTS' ? setlists[0]?.id : undefined),
+      stage: activeTab === 'STAGE' && stageQueue[stageQueueIndex] ? {
+        songId: stageQueue[stageQueueIndex].song.id,
+        entryId: stageQueue[stageQueueIndex].entryId,
+        index: stageQueueIndex, returnTab: stageReturnTab,
+      } : undefined,
     }
-  }, [])
+    const previous = navigationRef.current
+    const replace = replaceNavigationRef.current || !previous || (previous.tab === 'STAGE' && state.tab === 'STAGE')
+    replaceNavigationRef.current = false
+    navigationRef.current = state
+    if (!replace && JSON.stringify(previous) === JSON.stringify(state)) return
+    try {
+      if (!replace) historyPositionRef.current += 1
+      const historyState = { ...window.history.state, gtarPosition: historyPositionRef.current, gtarNavigation: state, stage: activeTab === 'STAGE', gtarHasPrevious: replace ? !!window.history.state?.gtarHasPrevious : true }
+      if (replace) window.history.replaceState(historyState, '', window.location.href)
+      else window.history.pushState(historyState, '', window.location.href)
+    } catch { /* History may be unavailable; local music data is unaffected. */ }
+  }, [isLoading, loadError, activeTab, viewerTransposeOffset, selectedSong?.id, editingSong?.id, currentNavTarget, activeSetlistManagerId, setlists, stageActiveSetlistId, stageQueue, stageQueueIndex, stageReturnTab])
 
-  // Browser History & Popstate integration for Stage Performance
+  const restoreHistoryRef = useRef(restoreNavigation)
+  restoreHistoryRef.current = restoreNavigation
   useEffect(() => {
-    const handlePopState = (e: PopStateEvent) => {
-      if (e.state?.stage) {
-        // Browser Forward navigation back into Stage
-        isExitingStageRef.current = false
-        if (stageQueueRef.current.length > 0) {
-          setActiveTab('STAGE')
+    if (isLoading || loadError) return
+    const handlePopState = (event: PopStateEvent) => {
+      if (historyBounceRef.current) {
+        const returned = historyBounceRef.current
+        historyBounceRef.current = null
+        returned()
+        return
+      }
+      const target = event.state?.gtarNavigation
+      const targetPosition = Number.isSafeInteger(event.state?.gtarPosition) ? event.state.gtarPosition : undefined
+      const next = () => {
+        historyPositionRef.current = targetPosition ?? 0
+        restoreHistoryRef.current(target)
+      }
+      if (editorNavigationGuard.current && !approvedHistoryPopRef.current) {
+        const delta = targetPosition === undefined ? 0 : targetPosition - historyPositionRef.current
+        if (delta) {
+          // Return to the editor entry while its guard asks Save/Discard/Cancel.
+          // Cancel leaves both the draft and the original history entries intact.
+          let returned = false
+          let approved = false
+          const proceed = () => { approvedHistoryPopRef.current = true; window.history.go(delta) }
+          historyBounceRef.current = () => { returned = true; if (approved) proceed() }
+          window.history.go(-delta)
+          editorNavigationGuard.current(() => { approved = true; if (returned) proceed() })
+        } else {
+          // Unowned/old entries have no position marker. Preserve the draft on Cancel.
+          window.history.replaceState({ ...window.history.state, gtarNavigation: navigationRef.current }, '', window.location.href)
+          editorNavigationGuard.current(next)
         }
       } else {
-        // Browser Back navigation out of Stage
-        if (activeTabRef.current === 'STAGE') {
-          isExitingStageRef.current = true
-          setActiveTab(stageReturnTabRef.current || 'SONGS')
-        }
+        approvedHistoryPopRef.current = false
+        next()
       }
     }
-
     window.addEventListener('popstate', handlePopState)
-    return () => {
-      window.removeEventListener('popstate', handlePopState)
-    }
-  }, [])
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [isLoading, loadError])
 
   // Derived unique tags
   const allTags = useMemo(() => {
@@ -459,12 +514,14 @@ export const App: React.FC = () => {
     setActiveTab('EDITOR')
   }
 
-  const handleNewSong = () => {
-    setEditingSong({})
-    setActiveTab('EDITOR')
-  }
+  const navigate = (next: () => void) => editorNavigationGuard.current ? editorNavigationGuard.current(next) : next()
 
-  const handleNewSetlist = () => {
+  const handleNewSong = () => navigate(() => {
+    setEditingSong({ id: generateUUID() })
+    setActiveTab('EDITOR')
+  })
+
+  const handleNewSetlist = () => navigate(() => {
     const newSetlist: WebSetlist = {
       id: generateUUID(),
       name: 'New Setlist',
@@ -478,7 +535,7 @@ export const App: React.FC = () => {
       setActiveSetlistManagerId(newSetlist.id)
       setActiveTab('SETLISTS')
     })
-  }
+  })
 
   const handlePlaySetlistSong = (songId: string, transposeOffset?: number) => {
     const s = songs.find((item) => item.id === songId)
@@ -505,12 +562,6 @@ export const App: React.FC = () => {
     const q: StageQueueItem[] = [{ song, transposeOffset: offset }]
     setStageQueue(q)
     setStageQueueIndex(0)
-    isExitingStageRef.current = false
-    try {
-      if (!window.history.state?.stage) {
-        window.history.pushState({ stage: true }, '', window.location.href)
-      }
-    } catch {}
     setActiveTab('STAGE')
   }
 
@@ -576,36 +627,17 @@ export const App: React.FC = () => {
     setStageQueueIndex(initialIndex)
     setSelectedSong(q[initialIndex].song)
     setViewerTransposeOffset(q[initialIndex].transposeOffset)
-    isExitingStageRef.current = false
-    try {
-      if (!window.history.state?.stage) {
-        window.history.pushState({ stage: true }, '', window.location.href)
-      }
-    } catch {}
     setActiveTab('STAGE')
   }
 
   const handleExitStage = () => {
-    if (!isExitingStageRef.current) {
-      isExitingStageRef.current = true
-      try {
-        if (window.history.state?.stage) {
-          window.history.back()
-          // M2: Safety timeout ensures consistent return to Explorer even if history.back() doesn't fire popstate
-          setTimeout(() => {
-            if (activeTabRef.current === 'STAGE') {
-              setActiveTab(stageReturnTabRef.current || 'SONGS')
-              if (window.history.state?.stage) {
-                try {
-                  window.history.replaceState({ stage: false }, '', window.location.href)
-                } catch {}
-              }
-            }
-          }, 120)
-          return
-        }
-      } catch {}
+    if (window.history.state?.gtarHasPrevious) {
+      window.history.back()
+      return
     }
+    // Also supports a restored Stage entry without an in-app predecessor.
+    replaceNavigationRef.current = true
+    if (stageReturnTab === 'SETLISTS' && stageActiveSetlistId) setActiveSetlistManagerId(stageActiveSetlistId)
     setActiveTab(stageReturnTab || 'SONGS')
   }
 
@@ -665,12 +697,12 @@ export const App: React.FC = () => {
     setActiveTab('SETLISTS')
   }
 
-  const handleSelectNavTarget = (target: ExplorerNavTarget) => {
+  const handleSelectNavTarget = (target: ExplorerNavTarget) => navigate(() => {
     setCurrentNavTarget(target)
     if (activeTab !== 'SONGS') {
       setActiveTab('SONGS')
     }
-  }
+  })
 
   if (isLoading) {
     return (
@@ -710,7 +742,7 @@ export const App: React.FC = () => {
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans">
       <Header
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        setActiveTab={(tab) => navigate(() => setActiveTab(tab))}
         onNewSong={handleNewSong}
         onOpenBackup={() => setIsBackupOpen(true)}
         onOpenProfile={() => setIsProfileOpen(true)}
@@ -825,6 +857,7 @@ export const App: React.FC = () => {
 
           {activeTab === 'EDITOR' && editingSong && (
             <DesktopEditor
+              navigationGuardRef={editorNavigationGuard}
               song={{
                 id: editingSong.id || generateUUID(),
                 title: editingSong.title || '',
@@ -853,7 +886,7 @@ export const App: React.FC = () => {
                 setEditingSong(null)
               }}
               onNewSong={() => {
-                setEditingSong({})
+                setEditingSong({ id: generateUUID() })
               }}
             />
           )}
@@ -864,6 +897,7 @@ export const App: React.FC = () => {
               folders={folders}
               allSongs={songs}
               initialSelectedSetlistId={activeSetlistManagerId}
+              onSelectedSetlistChange={setActiveSetlistManagerId}
               onSaveSetlist={handleSaveSetlist}
               onDeleteSetlist={handleDeleteSetlist}
               onSaveFolder={handleSaveFolder}

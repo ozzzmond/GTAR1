@@ -644,7 +644,7 @@ test('FIX_P1_3: QUEUE_REFERENCE_IDENTITY — missing references handled without 
 
 test('FIX_P1_4: BROWSER_BACK — history state push and popstate return handling', () => {
   const appSource = fs.readFileSync(path.resolve(__dirname, '../src/App.tsx'), 'utf8')
-  assert.ok(appSource.includes('window.history.pushState({ stage: true }'), 'App must push stage history state on entry')
+  assert.ok(appSource.includes('window.history.pushState(historyState'), 'App must push stage history state on entry')
   assert.ok(appSource.includes("window.addEventListener('popstate'"), 'App must register popstate listener for browser Back')
   assert.ok(appSource.includes('window.history.back()'), 'App handleExitStage must invoke history.back() when stage state active')
 })
@@ -817,8 +817,8 @@ test('CODEX_R5: EXPLORER_SCROLL_RESTORATION_AND_FORWARD_NAVIGATION — prevents 
     'App.tsx must use isRestoringScrollRef to prevent premature 0-reset of explorerScrollRef'
   )
   assert.ok(
-    appSource.includes('if (e.state?.stage)'),
-    'App.tsx popstate handler must check e.state?.stage to transition forward into Stage'
+    appSource.includes('restoreHistoryRef.current(target)'),
+    'App.tsx must restore the complete hydrated navigation on browser Forward'
   )
 })
 
@@ -885,11 +885,11 @@ test('M1: STANDALONE_STAGE_QUEUE - individual song entry opens standalone Stage 
 test('M2: ONE_ACTION_STAGE_EXIT - normalizes history state on mount and ensures one-action return', () => {
   const appSource = fs.readFileSync(path.resolve(__dirname, '../src/App.tsx'), 'utf8')
   assert.ok(
-    appSource.includes('window.history.replaceState({ stage: false }'),
-    'App.tsx must normalize stale stage history state on mount'
+    appSource.includes('restoreNavigation(window.history.state?.gtarNavigation, loadedSongs, loadedSetlists, loadedFolders)'),
+    'App.tsx must resolve restored Stage only after local hydration'
   )
   assert.ok(
-    appSource.includes('activeTabRef.current'),
+    appSource.includes('restoreHistoryRef.current'),
     'App.tsx popstate handler must read stable authoritative refs'
   )
 })
