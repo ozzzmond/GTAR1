@@ -63,6 +63,43 @@ export const BackupModal: React.FC<BackupModalProps> = ({
   }, [])
   const [partialImport, setPartialImport] = useState(false)
   const [isImporting, setIsImporting] = useState<boolean>(false)
+  const modalRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const originalOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = originalOverflow
+    }
+  }, [])
+
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !isImporting) {
+        onClose()
+      }
+    }
+    window.addEventListener('keydown', handleGlobalKeyDown)
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown)
+  }, [onClose, isImporting])
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Tab' && modalRef.current) {
+      const focusable = modalRef.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      )
+      if (focusable.length === 0) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+  }
 
   const backupJsonString = useMemo(() => {
     try {
@@ -188,11 +225,13 @@ export const BackupModal: React.FC<BackupModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-labelledby="backup-modal-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm animate-fade-in"
       onClick={() => { if (!isImporting) onClose() }}
     >
       <div
-        className="bg-app-surface border border-app-border rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col text-app-text shadow-2xl overflow-hidden"
+        ref={modalRef}
+        onKeyDown={handleKeyDown}
+        className="bg-app-surface border border-app-border rounded-2xl w-full max-w-2xl max-h-[90dvh] flex flex-col text-app-text shadow-2xl overflow-hidden animate-scale-in"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -248,7 +287,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
         </div>
 
         {/* Body Content */}
-        <div className="p-4 overflow-y-auto flex-1 space-y-4">
+        <div className="p-4 sm:p-5 overflow-y-auto overscroll-contain flex-1 space-y-4">
           {mode === 'EXPORT' && (
             <div className="space-y-4">
               <div className="p-3 bg-app-base border border-app-border rounded-xl flex items-start gap-3">

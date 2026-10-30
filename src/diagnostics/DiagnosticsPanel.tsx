@@ -34,7 +34,14 @@ function SessionPanel({ session }: { session: NonNullable<typeof diagnostics> })
   }, [session])
 
   useEffect(() => {
-    if (open) dialog.current?.showModal()
+    if (open) {
+      dialog.current?.showModal()
+      const originalOverflow = document.body.style.overflow
+      document.body.style.overflow = 'hidden'
+      return () => {
+        document.body.style.overflow = originalOverflow
+      }
+    }
     else dialog.current?.close()
   }, [open])
 
@@ -111,7 +118,7 @@ function SessionPanel({ session }: { session: NonNullable<typeof diagnostics> })
         <p id="debug-logs-retention" className="text-xs text-app-muted">Last 20 events, kept in this tab only. Reload clears logs. No song content or automatic uploads.</p>
         <p role="status" className="text-xs text-app-muted">{status || `${visible.length} events shown`}</p>
       </div>
-      <div className="min-h-0 overflow-y-auto bg-app-base p-4 sm:px-6">
+      <div className="min-h-0 overflow-y-auto overscroll-contain bg-app-base p-4 sm:px-6">
         {visible.length === 0 && <p className="py-10 text-center text-sm text-app-muted">No {filter === 'ALL' ? '' : filter.toLowerCase() + ' '}events to show.</p>}
         <ol aria-label="Diagnostic entries" className="space-y-2 text-xs">
           {visible.map((entry, index) => <li key={`${entry.timestamp}-${index}`} className="rounded-xl border border-app-border bg-app-surface p-3">

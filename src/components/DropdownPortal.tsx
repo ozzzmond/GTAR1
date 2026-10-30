@@ -17,7 +17,7 @@ interface DropdownPortalProps {
   align?: 'right' | 'left'
   /** Pixel gap below anchor. Default: 6 */
   gap?: number
-  /** Optional custom z-index (default: 25) */
+  /** Optional custom z-index (default: 45) */
   zIndex?: number
   children: React.ReactNode
 }
@@ -28,7 +28,7 @@ export const DropdownPortal: React.FC<DropdownPortalProps> = ({
   onClose,
   align = 'right',
   gap = 6,
-  zIndex = 25,
+  zIndex = 45,
   children,
 }) => {
   const menuRef = useRef<HTMLDivElement>(null)
@@ -102,7 +102,7 @@ export const DropdownPortal: React.FC<DropdownPortalProps> = ({
 
   const style: React.CSSProperties = {
     position: 'fixed',
-    // Above cards (10/20), below the header (30) and drawers/modals (50+).
+    // Above cards (10/20) and header (40), below drawers/modals (50+).
     zIndex,
     overflow: 'auto',
   }
