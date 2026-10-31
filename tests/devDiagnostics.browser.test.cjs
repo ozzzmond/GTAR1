@@ -90,6 +90,9 @@ test('DEV mobile browser: manual export, offline, reload, bounded log, storage d
     assert.notEqual(await exportOnce(), await exportOnce())
     await page.getByRole('button', { name: 'Clear', exact: true }).focus()
     await page.keyboard.press('Escape')
+    await page.getByRole('dialog', { name: 'Debug Logs', exact: true }).waitFor({ state: 'hidden' })
+    // Native dialog.close() queues the close event that restores Profile focus.
+    await page.waitForFunction(() => document.querySelector('[data-debug-logs-opener]') === document.activeElement)
     assert.equal(await page.getByRole('dialog').count(), 0)
     assert.equal(await profile.evaluate(element => element === document.activeElement), true)
     await openLogs()
