@@ -15,10 +15,8 @@
 /* Keep the original inline arrangement while leaving room for search at narrow desktop widths. */
 @media (min-width: 640px) and (max-width: 1279px) {
   .brand > button > div:nth-child(2) > span:nth-child(2),
-  .status > span:nth-child(2),
   .actions > nav span,
   .actions > button > span { display: none; }
-  .status { padding: .375rem; }
   .actions > nav button { padding-inline: .5rem; }
 }
 /* Retain every existing action on the smallest phone widths. */
