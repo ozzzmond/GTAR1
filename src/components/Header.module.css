@@ -7,7 +7,7 @@
   gap: .5rem;
 }
 .brand, .actions { flex-shrink: 0; }
-.search { flex: 1; min-width: 0; max-width: 28rem; margin-inline: .25rem; }
+.search { flex: 1; min-width: 0; max-width: 36rem; margin-inline: .25rem; }
 @media (min-width: 640px) {
   .layout { gap: 1rem; }
   .search { margin-inline: .5rem; }

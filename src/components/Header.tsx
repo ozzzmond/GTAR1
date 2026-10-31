@@ -15,6 +15,7 @@ import {
   Palette,
   Globe,
   Terminal,
+  Command,
 } from 'lucide-react'
 
 export type ActiveTab = 'SONGS' | 'SETLISTS' | 'VIEWER' | 'EDITOR' | 'STAGE'
@@ -52,24 +53,74 @@ export const Header: React.FC<HeaderProps> = ({
   searchScopeLabel = 'All Songs',
   globalSearchRef,
 }) => {
-  const [isSearchActive, setIsSearchActive] = useState(false)
+  const [isSearchFocused, setIsSearchFocused] = useState(false)
+  const [isMobileSearchActive, setIsMobileSearchActive] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
   const ownSearchRef = useRef<HTMLInputElement>(null)
+  const mobileInputRef = useRef<HTMLInputElement>(null)
   const searchInputRef = globalSearchRef || ownSearchRef
   const [showAvatarMenu, setShowAvatarMenu] = useState(false)
   const avatarMenuRef = useRef<HTMLDivElement>(null)
 
-  // Handle escape to close search or clear
+  // Track viewport width for responsive search variant
+  useEffect(() => {
+    const updateMobile = () => {
+      setIsMobile(window.innerWidth < 640)
+    }
+    updateMobile()
+    window.addEventListener('resize', updateMobile)
+    return () => window.removeEventListener('resize', updateMobile)
+  }, [])
+
+  // Auto-activate mobile overlay if a search query is active on small screens
+  useEffect(() => {
+    if (searchQuery && typeof window !== 'undefined' && window.innerWidth < 640) {
+      setIsMobileSearchActive(true)
+    }
+  }, [searchQuery])
+
+  // Handle keyboard events on search inputs
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && e.nativeEvent.isComposing) { e.preventDefault(); return }
+    if (e.key === 'Enter' && e.nativeEvent.isComposing) {
+      e.preventDefault()
+      return
+    }
     if (e.key === 'Escape') {
       if (searchQuery) {
         onSearchChange('')
       } else {
-        setIsSearchActive(false)
-        searchInputRef.current?.blur()
+        setIsSearchFocused(false)
+        e.currentTarget.blur()
       }
     }
   }
+
+  // Desktop Ctrl/Cmd+K shortcut to focus search
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'k') {
+        const target = e.target as HTMLElement | null
+        if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+          if (target.id === 'multi-song-search-input') {
+            return
+          }
+        }
+        e.preventDefault()
+        if (typeof window !== 'undefined' && window.innerWidth < 640) {
+          setIsMobileSearchActive(true)
+          requestAnimationFrame(() => {
+            mobileInputRef.current?.focus()
+            mobileInputRef.current?.select?.()
+          })
+        } else {
+          searchInputRef.current?.focus()
+          searchInputRef.current?.select?.()
+        }
+      }
+    }
+    window.addEventListener('keydown', handleGlobalKeyDown)
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown)
+  }, [searchInputRef])
 
   // Click outside avatar popover
   useEffect(() => {
@@ -82,8 +133,20 @@ export const Header: React.FC<HeaderProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+  const openMobileSearch = () => {
+    setIsMobileSearchActive(true)
+    requestAnimationFrame(() => {
+      mobileInputRef.current?.focus()
+    })
+  }
+
+  const closeMobileSearch = () => {
+    setIsMobileSearchActive(false)
+    onSearchChange('')
+  }
+
   return (
-    <header className="bg-app-header border-b border-app-border sticky top-0 z-40 px-3 py-2.5">
+    <header className="bg-app-header border-b border-app-border sticky top-0 z-40 px-3 py-2.5 relative">
       <div className={styles.layout}>
         {/* Left: Mobile Drawer Toggle & App Branding */}
         <div className={`flex items-center gap-2 sm:gap-3 ${styles.brand}`}>
@@ -126,22 +189,80 @@ export const Header: React.FC<HeaderProps> = ({
           </span>
         </div>
 
-        {/* Center: compact local search, as in the original PROD toolbar. */}
-        <form onSubmit={event => event.preventDefault()} role="search" aria-label="Global song search" className={styles.search}>
-          <div className="relative flex min-w-0 items-center">
-            <Search className="w-4 h-4 header-neutral-icon absolute left-3 pointer-events-none" />
-            <input ref={searchInputRef} type="text" aria-label="Global search" value={searchQuery}
-              onChange={event => onSearchChange(event.target.value)} onKeyDown={handleKeyDown}
-              onFocus={() => setIsSearchActive(true)} onBlur={() => setIsSearchActive(false)}
-              placeholder={`Search ${searchScopeLabel}... (Esc to clear)`}
-              className="header-search-input min-h-[36px] min-w-0 w-full pl-9 pr-8 rounded-xl bg-app-surface border border-app-border text-xs text-app-text placeholder:text-app-muted focus:outline-none focus:border-app-accent focus:ring-1 focus:ring-app-accent transition-colors" />
-            {searchQuery && <button type="button" onClick={() => { onSearchChange(''); searchInputRef.current?.focus() }} aria-label="Clear search query"
-              className="absolute right-0 min-h-[36px] min-w-[32px] flex items-center justify-center header-neutral-icon hover:text-app-heading rounded"><X className="w-3.5 h-3.5" /></button>}
-          </div>
-        </form>
+        {/* Center: Desktop search bar (Design 2 revamp) */}
+        {!isMobile && (
+          <form
+            onSubmit={event => event.preventDefault()}
+            role="search"
+            aria-label="Global song search"
+            className={`hidden sm:flex ${styles.search}`}
+          >
+            <div
+              className={`header-search-box relative flex min-w-0 w-full items-center transition-all duration-200 rounded-xl border border-app-border bg-app-surface ${
+                isSearchFocused ? 'border-app-accent ring-2 ring-app-accent/20' : 'hover:border-app-border/80'
+              }`}
+            >
+              <div className="pl-3.5 pr-2 pointer-events-none shrink-0">
+                <Search
+                  className={`w-4 h-4 transition-colors ${
+                    isSearchFocused ? 'text-app-accent' : 'header-neutral-icon'
+                  }`}
+                />
+              </div>
+              <input
+                ref={searchInputRef}
+                type="text"
+                aria-label="Global search"
+                value={searchQuery}
+                onChange={event => onSearchChange(event.target.value)}
+                onKeyDown={handleKeyDown}
+                onFocus={() => setIsSearchFocused(true)}
+                onBlur={() => setIsSearchFocused(false)}
+                placeholder={`Search ${searchScopeLabel}... (Esc to clear)`}
+                className="header-search-input min-h-[36px] min-w-0 w-full py-1.5 pr-2 bg-transparent text-xs text-app-text placeholder:text-app-muted focus:outline-none"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSearchChange('')
+                    searchInputRef.current?.focus()
+                  }}
+                  aria-label="Clear search query"
+                  className="p-1 mr-1.5 header-neutral-icon hover:text-app-heading transition-colors shrink-0"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+              <div className="pr-2 shrink-0 hidden md:flex items-center">
+                <kbd
+                  className="header-search-kbd inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-mono font-semibold text-app-muted bg-app-base border border-app-border rounded select-none pointer-events-none"
+                  title="Ctrl+K or Cmd+K to search"
+                >
+                  <Command className="w-2.5 h-2.5" /> K
+                </kbd>
+              </div>
+            </div>
+          </form>
+        )}
 
         {/* Right Actions */}
         <div className={`flex items-center gap-1.5 sm:gap-2 ${styles.actions}`}>
+          {/* Mobile Search Icon Trigger Button */}
+          {isMobile && (
+            <button
+              type="button"
+              onClick={openMobileSearch}
+              aria-label="Open search"
+              title="Search songs"
+              className={`sm:hidden ui-button mobile-search-trigger p-2 min-h-[36px] min-w-[36px] rounded-xl bg-app-surface border border-app-border transition-colors flex items-center justify-center active:scale-95 ${
+                searchQuery ? 'text-app-accent border-app-accent' : 'header-neutral-icon hover:text-app-heading hover:border-app-accent'
+              }`}
+            >
+              <Search className="w-4 h-4" />
+            </button>
+          )}
+
           {/* Main Views Switcher */}
           <nav aria-label="Main navigation" className="hidden sm:flex items-center bg-app-surface/80 p-0.5 rounded-xl border border-app-border text-xs font-semibold min-h-[36px]">
             <button
@@ -181,7 +302,7 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
 
           {/* Browse Song Sources Entry */}
-          {onOpenSources && (
+          {onOpenSources && (!isMobile || !isMobileSearchActive) && (
             <button
               onClick={onOpenSources}
               title="Browse Song Sources"
@@ -312,6 +433,62 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Mobile Full-Width Expanded Search Overlay */}
+      {isMobile && isMobileSearchActive && (
+        <div
+          className="sm:hidden mobile-search-overlay absolute inset-0 z-50 flex items-center gap-2 px-3 bg-app-header border-b border-app-border animate-scale-in"
+          role="search"
+          aria-label="Mobile expanded song search"
+        >
+          <div className="header-search-box flex-1 relative flex items-center min-w-0 rounded-xl bg-app-surface border border-app-accent ring-2 ring-app-accent/20 px-3 py-1">
+            <Search className="w-4 h-4 text-app-accent mr-2 shrink-0 pointer-events-none" />
+            <input
+              ref={mobileInputRef}
+              type="text"
+              aria-label="Global search"
+              value={searchQuery}
+              onChange={event => onSearchChange(event.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={`Search ${searchScopeLabel}...`}
+              autoFocus
+              className="header-search-input min-h-[36px] w-full bg-transparent text-xs text-app-text placeholder:text-app-muted font-medium focus:outline-none"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => {
+                  onSearchChange('')
+                  mobileInputRef.current?.focus()
+                }}
+                aria-label="Clear search query"
+                className="p-1 header-neutral-icon hover:text-app-heading transition-colors shrink-0"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+          {onOpenSources && (
+            <button
+              type="button"
+              onClick={onOpenSources}
+              title="Browse Song Sources"
+              aria-label="Browse Song Sources"
+              className="ui-button px-2 sm:px-2.5 py-1.5 rounded-xl bg-app-button hover:brightness-110 border border-app-border text-app-button-text text-xs font-medium transition-colors flex items-center gap-1.5 min-h-[36px]"
+            >
+              <Globe className="w-3.5 h-3.5 text-app-accent" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={closeMobileSearch}
+            aria-label="Cancel search"
+            className="px-2.5 py-1.5 text-xs font-semibold text-app-muted hover:text-app-heading transition-colors shrink-0 min-h-[36px] flex items-center justify-center"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
     </header>
   )
 }

@@ -32,6 +32,9 @@ test('compact header: inline responsive local search, offline use and provider n
       })
       await page.goto(origin)
       const query = page.getByLabel('Global search', { exact: true })
+      if (width < 640) {
+        await page.getByRole('button', { name: 'Open search', exact: true }).click()
+      }
       await query.waitFor()
       await page.evaluate(async () => {
         const core = await import('/src/utils/storage.ts')
@@ -49,10 +52,11 @@ test('compact header: inline responsive local search, offline use and provider n
       })
       const before = await records()
       const header = page.locator('header').first()
-      assert.equal(await header.locator('input').count(), 1)
+      const searchControl = width < 640 ? header.getByRole('button', { name: 'Open search', exact: true }) : query
+      assert.equal(await header.locator('input').count(), width < 640 ? 0 : 1)
       assert.equal(await header.locator('select').count(), 0, 'No search scope or provider selector')
-      const bounds = await Promise.all([query, header.getByRole('button', {name:'New Song', exact:true}), header.getByRole('button', {name:'Browse Song Sources', exact:true}), header.getByRole('button', {name:'Backup and Restore', exact:true}), header.getByRole('button', {name:/Musician Profile:/})].map(control => control.boundingBox()))
-      assert.ok(bounds[0].width >= 60, `Search remains usable at ${width}px`)
+      const bounds = await Promise.all([searchControl, header.getByRole('button', {name:'New Song', exact:true}), header.getByRole('button', {name:'Browse Song Sources', exact:true}), header.getByRole('button', {name:'Backup and Restore', exact:true}), header.getByRole('button', {name:/Musician Profile:/})].map(control => control.boundingBox()))
+      assert.ok(bounds[0].width >= (width < 640 ? 36 : 60), `Search remains usable at ${width}px`)
       for (let i = 0; i < bounds.length; i++) {
         const box = bounds[i]
         assert.ok(box.x >= 0 && box.x + box.width <= width, `Control fits ${width}px`)
@@ -61,9 +65,17 @@ test('compact header: inline responsive local search, offline use and provider n
       }
       assert.ok(await header.evaluate(el => el.offsetHeight <= 65), 'Compact header height')
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'No page overflow')
+      if (width < 640) {
+        await searchControl.click()
+        await query.waitFor()
+      }
       await query.focus()
       await query.press('Tab')
-      assert.equal(await header.getByRole('button', {name:'New Song', exact:true}).evaluate(el => el === document.activeElement), width < 640)
+      if (width >= 640) {
+        assert.equal(await header.getByRole('button', {name:'Songbook', exact:true}).evaluate(el => el === document.activeElement), true)
+      } else {
+        assert.equal(await header.getByRole('button', {name:'Browse Song Sources', exact:true}).evaluate(el => el === document.activeElement), true)
+      }
       await context.setOffline(true)
       await query.fill('Beta')
       await main.getByText('Beta Song', {exact:true}).waitFor()
@@ -121,6 +133,9 @@ test('compact header: inline responsive local search, offline use and provider n
       assert.equal(externalRequests.length, 4, 'Only explicit provider actions navigate')
       assert.deepEqual(await records(), before, 'Search leaves favorites, tags and setlists intact')
       await page.reload()
+      if (width < 640) {
+        await header.getByRole('button', { name: 'Open search', exact: true }).click()
+      }
       await query.waitFor()
       assert.equal(await query.inputValue(), '', 'Query remains session-only')
       await header.getByRole('button', {name:'Browse Song Sources', exact:true}).click()
