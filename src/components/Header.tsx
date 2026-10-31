@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import styles from './Header.module.css'
+import { SearchResults } from './SearchResults'
+import type { SongEntity, WebSetlist } from '../types/gtar'
 import { GTAR1_VERSION } from '../types/gtar'
 import type { LocalUserProfile } from '../utils/localProfile'
 import { getInitials, DEFAULT_AVATAR_PATH } from '../utils/localProfile'
@@ -34,6 +36,11 @@ export interface HeaderProps {
   onToggleMobileDrawer: () => void
   isMobileDrawerOpen: boolean
   searchScopeLabel?: string
+  songs?: SongEntity[]
+  setlists?: WebSetlist[]
+  onSelectSong?: (song: SongEntity) => void
+  onSelectSetlist?: (setlist: WebSetlist) => void
+  onOpenImport?: () => void
   globalSearchRef?: React.RefObject<HTMLInputElement | null>
 }
 
@@ -52,6 +59,7 @@ export const Header: React.FC<HeaderProps> = ({
   isMobileDrawerOpen,
   searchScopeLabel = 'All Songs',
   globalSearchRef,
+  songs = [], setlists = [], onSelectSong, onSelectSetlist, onOpenImport,
 }) => {
   const [isSearchFocused, setIsSearchFocused] = useState(false)
   const [isMobileSearchActive, setIsMobileSearchActive] = useState(false)
@@ -145,6 +153,30 @@ export const Header: React.FC<HeaderProps> = ({
     onSearchChange('')
   }
 
+  const dismissResults = () => {
+    setIsSearchFocused(false)
+    setIsMobileSearchActive(false)
+  }
+  const resultsPanel = <SearchResults query={searchQuery} songs={songs} setlists={setlists}
+    onSelectSong={song => { dismissResults(); onSelectSong?.(song) }}
+    onSelectSetlist={setlist => { dismissResults(); onSelectSetlist?.(setlist) }}
+    onOpenSources={onOpenSources ? () => { dismissResults(); onOpenSources() } : undefined}
+    onOpenImport={onOpenImport ? () => { dismissResults(); onOpenImport() } : undefined} />
+  const handleSearchBlur = (event: React.FocusEvent<HTMLElement>) => {
+    if (!event.currentTarget.contains(event.relatedTarget as Node)) setIsSearchFocused(false)
+  }
+  const handleResultsKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (import.meta.env.GTAR1_DEV_NATIVE_SEARCH && event.key === 'ArrowDown' && event.target instanceof HTMLInputElement && searchQuery.trim()) {
+      event.preventDefault()
+      setIsSearchFocused(true)
+      requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('#global-search-results button:not(:disabled)')?.focus())
+    } else if (event.key === 'Escape' && !(event.target instanceof HTMLInputElement)) {
+      event.preventDefault()
+      ;(isMobile ? mobileInputRef : searchInputRef).current?.focus()
+      setIsSearchFocused(false)
+    }
+  }
+
   return (
     <header className="bg-app-header border-b border-app-border sticky top-0 z-40 px-3 py-2.5 relative">
       <div className={styles.layout}>
@@ -195,7 +227,9 @@ export const Header: React.FC<HeaderProps> = ({
             onSubmit={event => event.preventDefault()}
             role="search"
             aria-label="Global song search"
-            className={`hidden sm:flex ${styles.search}`}
+            onBlur={handleSearchBlur}
+            onKeyDown={handleResultsKeyDown}
+            className={`hidden sm:flex relative ${styles.search}`}
           >
             <div
               className={`header-search-box relative flex min-w-0 w-full items-center transition-all duration-200 rounded-xl border border-app-border bg-app-surface ${
@@ -213,11 +247,12 @@ export const Header: React.FC<HeaderProps> = ({
                 ref={searchInputRef}
                 type="text"
                 aria-label="Global search"
+                aria-controls="global-search-results"
+                maxLength={200}
                 value={searchQuery}
-                onChange={event => onSearchChange(event.target.value)}
+                onChange={event => { setIsSearchFocused(true); onSearchChange(event.target.value) }}
                 onKeyDown={handleKeyDown}
                 onFocus={() => setIsSearchFocused(true)}
-                onBlur={() => setIsSearchFocused(false)}
                 placeholder={`Search ${searchScopeLabel}... (Esc to clear)`}
                 className="header-search-input min-h-[36px] min-w-0 w-full py-1.5 pr-2 bg-transparent text-xs text-app-text placeholder:text-app-muted focus:outline-none"
               />
@@ -243,6 +278,7 @@ export const Header: React.FC<HeaderProps> = ({
                 </kbd>
               </div>
             </div>
+            {import.meta.env.GTAR1_DEV_NATIVE_SEARCH && isSearchFocused && searchQuery.trim() && <div className="absolute top-full left-0 right-0 pt-2 z-50">{resultsPanel}</div>}
           </form>
         )}
 
@@ -440,6 +476,8 @@ export const Header: React.FC<HeaderProps> = ({
           className="sm:hidden mobile-search-overlay absolute inset-0 z-50 flex items-center gap-2 px-3 bg-app-header border-b border-app-border animate-scale-in"
           role="search"
           aria-label="Mobile expanded song search"
+          onBlur={handleSearchBlur}
+          onKeyDown={handleResultsKeyDown}
         >
           <div className="header-search-box flex-1 relative flex items-center min-w-0 rounded-xl bg-app-surface border border-app-accent ring-2 ring-app-accent/20 px-3 py-1">
             <Search className="w-4 h-4 text-app-accent mr-2 shrink-0 pointer-events-none" />
@@ -447,8 +485,11 @@ export const Header: React.FC<HeaderProps> = ({
               ref={mobileInputRef}
               type="text"
               aria-label="Global search"
+              aria-controls="global-search-results"
+              maxLength={200}
+              onFocus={() => setIsSearchFocused(true)}
               value={searchQuery}
-              onChange={event => onSearchChange(event.target.value)}
+              onChange={event => { setIsSearchFocused(true); onSearchChange(event.target.value) }}
               onKeyDown={handleKeyDown}
               placeholder={`Search ${searchScopeLabel}...`}
               autoFocus
@@ -487,6 +528,7 @@ export const Header: React.FC<HeaderProps> = ({
           >
             Cancel
           </button>
+          {import.meta.env.GTAR1_DEV_NATIVE_SEARCH && isSearchFocused && searchQuery.trim() && <div className="absolute top-full left-0 right-0 px-3 pt-2">{resultsPanel}</div>}
         </div>
       )}
     </header>

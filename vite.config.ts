@@ -58,6 +58,9 @@ export default defineConfig(({ mode }) => {
 
   return {
     define: {
+      'import.meta.env.GTAR1_DEV_NATIVE_SEARCH': JSON.stringify(
+        appEnv === 'development' && mode !== 'production-pwa'
+      ),
       'import.meta.env.GTAR1_DEV_DIAGNOSTICS': JSON.stringify(
         appEnv === 'development' && mode !== 'production-pwa'
         && process.env.GTAR_ENV !== 'production' && process.env.VITE_APP_ENV !== 'production'

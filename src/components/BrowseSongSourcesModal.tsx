@@ -425,13 +425,22 @@ export const BrowseSongSourcesModal: React.FC<BrowseSongSourcesModalProps> = ({
   )
 
   const handleSaveImportedSong = async () => {
-    if (!parsedPreview) return
+    if (!parsedPreview || isSaving) return
     const cleanTitle = editTitle.trim()
     if (!cleanTitle) {
       setSaveError('Song title cannot be empty')
       return
     }
 
+    if (duplicateSong) {
+      setSaveError('A song with this title already exists. Choose Save as Copy or change the title.')
+      return
+    }
+    const fields = [editTitle, editArtist, editKey, editCapo, editBpm, editTime, editYear]
+    if (fields.some(field => field.length > 150 || /[\x00-\x1F\x7F{}]/.test(field))) {
+      setSaveError('Metadata must be at most 150 characters and cannot contain controls or braces.')
+      return
+    }
     setIsSaving(true)
     setSaveError(null)
 
@@ -445,6 +454,9 @@ export const BrowseSongSourcesModal: React.FC<BrowseSongSourcesModalProps> = ({
         time: editTime.trim() || undefined,
         year: editYear.trim() || undefined,
       })
+
+      const validated = parseImportedChordContent(syncedContent)
+      if (!validated.success) throw new Error(validated.error || 'Invalid chart content')
 
       const newSongEntity: SongEntity = {
         id: generateUUID(),
@@ -1130,7 +1142,7 @@ export const BrowseSongSourcesModal: React.FC<BrowseSongSourcesModalProps> = ({
                         <div>
                           <span className="font-bold">Duplicate Title Detected:</span>
                           <p className="text-[11px] text-amber-200/90 mt-0.5">
-                            A song titled &ldquo;{editTitle}&rdquo; already exists in your local songbook. Saving will create an independent new song without overwriting.
+                            A song titled &ldquo;{editTitle}&rdquo; already exists. Choose Save as Copy or change the title before saving.
                           </p>
                         </div>
                       </div>
