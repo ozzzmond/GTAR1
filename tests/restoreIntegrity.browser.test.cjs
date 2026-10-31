@@ -163,7 +163,9 @@ test('Real IndexedDB: baseline R1/R2/R6 and adversarial restore verification in 
     // Exercise the real React modal as well as storage APIs. This browser context
     // contains synthetic records only and is destroyed at the end of this test.
     await page.goto(origin)
-    await page.getByRole('button', { name: 'Backup and Restore', exact: true }).click()
+    const backupBtn = page.getByRole('button', { name: 'Backup and Restore', exact: true })
+    await backupBtn.waitFor({ state: 'visible', timeout: 60000 })
+    await backupBtn.click()
     await page.getByRole('button', { name: 'Restore From File / JSON' }).click()
     const beforePreview = await page.evaluate(() => JSON.stringify(localStorage))
     const uiBackup = { songs: [{ id: 'ui-new', title: 'UI synthetic new', rawContent: '', format: 'PLAIN', createdAt: 1, updatedAt: 1 }], setlists: [{ id: 'ui-list', name: 'UI synthetic list', songs: [] }], folders: [], themeMode: 'oled-black' }
@@ -177,7 +179,8 @@ test('Real IndexedDB: baseline R1/R2/R6 and adversarial restore verification in 
     assert.equal(previewDigest, results.committed, 'A12 preview leaves every persistent library store unchanged')
     await page.getByRole('button', { name: 'Cancel', exact: true }).click()
     assert.equal(await page.evaluate(() => JSON.stringify(localStorage)), beforePreview, 'A12 cancel does not mutate settings')
-    await page.getByRole('button', { name: 'Backup and Restore', exact: true }).click()
+    await backupBtn.waitFor({ state: 'visible', timeout: 60000 })
+    await backupBtn.click()
     await page.getByRole('button', { name: 'Restore From File / JSON' }).click()
     await page.locator('textarea').fill(JSON.stringify(uiBackup))
     await page.getByRole('combobox', { name: 'Restore behavior' }).selectOption('REPLACE')
