@@ -270,7 +270,7 @@ export interface ImportParseResult {
 function sanitizeField(value: string | undefined | null, maxLength = 150): string {
   if (!value) return ''
   return String(value)
-    .replace(/[\x00-\x1F\x7F]/g, ' ')
+    .replace(/[\x00-\x1F\x7F{}]/g, ' ')
     .trim()
     .slice(0, maxLength)
 }
@@ -290,7 +290,7 @@ export function parseImportedChordContent(
   }
 
   // Reject oversized input
-  if (rawText.length > MAX_IMPORT_BYTES) {
+  if (new TextEncoder().encode(rawText).byteLength > MAX_IMPORT_BYTES) {
     return {
       success: false,
       error: `Input content exceeds maximum allowed size of ${Math.round(MAX_IMPORT_BYTES / 1024)} KB.`,
@@ -298,7 +298,15 @@ export function parseImportedChordContent(
   }
 
   // Strip dangerous control characters while preserving newlines and tabs
+  // Adapt DEV.17 sanitizeUgMarkup only for user-supplied chart text.
+  // No HTML store extraction, remote fetch, or fabricated key/tempo defaults.
+  if (/<(?:!doctype|html|head|body|script|style|iframe|object|embed|svg|img)\b/i.test(rawText)) {
+    return { success: false, error: 'HTML pages are not chord charts. Paste plain text or ChordPro instead.' }
+  }
   const cleaned = rawText.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+    .replace(/\[ch\]([A-G][b#]?[a-zA-Z0-9#+/()_-]{0,30})\[\/ch\]/gi, '[$1]')
+    .replace(/\[\/?tab\]/gi, '')
+  if (!cleaned.trim()) return { success: false, error: 'Cannot import empty song content.' }
 
   // Extract canonical directives
   const { metadata, legacyDirectives } = parseChordProDirectives(cleaned)
@@ -344,7 +352,7 @@ export function parseImportedChordContent(
   }
 
   if (!title) {
-    title = options?.defaultTitle || 'Untitled Imported Song'
+    title = sanitizeField(options?.defaultTitle, 150) || 'Untitled Imported Song'
   }
 
   // Sync canonical updates to ensure directives reflect extracted title and artist

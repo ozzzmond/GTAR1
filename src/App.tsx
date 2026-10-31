@@ -115,6 +115,8 @@ export const App: React.FC = () => {
   const [isProfileOpen, setIsProfileOpen] = useState<boolean>(false)
   const [isThemeOpen, setIsThemeOpen] = useState<boolean>(false)
   const [isSourcesOpen, setIsSourcesOpen] = useState<boolean>(false)
+  const [sourcesInitialTab, setSourcesInitialTab] = useState<'browse' | 'import'>('browse')
+  const openSources = () => { setSourcesInitialTab('browse'); setIsSourcesOpen(true) }
   const [userProfile, setUserProfile] = useState<LocalUserProfile>(loadLocalProfile)
 
   // Stage Color Theme (persisted in localStorage)
@@ -786,13 +788,18 @@ export const App: React.FC = () => {
         onOpenBackup={() => setIsBackupOpen(true)}
         onOpenProfile={() => setIsProfileOpen(true)}
         onOpenTheme={() => setIsThemeOpen(true)}
-        onOpenSources={() => setIsSourcesOpen(true)}
+        onOpenSources={openSources}
         userProfile={userProfile}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         onToggleMobileDrawer={() => setIsMobileDrawerOpen(!isMobileDrawerOpen)}
         isMobileDrawerOpen={isMobileDrawerOpen}
         searchScopeLabel={searchScopeLabel}
+        songs={songs}
+        setlists={setlists}
+        onSelectSong={song => navigate(() => { clearSearch(); handleSelectSong(song) })}
+        onSelectSetlist={setlist => { clearSearch(); handleSelectNavTarget({ type: 'SETLIST', setlistId: setlist.id }) }}
+        onOpenImport={() => { setSourcesInitialTab('import'); setIsSourcesOpen(true) }}
       />
 
       <div className="flex-1 flex overflow-hidden">
@@ -809,7 +816,7 @@ export const App: React.FC = () => {
             onDeleteFolder={handleDeleteFolder}
             onNewSong={handleNewSong}
             onNewSetlist={handleNewSetlist}
-            onOpenSources={() => setIsSourcesOpen(true)}
+            onOpenSources={openSources}
             onSelectSetlist={(slId) => handleSelectNavTarget({ type: 'SETLIST', setlistId: slId })}
           />
         </aside>
@@ -840,7 +847,7 @@ export const App: React.FC = () => {
                 onDeleteFolder={handleDeleteFolder}
                 onNewSong={handleNewSong}
                 onNewSetlist={handleNewSetlist}
-                onOpenSources={() => setIsSourcesOpen(true)}
+                onOpenSources={openSources}
                 onSelectSetlist={(slId) => handleSelectNavTarget({ type: 'SETLIST', setlistId: slId })}
                 onCloseMobileDrawer={() => setIsMobileDrawerOpen(false)}
               />
@@ -865,7 +872,7 @@ export const App: React.FC = () => {
               onSelectSong={handleSelectSong}
               onEditSong={handleEditSong}
               onNewSong={handleNewSong}
-              onOpenSources={() => setIsSourcesOpen(true)}
+              onOpenSources={openSources}
               onDeleteSong={handleDeleteSong}
               onSaveSong={handleSaveFromEditor as any}
               onBulkUpdateSongs={handleBulkUpdateSongs}
@@ -1010,6 +1017,7 @@ export const App: React.FC = () => {
 
       {/* Browse Song Sources Modal */}
       <BrowseSongSourcesModal
+        initialTab={sourcesInitialTab}
         searchQuery={searchQuery}
         isOpen={isSourcesOpen}
         onClose={() => setIsSourcesOpen(false)}
