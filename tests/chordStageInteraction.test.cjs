@@ -169,3 +169,59 @@ test('CDX F1: actual SongViewer and Stage parents expose preview, full SVG, voic
   }
   dom.window.close()
 })
+
+test('Escape keeps an overlapping preview dismissed until pointer exit; explicit activation and later hover still work', (t) => {
+  const { JSDOM } = require('jsdom')
+  const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost/' })
+  Object.assign(global, {
+    window: dom.window, document: dom.window.document, Element: dom.window.Element,
+    HTMLElement: dom.window.HTMLElement, IS_REACT_ACT_ENVIRONMENT: true,
+  })
+  const { createRoot } = require('react-dom/client')
+  const { useChordDiagrams } = require('../src/components/useChordDiagrams.tsx')
+  const { act } = React
+  let diagrams
+  function Harness() {
+    diagrams = useChordDiagrams('dismissal-regression', true)
+    return React.createElement(React.Fragment, null, React.createElement('button', { id: 'trigger' }, 'Cadd9/E'), diagrams.overlays)
+  }
+  const root = createRoot(document.getElementById('root'))
+  const preview = () => document.querySelector('[data-chord-preview]')
+  const escape = () => act(() => window.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
+  try {
+    act(() => root.render(React.createElement(Harness)))
+    const trigger = document.getElementById('trigger')
+    trigger.getBoundingClientRect = () => ({ left: 100, right: 140, top: 200, bottom: 220, width: 40, height: 20 })
+    t.mock.timers.enable({ apis: ['setTimeout'] })
+    // The popup overlaps the trigger's pointer position. Its removal causes a
+    // browser-generated mouseenter without any intentional pointer movement.
+    act(() => diagrams.onChordClick('Cadd9/E', trigger))
+    act(() => preview().dispatchEvent(new window.MouseEvent('pointermove', { bubbles: true, clientX: 120, clientY: 210 })))
+    escape()
+    assert.equal(preview(), null)
+    assert.equal(document.activeElement, trigger, 'Escape restores trigger focus')
+    act(() => diagrams.onChordHover('Cadd9/E', trigger))
+    act(() => t.mock.timers.tick(250))
+    assert.equal(preview() === null, true, 'Stationary pointer cannot reopen dismissed preview')
+    act(() => diagrams.onChordClick('Cadd9/E', trigger))
+    assert.ok(preview(), 'Explicit activation still opens the same chord')
+    escape()
+    act(() => diagrams.onChordLeave())
+    act(() => diagrams.onChordHover('Cadd9/E', trigger))
+    act(() => t.mock.timers.tick(250))
+    assert.ok(preview(), 'Hover works again after pointer exit and reentry')
+    escape()
+    // With the pointer elsewhere, keyboard dismissal must not suppress the next
+    // intentional hover over the same trigger.
+    act(() => document.body.dispatchEvent(new window.MouseEvent('pointermove', { bubbles: true, clientX: 0, clientY: 0 })))
+    act(() => diagrams.onChordClick('Cadd9/E', trigger))
+    escape()
+    act(() => diagrams.onChordHover('Cadd9/E', trigger))
+    act(() => t.mock.timers.tick(250))
+    assert.ok(preview(), 'Pointer elsewhere does not suppress a later hover')
+  } finally {
+    act(() => root.unmount())
+    t.mock.timers.reset()
+    dom.window.close()
+  }
+})

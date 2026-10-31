@@ -11,6 +11,8 @@ export function useChordDiagrams(context: string, enabled: boolean) {
   const [pinned, setPinned] = useState(false)
   const trigger = useRef<HTMLElement | null>(null)
   const pinnedRef = useRef(false)
+  const pointer = useRef<{ x: number; y: number } | null>(null)
+  const dismissedTrigger = useRef<HTMLElement | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const cancelTimer = useCallback(() => {
     if (timer.current) clearTimeout(timer.current)
@@ -18,12 +20,31 @@ export function useChordDiagrams(context: string, enabled: boolean) {
   }, [])
   const close = useCallback(() => {
     cancelTimer()
+    // Removing an overlapping popup can expose its trigger under a stationary
+    // pointer and synthesize mouseenter. Keep Escape/close effective until exit.
+    const rect = trigger.current?.getBoundingClientRect()
+    const point = pointer.current
+    dismissedTrigger.current = rect && point && point.x >= rect.left && point.x <= rect.right
+      && point.y >= rect.top && point.y <= rect.bottom ? trigger.current : null
     setAnchor(null)
     setSelectedChord(null)
     if (pinnedRef.current) trigger.current?.focus()
     pinnedRef.current = false
     setPinned(false)
   }, [cancelTimer])
+
+  useEffect(() => {
+    const trackPointer = (event: PointerEvent) => {
+      pointer.current = { x: event.clientX, y: event.clientY }
+      if (dismissedTrigger.current && !dismissedTrigger.current.contains(event.target as Node)) dismissedTrigger.current = null
+    }
+    document.addEventListener('pointermove', trackPointer)
+    document.addEventListener('pointerdown', trackPointer)
+    return () => {
+      document.removeEventListener('pointermove', trackPointer)
+      document.removeEventListener('pointerdown', trackPointer)
+    }
+  }, [])
 
   useEffect(() => { close() }, [context, enabled, close])
   useEffect(() => cancelTimer, [cancelTimer])
@@ -47,6 +68,7 @@ export function useChordDiagrams(context: string, enabled: boolean) {
   const onChordClick = (chord: string, target?: HTMLElement) => {
     if (!enabled) return
     cancelTimer()
+    dismissedTrigger.current = null
     trigger.current = target || null
     pinnedRef.current = true
     setPinned(true)
@@ -59,13 +81,14 @@ export function useChordDiagrams(context: string, enabled: boolean) {
   }
   const onChordHover = (chord: string, target: HTMLElement) => {
     cancelTimer()
-    if (!enabled || pinnedRef.current || selectedChord) return
+    if (!enabled || pinnedRef.current || selectedChord || dismissedTrigger.current === target) return
     timer.current = setTimeout(() => {
       trigger.current = target
       setAnchor({ chord, rect: target.getBoundingClientRect() })
     }, 250)
   }
   const onChordLeave = () => {
+    dismissedTrigger.current = null
     cancelTimer()
     if (!pinnedRef.current) timer.current = setTimeout(close, 200)
   }
