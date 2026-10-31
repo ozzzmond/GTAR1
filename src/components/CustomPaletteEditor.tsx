@@ -188,7 +188,10 @@ export const CustomPaletteEditor: React.FC<CustomPaletteEditorProps> = ({
     // Apply imported values to the editor preview only (stagedColors), not persistent yet
     const nextColors = { ...result.colors }
     if (stagedColors.identity) {
-      nextColors.identity = { ...stagedColors.identity }
+      nextColors.identity = {
+        factoryId: stagedColors.identity.factoryId,
+        displayName: result.colors.identity?.displayName || stagedColors.identity.displayName,
+      }
     } else {
       delete nextColors.identity
     }

@@ -864,6 +864,9 @@ export const ThemeModal: React.FC<ThemeModalProps> = ({
       return false
     }
 
+    setOverrides(nextOverrides)
+    setStagedTheme(mode)
+    setStandaloneColors(cleanStandalone)
     committedAppearanceRef.current = {
       mode,
       standalone: cleanStandalone,

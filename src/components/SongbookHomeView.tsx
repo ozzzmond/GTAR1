@@ -548,7 +548,7 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
                   <button
                     type="button"
                     onClick={() => onEnterStageSetlist(activeSetlist, 0)}
-                    className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm"
+                    className="px-3.5 py-1.5 rounded-xl bg-app-action hover:brightness-110 text-app-on-action text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm"
                   >
                     <Play className="w-3.5 h-3.5 fill-current" />
                     <span>Play in Stage</span>
@@ -617,7 +617,7 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
                               e.stopPropagation()
                               onEnterStageSetlist(activeSetlist, idx)
                             }}
-                            className="p-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
+                            className="p-1.5 rounded-lg bg-app-action hover:brightness-110 text-app-on-action transition-colors"
                             title="Play in Stage"
                             aria-label="Play in Stage"
                           >
@@ -650,7 +650,7 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="ui-primary-text text-base font-bold text-app-heading flex items-center gap-2">
-                <ListMusic className="w-4 h-4 text-purple-400" />
+                <ListMusic className="ui-section-icon w-4 h-4 text-app-section" />
                 <span>
                   {currentNavTarget.type === 'FOLDER'
                     ? folderMap.get(currentNavTarget.folderId)?.name || 'Folder Setlists'
@@ -683,7 +683,7 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
                     <div>
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex items-center gap-2">
-                          <ListMusic className="w-4 h-4 text-purple-400" />
+                          <ListMusic className="ui-section-icon w-4 h-4 text-app-section" />
                           <h3 className="ui-primary-text text-sm font-bold text-app-heading group-hover:text-app-link transition-colors">
                             {sl.name}
                           </h3>
@@ -725,8 +725,8 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
         {!isSetlistContext && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-white flex items-center gap-2">
-                <Music className="w-4 h-4 text-sky-400" />
+              <h2 className="ui-primary-text text-base font-bold text-app-heading flex items-center gap-2">
+                <Music className="ui-section-icon w-4 h-4 text-app-section" />
                 <span>
                   {currentNavTarget.type === 'TAG' ? `Songs tagged #${currentNavTarget.tag}` : 'All Songs'}
                 </span>
@@ -885,7 +885,7 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
                                       setActiveMenuSongId(null)
                                       onEnterStageSong(song)
                                     }}
-                                    className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-app-hover text-emerald-400 flex items-center gap-2"
+                                    className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-app-hover text-app-action flex items-center gap-2"
                                   >
                                     <Play className="w-3.5 h-3.5 fill-current" />
                                     <span>Play in Stage</span>
@@ -993,7 +993,7 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
                               }}
                               title="Play in Stage"
                               aria-label={`Play ${song.title} in Stage`}
-                              className="px-2 py-0.5 rounded-md bg-emerald-700/80 hover:bg-emerald-600 text-white font-semibold text-[11px] transition-colors flex items-center gap-1"
+                              className="px-2 py-0.5 rounded-md bg-app-action hover:brightness-110 text-app-on-action font-semibold text-[11px] transition-colors flex items-center gap-1"
                             >
                               <Play className="w-2.5 h-2.5 fill-current" />
                               <span>Stage</span>

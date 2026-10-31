@@ -214,11 +214,6 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </button>
 
-          {/* Local Offline Pill */}
-          <span title="Local Standalone" className={`hidden lg:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-950/60 text-emerald-400 border border-emerald-800/60 ${styles.status}`}>
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-            <span>Local Standalone</span>
-          </span>
         </div>
 
         {/* Center: Desktop search bar (Design 2 revamp) */}
