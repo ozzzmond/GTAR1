@@ -92,6 +92,52 @@ environment, diagnostics, or icons.
   implement-spec, wayfinder, triage, to-tickets, code-review,
   improve-codebase-architecture, or any parallel subagent fan-out.
 
+## UI Review Skill (pbakaus/impeccable)
+- Role: UI reviewer and slop detector only, not a redesigner. DEV trial,
+  adopted alongside GTAR; issues found in either repo are fixed in both, each
+  by its own PR. Do not edit GTAR from this repo.
+- Source: github.com/pbakaus/impeccable (Apache-2.0), vendored by manual copy
+  into `.agents/skills/impeccable/`, pinned to upstream commit `77ac20b968ee` (skill 4.8.0, engine 0.1.18).
+  Do not edit or auto-update; updates go through a normal PR to dev.
+- Dev tooling only, never runtime: no `npx impeccable install`, no design hook,
+  no submodule, no editor plugin, and never add impeccable to package.json or
+  the runtime dependency graph. Run it only through pinned `npx`.
+- Telemetry off: `.impeccable/config.json` contains `"telemetry": false`.
+  Commit only that file; the rest of `.impeccable/` is gitignored. Findings go
+  in the chat report, not in committed critique/review files.
+- PRODUCT.md / DESIGN.md (repo root) are written once by `init` / `document`
+  with owner approval. Reference only: this file overrides them and the skill.
+  Same skip rule as above for commit/merge/tag/push/issue/subagent steps.
+- Allowed, read-only:
+  - `npx impeccable@4.8.0 detect --json src` — deterministic, no LLM.
+    Exit 0 clean, 2 findings, 1 scan failed: report the code, do not
+    retry-loop.
+  - `npx impeccable@4.8.0 detect --json http://localhost:5173` —
+    local dev server only.
+  - `critique <one component>`, `audit <one surface>` — findings P0–P3, no
+    code changes.
+- Allowed only after the owner picks findings: harden, adapt, clarify,
+  typeset, layout, polish, optimize. One target, one fix round, then report and
+  stop. Never chain critique → fix → critique without owner approval.
+- Not allowed unless the owner names the command: live, generate, bolder,
+  quieter, distill, overdrive, delight, colorize, animate, onboard, shape,
+  extract, craft, pin.
+- Never: weaken any Project Profile guarantee; add Google, cloud, web fonts,
+  CDN, or any network request; touch IndexedDB/storage, backup/restore,
+  import/export, chord/key/transpose, or ported src/utils modules; change data
+  shape or saved user content as part of a design fix; hardcode colors outside
+  existing theme tokens; modify LICENSE, NOTICE, or mascot assets; run
+  whole-app passes.
+- First runs, one directive each: (1) detect on src → baseline counts per
+  rule, flag noisy rules; (2) rendered detect → contrast/tiny-text baseline;
+  (3) `audit` of the fullscreen chart view, findings only; (4) owner decides
+  ignore list (`ignores add-value … --reason`).
+- Verification: the Verification commands above, plus a detector re-run on the
+  target (targeted findings resolved, no new P0/P1). Skill adoption needs no
+  version bump or tag.
+- Audit-script use: pass only rule counts, exit code, and top P0/P1 items to
+  any model, never the full JSON.
+
 ## Domain Terms
 Use these exact terms in code, tests, PRs, and reports:
 - ORIGINAL_KEY — verified source/original song key.
