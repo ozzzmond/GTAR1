@@ -72,6 +72,8 @@ environment, diagnostics, or icons.
 - Source: github.com/mattpocock/skills, installed as an editable copy pinned
   to upstream commit `4ae2317ddb22`. Do not auto-update; updates go through
   a normal PR to dev.
+- If a named skill is missing in your environment, do not block: follow its
+  one-line description below and say so in your report.
 - Precedence: this file overrides any skill. If a skill step says to commit,
   merge, tag, push, open a tracker issue, or spawn subagents, skip that step
   and report it instead.
