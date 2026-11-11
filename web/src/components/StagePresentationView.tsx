@@ -62,7 +62,7 @@ export const StagePresentationView: React.FC = () => {
   // Listen to real-time Stage Cast updates and Presentation API receiver connections
   useEffect(() => {
     // Set clean secondary window title so presentation banner doesn't show duplicate lines
-    document.title = import.meta.env.DEV ? 'GTAR-Dev Live Stage Companion' : 'GTAR Stage Display'
+    document.title = import.meta.env.DEV ? 'GTAR-Dev Live Stage Companion' : 'GTAR1 Stage Display'
 
     const applyScroll = (scrollTop: number, scrollFraction: number) => {
       const container = containerRef.current

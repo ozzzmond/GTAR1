@@ -8,10 +8,11 @@
  * per-record sync never uploads them.
  */
 import type { ActiveSongState, WebSetlist } from '../types/gtar'
+import { GTAR1_DEMO_SETLISTS, GTAR1_DEMO_SONGS } from './gtar1DemoSeed'
 
 /** Kept for existing imports: no songs and no setlists ship with the app. */
-export const DEFAULT_SETLIST: ActiveSongState[] = []
-export const DEFAULT_SAMPLE_SETLISTS: WebSetlist[] = []
+export const DEFAULT_SETLIST: ActiveSongState[] = import.meta.env.VITE_GTAR1_DEMO === '1' ? GTAR1_DEMO_SONGS : []
+export const DEFAULT_SAMPLE_SETLISTS: WebSetlist[] = import.meta.env.VITE_GTAR1_DEMO === '1' ? GTAR1_DEMO_SETLISTS : []
 
 /** Shown when the library is empty. Not part of the library; never saved or synced. */
 export const EMPTY_LIBRARY_SONG: ActiveSongState = {

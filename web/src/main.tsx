@@ -31,7 +31,7 @@ if (typeof window !== 'undefined') {
 function applyEnvironmentBranding(isDev: boolean) {
   if (typeof document === 'undefined') return
 
-  document.title = isDev ? 'GTAR-Dev Live Stage Companion' : 'GTAR Live Stage Companion'
+  document.title = isDev ? 'GTAR-Dev Live Stage Companion' : (import.meta.env.VITE_GTAR1_DEMO === '1' ? 'GTAR1 Demo' : 'GTAR1 Live Stage Companion')
 
   const iconHref = isDev ? '/favicon.png' : '/favicon-prod.png'
   const appleHref = isDev ? '/apple-touch-icon.png' : '/apple-touch-icon-prod.png'

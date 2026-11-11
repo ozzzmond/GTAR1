@@ -142,7 +142,7 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
               <span>Local-First Storage</span>
             </div>
             <p className="text-[11px] text-app-text leading-relaxed">
-              GTAR runs 100% offline. All songbooks, setlists, custom themes, and preferences are stored directly on this device via browser storage. No mandatory login is required.
+              GTAR1 runs 100% offline. All songbooks, setlists, custom themes, and preferences are stored directly on this device via browser storage. No mandatory login is required.
             </p>
           </div>
 
