@@ -1,0 +1,1711 @@
+import { useTagLibrary } from '../utils/tagLibraryContext'
+import { normalizeTags, tagChipStyle } from '../utils/songTags'
+import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react'
+import {
+  Music,
+  Activity,
+  Type,
+  User,
+  Tag,
+  Save,
+  FileEdit,
+  ClipboardPaste,
+  Copy,
+  Trash2,
+  ArrowLeft,
+  SlidersHorizontal,
+  X,
+  Calendar,
+  Clock,
+  SquareCode,
+  Check,
+  MoreHorizontal,
+  FilePlus,
+  Layers,
+  Undo2,
+  Redo2,
+} from 'lucide-react'
+import { EditorToolbarButton } from './EditorToolbarButton'
+import { ChordProCodeEditor } from './ChordProCodeEditor'
+import { DropdownPortal } from './DropdownPortal'
+import { SongLineRenderer } from './SongLineRenderer'
+import { parseGtarSong, standardizeChordProBrackets } from '../utils/songParser'
+import { TextHistory, indentText, type TextEdit } from '../utils/editorText'
+import { normalizeMusicalKey, canonicalSongKey, keysArePitchEquivalent } from '../utils/musicalKey'
+import { parseChordProDirectives, syncCanonicalDirectives, type CanonicalMetadata } from '../utils/chordProMetadata'
+import { declaredKey, resolveSongKeys, transposeContext, wrapKeyOffset } from '../utils/songKeySemantics'
+import { transposeCanonicalSong } from '../utils/chartKeyAlignment'
+import { generateUUID } from '../utils/uuid'
+import type { ActiveSongState } from '../types/gtar'
+
+export function createBlankCanonicalSong(): ActiveSongState {
+  return {
+    id: generateUUID(),
+    title: 'New Song',
+    artist: '',
+    key: '',
+    capo: 'No Capo',
+    bpm: '120',
+    format: 'CHORD_PRO',
+    transposeOffset: 0,
+    rawContent: `{title: New Song}\n{artist: }\n{original_key: }\n{tempo: 120 BPM}\n{time: 4/4}\n{year: }\n\n[Intro]\n\n[Verse 1]\n\n[Chorus]\n`,
+  }
+}
+
+interface DesktopEditorProps {
+  song: ActiveSongState
+  onUpdateSong: (updated: Partial<ActiveSongState>) => boolean | void
+  onSaveSong?: (updated: ActiveSongState) => boolean | void
+  onClose?: () => void
+  navigationGuardRef?: React.RefObject<((next: () => void) => void) | null>
+  recoveryDraftRef?: React.RefObject<(() => ActiveSongState | null) | null>
+  /** #170: called when the editor closes after autosaving edits, so the app can confirm "Changes saved". */
+  onLeaveWithSavedChanges?: () => void
+  transposeOffset: number
+  onNewSong?: () => void
+}
+
+type ChartTextEdit = TextEdit & { chartState?: { key: string; originalKey: string; confirmedChartKey: string; transposeOffset: number } }
+
+const QUICK_GENRE_TAGS = ['Worship', 'OPM', 'Acoustic', 'Rock', 'Slow Rock', 'Encore']
+const QUICK_SECTIONS = ['[Intro]', '[Verse 1]', '[Chorus]', '[Bridge]', '[Solo]', '[Outro]', '[Tab]']
+
+export const DesktopEditor: React.FC<DesktopEditorProps> = ({
+  song,
+  onUpdateSong,
+  onSaveSong,
+  onClose,
+  transposeOffset: suppliedOffset,
+  navigationGuardRef,
+  recoveryDraftRef,
+  onNewSong,
+  onLeaveWithSavedChanges,
+}) => {
+  const [editingSong, setEditingSong] = useState<ActiveSongState>(song)
+  // A failed text transformation must retain its rebased offset in the draft.
+  const [pendingOffset, setPendingOffset] = useState<{ source: number; value: number } | null>(null)
+  const transposeOffset = pendingOffset?.source === suppliedOffset ? pendingOffset.value : suppliedOffset
+  const [confirmedChartKey, setConfirmedChartKey] = useState(song.confirmedChartKey || '')
+  const [chartConfirmation, setChartConfirmation] = useState('')
+  const [keyDeletion, setKeyDeletion] = useState<{ text: string; key: string } | null>(null)
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- A new external selection supersedes a pending text-transform offset.
+    setPendingOffset(null)
+  }, [suppliedOffset])
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const [insertAnchor, setInsertAnchor] = useState<HTMLButtonElement | null>(null)
+  const [insertOpen, setInsertOpen] = useState(false)
+
+  // Local editor state initialized from active song
+  const [localTitle, setLocalTitle] = useState(song.title || '')
+  const [localArtist, setLocalArtist] = useState(song.artist || '')
+  const [localKey, setLocalKey] = useState(song.rawContent && !declaredKey(song.rawContent).present ? song.confirmedChartKey || '' : declaredKey(song.rawContent || '').key || normalizeMusicalKey(song.key || '') || song.key || '')
+  const [localOriginalKey, setLocalOriginalKey] = useState(song.originalKey || declaredKey(song.rawContent || '', true).key)
+  const [localBpm, setLocalBpm] = useState(song.bpm || '')
+  const [localTime, setLocalTime] = useState(song.time || '')
+  const [localYear, setLocalYear] = useState(song.year || '')
+  const { colors: tagColors } = useTagLibrary()
+  const [localTags, setLocalTags] = useState(normalizeTags(song.tags))
+  const [localRawContent, setLocalRawContent] = useState(() =>
+    standardizeChordProBrackets(song.rawContent || '')
+  )
+
+  const [toastMessage, setToastMessage] = useState<string | null>(null)
+  const [copyFeedback, setCopyFeedback] = useState(false)
+  const [editorMode, setEditorMode] = useState<'code' | 'raw'>('code')
+  const fields = (value: ActiveSongState) => ({
+    title: value.title || '',
+    artist: value.artist || '',
+    // Compare the same raw-authoritative chart state used by the draft initializer.
+    key: value.rawContent && !declaredKey(value.rawContent).present ? value.confirmedChartKey || '' : value.key || '',
+    originalKey: value.originalKey || '',
+    confirmedChartKey: value.confirmedChartKey || '',
+    capo: value.capo || '',
+    bpm: value.bpm || '',
+    time: value.time || '',
+    year: value.year || '',
+    tags: JSON.stringify(normalizeTags(value.tags)),
+    rawContent: value.rawContent || '',
+  })
+  const [persisted, setPersisted] = useState(() => fields(song))
+  const history = useRef(new TextHistory())
+  const [historyCanUndo, setHistoryCanUndo] = useState(false)
+  const [historyCanRedo, setHistoryCanRedo] = useState(false)
+  const [splitRatio, setSplitRatio] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('gtar_editor_split_ratio')
+      if (saved) {
+        const num = parseFloat(saved)
+        if (!isNaN(num) && num >= 20 && num <= 80) return num
+      }
+    } catch {
+      // ignore
+    }
+    return 50
+  })
+  const splitContainerRef = useRef<HTMLDivElement>(null)
+  const selection = useRef({ start: 0, end: 0 })
+  const pendingCaretRestoration = useRef<{
+    songId?: string | number
+    selectionStart: number
+    selectionEnd: number
+    scrollTop: number
+    scrollLeft: number
+  } | null>(null)
+
+  const captureEditorSelection = () => {
+    if (editorMode !== 'raw') return
+    const textarea = textareaRef.current
+    if (textarea) {
+      selection.current = { start: textarea.selectionStart, end: textarea.selectionEnd }
+      pendingCaretRestoration.current = {
+        songId: editingSong.id,
+        selectionStart: textarea.selectionStart,
+        selectionEnd: textarea.selectionEnd,
+        scrollTop: textarea.scrollTop,
+        scrollLeft: textarea.scrollLeft,
+      }
+    }
+  }
+
+  useLayoutEffect(() => {
+    if (editorMode !== 'raw') {
+      pendingCaretRestoration.current = null
+      return
+    }
+    if (!pendingCaretRestoration.current) return
+    const { songId, selectionStart, selectionEnd, scrollTop, scrollLeft } = pendingCaretRestoration.current
+    if (songId !== editingSong.id) {
+      pendingCaretRestoration.current = null
+      return
+    }
+    const textarea = textareaRef.current
+    if (!textarea) return
+
+    const maxLen = textarea.value.length
+    const clampedStart = Math.min(Math.max(0, selectionStart), maxLen)
+    const clampedEnd = Math.min(Math.max(clampedStart, selectionEnd), maxLen)
+
+    try {
+      if (typeof textarea.focus === 'function') {
+        textarea.focus({ preventScroll: true })
+      }
+    } catch {
+      textarea.focus?.()
+    }
+
+    textarea.setSelectionRange(clampedStart, clampedEnd)
+    textarea.scrollTop = scrollTop
+    textarea.scrollLeft = scrollLeft
+    selection.current = { start: clampedStart, end: clampedEnd }
+    pendingCaretRestoration.current = null
+  }, [localRawContent, editingSong.id, editorMode])
+  const [pendingNavigation, setPendingNavigation] = useState<(() => void) | null>(null)
+
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveFailed, setSaveFailed] = useState(false)
+  const draft = {
+    title: localTitle,
+    artist: localArtist,
+    key: localKey,
+    originalKey: localOriginalKey,
+    confirmedChartKey,
+    capo: editingSong.capo || '',
+    bpm: localBpm,
+    time: localTime,
+    year: localYear,
+    tags: JSON.stringify(normalizeTags(localTags)),
+    rawContent: localRawContent,
+  }
+  const isSaved = Object.entries(draft).every(([key, value]) => persisted[key as keyof typeof persisted] === value)
+  const saveStatus: 'SAVING' | 'SAVED' | 'FAILED' | 'UNSAVED' =
+    isSaving ? 'SAVING' : saveFailed && !isSaved ? 'FAILED' : isSaved ? 'SAVED' : 'UNSAVED'
+  useEffect(() => {
+    if (recoveryDraftRef) recoveryDraftRef.current = () => isSaved ? null : { ...editingSong, ...draft, tags: normalizeTags(localTags), transposeOffset }
+    return () => { if (recoveryDraftRef) recoveryDraftRef.current = null }
+  })
+  const keyContext = transposeContext({ key: localKey, confirmedChartKey, originalKey: localOriginalKey, rawContent: localRawContent }, transposeOffset)
+  const keyConflict = keyContext.chartConflict || keyContext.originalConflict
+  // #170: autosave is silent, so confirm on leave that this session's edits were kept.
+  const autosavedEditsRef = useRef(false)
+  const leaveStateRef = useRef({ isSaved, onLeaveWithSavedChanges })
+  useEffect(() => { leaveStateRef.current = { isSaved, onLeaveWithSavedChanges } })
+  useEffect(() => () => {
+    const { isSaved: saved, onLeaveWithSavedChanges: notify } = leaveStateRef.current
+    if (autosavedEditsRef.current && saved) notify?.()
+  }, [])
+  const autosave = (updated: Partial<ActiveSongState>) => {
+    const isRedundant = Object.entries(updated).every(
+      ([key, val]) => persisted[key as keyof typeof persisted] === val
+    )
+    if (isRedundant && updated.rawContent !== undefined) {
+      return
+    }
+
+    const next = { ...updated, id: editingSong.id }
+    if (updated.rawContent === undefined) {
+      const canonical: CanonicalMetadata = {}
+      for (const field of ['title', 'artist', 'key', 'originalKey', 'bpm', 'time', 'year'] as const) {
+        if (updated[field] !== undefined) canonical[field] = updated[field]
+      }
+      if (Object.keys(canonical).length > 0) {
+        const rawContent = syncCanonicalDirectives(localRawContent, canonical)
+        next.rawContent = rawContent
+        setLocalRawContent(rawContent)
+      }
+    }
+    const keys = resolveSongKeys({ ...draft, ...next })
+    if (keys.chartConflict || keys.originalConflict) { setSaveFailed(true); return }
+    try {
+      const res = onUpdateSong(next)
+      if (res === true) {
+        setPersisted(previous => ({ ...previous, ...next, tags: next.tags === undefined ? previous.tags : JSON.stringify(normalizeTags(next.tags)) }))
+        autosavedEditsRef.current = true
+        setSaveFailed(false)
+      } else {
+        setSaveFailed(true)
+      }
+    } catch {
+      setSaveFailed(true)
+      showToast('Changes are not saved. Retry saving before leaving.')
+    }
+  }
+  const requestNavigation = (next: () => void) => {
+    if (isSaved) next()
+    else setPendingNavigation(previous => previous ? () => { previous(); next() } : next)
+  }
+  useEffect(() => {
+    if (navigationGuardRef) navigationGuardRef.current = requestNavigation
+    return () => { if (navigationGuardRef) navigationGuardRef.current = null }
+  })
+  useEffect(() => {
+    if (isSaved) return
+    const guard = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = '' }
+    window.addEventListener('beforeunload', guard)
+    return () => window.removeEventListener('beforeunload', guard)
+  }, [isSaved])
+  const [isMetadataModalOpen, setIsMetadataModalOpen] = useState(false)
+
+  const handleConfirmTransposeToOriginalKey = (targetOriginalKey: string | null | undefined) => {
+    const validated = normalizeMusicalKey(targetOriginalKey)
+    if (!validated) {
+      showToast('Invalid Original Key')
+      return
+    }
+    const currentKey = keyContext.chartEstimated ? '' : normalizeMusicalKey(keyContext.chartKey)
+    if (keyConflict || (currentKey && currentKey.endsWith('m') !== validated.endsWith('m'))) {
+      showToast('Resolve key metadata and matching major/minor modes before transposing')
+      return
+    }
+    if (!currentKey) {
+      showToast('Set current key before transposing')
+      return
+    }
+
+    if (currentKey === validated) {
+      setLocalOriginalKey(validated)
+      autosave({ originalKey: validated })
+      showToast('Chart is already in Original Key')
+      return
+    }
+
+    // Call deterministic transposition
+    const transposed = transposeCanonicalSong(localRawContent, currentKey, validated)
+    const rebasedOffset = wrapKeyOffset(transposeOffset - transposed.semitones)
+    setPendingOffset({ source: suppliedOffset, value: rebasedOffset })
+    setConfirmedChartKey(transposed.key)
+    setLocalKey(transposed.key)
+    setLocalOriginalKey(validated)
+    const alignedContent = syncCanonicalDirectives(transposed.rawContent, { originalKey: validated })
+    const previous: ChartTextEdit = { text: localRawContent, ...selection.current,
+      chartState: { key: localKey, originalKey: localOriginalKey, confirmedChartKey, transposeOffset } }
+    history.current.record(previous, { text: alignedContent, ...selection.current })
+    setHistoryCanUndo(history.current.canUndo())
+    setHistoryCanRedo(history.current.canRedo())
+    setLocalRawContent(alignedContent)
+
+    autosave({
+      key: transposed.key,
+      confirmedChartKey: transposed.key,
+      transposeOffset: rebasedOffset,
+      originalKey: validated,
+      rawContent: alignedContent,
+    })
+    showToast(`Chart transposed from ${currentKey} to Original Key ${validated} (${transposed.semitones > 0 ? '+' : ''}${transposed.semitones} semitones)`)
+  }
+
+  // Reset local state when active song changes
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Switching song identity resets the draft and undo history together.
+    setEditingSong(song)
+    setPendingOffset(null)
+    setConfirmedChartKey(song.confirmedChartKey || '')
+    setChartConfirmation('')
+    setKeyDeletion(null)
+    const parsedMeta = parseChordProDirectives(song.rawContent || '').metadata
+    setLocalTitle(song.title || parsedMeta.title || '')
+    setLocalArtist(song.artist || parsedMeta.artist || '')
+    const initKey = song.rawContent && !declaredKey(song.rawContent).present ? song.confirmedChartKey || '' : declaredKey(song.rawContent || '').key || normalizeMusicalKey(song.key || parsedMeta.key || '') || song.key || parsedMeta.key || ''
+    setLocalKey(initKey)
+    setLocalOriginalKey(song.originalKey || declaredKey(song.rawContent || '', true).key)
+    setLocalBpm(song.bpm || (parsedMeta.tempo ? String(parsedMeta.tempo) : ''))
+    setLocalTime(song.time || parsedMeta.time || '')
+    setLocalYear(song.year || (parsedMeta.year ? String(parsedMeta.year) : ''))
+    setLocalTags(normalizeTags(song.tags))
+    setLocalRawContent(standardizeChordProBrackets(song.rawContent || ''))
+    setPersisted(fields(song))
+    autosavedEditsRef.current = false
+    setSaveFailed(false)
+    setIsSaving(false)
+    history.current = new TextHistory()
+    setHistoryCanUndo(false)
+    setHistoryCanRedo(false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Same-ID updates must not erase the unsaved draft or undo history.
+  }, [song.id])
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg)
+    setTimeout(() => setToastMessage(null), 3500)
+  }
+
+  // Real-time live stage preview parsing
+  const parsedSong = useMemo(() => {
+    return parseGtarSong(localRawContent, transposeOffset)
+  }, [localRawContent, transposeOffset])
+
+  // Handle new blank song action with unsaved changes protection
+  const handleNewSong = () => {
+    requestNavigation(() => {
+      const blank = createBlankCanonicalSong()
+      setEditingSong(blank)
+      setPendingOffset(null)
+      setConfirmedChartKey('')
+      setLocalTitle(blank.title)
+      setLocalArtist(blank.artist)
+      const initKey = canonicalSongKey(blank.key || '')
+      setLocalKey(initKey)
+      setLocalOriginalKey('')
+      setLocalBpm(blank.bpm || '')
+      setLocalTime('')
+      setLocalYear('')
+      setLocalTags([])
+      setLocalRawContent(blank.rawContent || '')
+      setPersisted(fields(blank))
+      setSaveFailed(false)
+      setIsSaving(false)
+      history.current = new TextHistory()
+      setHistoryCanUndo(false)
+      setHistoryCanRedo(false)
+      showToast('New blank song started')
+      onNewSong?.()
+    })
+  }
+
+  // Handle saving changes
+  const handleSave = () => {
+    if (keyDeletion) return false
+    const currentMeta = parseChordProDirectives(localRawContent).metadata
+    const resolvedTitle = localTitle.trim() || currentMeta.title || 'Untitled Song'
+    const resolvedArtist = localArtist.trim() || currentMeta.artist || ''
+    const rawKey = localKey.trim() || currentMeta.key || ''
+    const effectiveKey = normalizeMusicalKey(rawKey)
+    if (effectiveKey === null) { showToast('Enter a valid key, such as G, F#m or Bb.'); return false }
+    if (keyConflict) { showToast('Resolve conflicting or invalid key metadata before saving.'); return false }
+
+    const resolvedBpm = localBpm.trim() || (currentMeta.tempo ? String(currentMeta.tempo) : '')
+    const resolvedTime = localTime.trim() || currentMeta.time || ''
+    const resolvedYear = localYear.trim() || (currentMeta.year ? String(currentMeta.year) : '')
+
+    // Synchronize canonical ChordPro directives in rawContent
+    const canonicalMetadata: CanonicalMetadata = {
+      title: resolvedTitle,
+      artist: resolvedArtist,
+      // A removed raw chart directive stays absent; cached chart metadata is cleared.
+      ...(declaredKey(localRawContent).key ? { key: effectiveKey } : {}),
+      tempo: resolvedBpm || undefined,
+      time: resolvedTime || undefined,
+      year: resolvedYear || undefined,
+    }
+    const syncedContent = syncCanonicalDirectives(localRawContent, canonicalMetadata)
+    const standardized = standardizeChordProBrackets(syncedContent)
+
+    const updatedSong: ActiveSongState = {
+      ...editingSong,
+      title: resolvedTitle,
+      artist: resolvedArtist,
+      key: effectiveKey,
+      confirmedChartKey: confirmedChartKey || undefined,
+      ...(localOriginalKey.trim() ? { originalKey: canonicalSongKey(localOriginalKey.trim()) } : { originalKey: undefined }),
+      bpm: resolvedBpm,
+      time: resolvedTime || undefined,
+      ...(resolvedYear ? { year: resolvedYear } : { year: undefined }),
+      tags: normalizeTags(localTags),
+      rawContent: standardized,
+      format: 'CHORD_PRO',
+      transposeOffset,
+    }
+
+    setIsSaving(true)
+    setSaveFailed(false)
+    try {
+      const saved = onSaveSong ? onSaveSong(updatedSong) : onUpdateSong(updatedSong)
+      if (saved !== true) {
+        setSaveFailed(true)
+        showToast('Changes are not saved. Retry saving before leaving.')
+        return false
+      }
+      setSaveFailed(false)
+      setEditingSong(updatedSong)
+      setLocalTitle(updatedSong.title)
+      setLocalArtist(updatedSong.artist || '')
+      setLocalKey(effectiveKey)
+      setLocalOriginalKey(updatedSong.originalKey || '')
+      setLocalBpm(updatedSong.bpm || '')
+      setLocalTime(updatedSong.time || '')
+      setLocalYear(updatedSong.year || '')
+      setLocalTags(normalizeTags(updatedSong.tags))
+      setLocalRawContent(standardized)
+      setPersisted(fields(updatedSong))
+      showToast('Songbook saved!')
+      return true
+    } catch {
+      setSaveFailed(true)
+      showToast('Changes are not saved. Retry saving before leaving.')
+      return false
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const saveRef = useRef(handleSave)
+  useEffect(() => {
+    saveRef.current = handleSave
+  })
+
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 's') {
+        e.preventDefault()
+        saveRef.current()
+      }
+    }
+    window.addEventListener('keydown', handleGlobalKeyDown)
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown)
+  }, [])
+
+  // Toggle quick genre tag chip
+  const handleToggleTag = (tag: string) => {
+    const currentTags = normalizeTags(localTags)
+
+    const isSelected = currentTags.some((t) => t.toLowerCase() === tag.toLowerCase())
+    let nextTags: string[]
+
+    if (isSelected) {
+      nextTags = currentTags.filter((t) => t.toLowerCase() !== tag.toLowerCase())
+    } else {
+      nextTags = [...currentTags, tag]
+    }
+
+    setLocalTags(nextTags)
+  }
+
+  // Raw text change handler (eliminates erratic angle brackets on the fly)
+  const handleRawContentChange = (newText: string, remember = true, restored?: ChartTextEdit['chartState'], deletionChoice?: string) => {
+    const cleaned = standardizeChordProBrackets(newText)
+    const previousChart = declaredKey(localRawContent)
+    const nextChart = declaredKey(cleaned)
+    const nextOriginalKey = declaredKey(cleaned, true)
+    if (remember && previousChart.conflict && !nextChart.present) {
+      showToast('Resolve conflicting key directives before removing Chart Key.')
+      return
+    }
+    if (remember && deletionChoice === undefined && previousChart.key && !previousChart.conflict &&
+      !nextChart.key && !nextChart.conflict && nextOriginalKey.key && !nextOriginalKey.conflict &&
+      !keysArePitchEquivalent(previousChart.key, nextOriginalKey.key)) {
+      setKeyDeletion({ text: cleaned, key: previousChart.key })
+      return
+    }
+    const chartState = { key: localKey, originalKey: localOriginalKey, confirmedChartKey, transposeOffset }
+    const previousEdit: ChartTextEdit = { text: localRawContent, ...selection.current, chartState }
+    if (remember) {
+      const currentStart = editorMode === 'raw' ? (textareaRef.current?.selectionStart ?? 0) : selection.current.start
+      const currentEnd = editorMode === 'raw' ? (textareaRef.current?.selectionEnd ?? 0) : selection.current.end
+      history.current.record(previousEdit, { text: cleaned, start: currentStart, end: currentEnd })
+      setHistoryCanUndo(history.current.canUndo())
+      setHistoryCanRedo(history.current.canRedo())
+    }
+    setLocalRawContent(cleaned)
+    const nextDirectives = parseChordProDirectives(cleaned)
+    const previousDirectives = parseChordProDirectives(localRawContent)
+    const metadata = nextDirectives.metadata
+    // A recorded deletion choice survives subsequent lyric/metadata edits.
+    const nextConfirmed = deletionChoice ?? (nextChart.key ? '' : confirmedChartKey)
+    const updated: Partial<ActiveSongState> = { rawContent: cleaned, confirmedChartKey: nextConfirmed }
+    setConfirmedChartKey(nextConfirmed)
+    if (metadata.artist !== undefined || previousDirectives.metadata.artist !== undefined) {
+      const artist = metadata.artist ?? ''
+      setLocalArtist(artist)
+      updated.artist = artist
+    }
+    if (metadata.title !== undefined) {
+      setLocalTitle(metadata.title)
+      updated.title = metadata.title
+    }
+    const rawChart = declaredKey(cleaned)
+    if (!rawChart.conflict && (rawChart.present || declaredKey(localRawContent).present) && rawChart.key !== localKey) {
+      const normKey = rawChart.key || nextConfirmed
+      setLocalKey(normKey)
+      updated.key = normKey
+    }
+    const previousOriginal = previousDirectives.directives.filter(d => ['original_key', 'originalkey'].includes(d.name))
+    const nextOriginal = nextDirectives.directives.filter(d => ['original_key', 'originalkey'].includes(d.name))
+    const originalChanged = JSON.stringify(previousOriginal.map(d => [d.name, d.value])) !== JSON.stringify(nextOriginal.map(d => [d.name, d.value]))
+    const rawOriginal = declaredKey(cleaned, true)
+    if (originalChanged && !rawOriginal.conflict) {
+      setLocalOriginalKey(rawOriginal.key)
+      updated.originalKey = rawOriginal.key
+    }
+    if (metadata.tempo !== undefined) {
+      const t = String(metadata.tempo)
+      setLocalBpm(t)
+      updated.bpm = t
+    }
+    if (metadata.time !== undefined) {
+      setLocalTime(metadata.time)
+      updated.time = metadata.time
+    }
+    if (metadata.year !== undefined) {
+      const y = String(metadata.year)
+      setLocalYear(y)
+      updated.year = y
+    }
+    if (restored) {
+      setLocalKey(restored.key)
+      setLocalOriginalKey(restored.originalKey)
+      setConfirmedChartKey(restored.confirmedChartKey)
+      setPendingOffset({ source: suppliedOffset, value: restored.transposeOffset })
+      Object.assign(updated, restored)
+    }
+    autosave(updated)
+  }
+
+  // Insert or wrap text in [brackets] (QoL action)
+  const handleInsertBrackets = () => {
+    const textarea = textareaRef.current
+    const start = textarea ? textarea.selectionStart : selection.current.start
+    const end = textarea ? textarea.selectionEnd : selection.current.end
+    const text = localRawContent
+    const scrollTop = textarea?.scrollTop ?? 0
+    const scrollLeft = textarea?.scrollLeft ?? 0
+
+    if (start !== end) {
+      // Wrap selection in brackets
+      const selected = text.substring(start, end)
+      const wrapped = selected.startsWith('[') && selected.endsWith(']') ? selected : `[${selected}]`
+      const newText = text.substring(0, start) + wrapped + text.substring(end)
+      pendingCaretRestoration.current = {
+        songId: editingSong.id,
+        selectionStart: start,
+        selectionEnd: start + wrapped.length,
+        scrollTop,
+        scrollLeft,
+      }
+      handleRawContentChange(newText)
+    } else {
+      // Insert [] and position caret between them
+      const newText = text.substring(0, start) + '[]' + text.substring(start)
+      pendingCaretRestoration.current = {
+        songId: editingSong.id,
+        selectionStart: start + 1,
+        selectionEnd: start + 1,
+        scrollTop,
+        scrollLeft,
+      }
+      handleRawContentChange(newText)
+    }
+  }
+
+  // Helper 3: Paste from clipboard
+  const handlePasteClipboard = async () => {
+    try {
+      const clipText = await navigator.clipboard.readText()
+      if (!clipText) return
+
+      const sanitized = standardizeChordProBrackets(clipText)
+      const textarea = textareaRef.current
+      if (!textarea) {
+        handleRawContentChange(sanitized)
+        return
+      }
+
+      const start = textarea.selectionStart
+      const end = textarea.selectionEnd
+      const text = localRawContent
+      const updated = text.substring(0, start) + sanitized + text.substring(end)
+      pendingCaretRestoration.current = {
+        songId: editingSong.id,
+        selectionStart: start + sanitized.length,
+        selectionEnd: start + sanitized.length,
+        scrollTop: textarea.scrollTop,
+        scrollLeft: textarea.scrollLeft,
+      }
+      handleRawContentChange(updated)
+      showToast('Pasted and standardized ChordPro notation')
+    } catch {
+      showToast('Clipboard access denied. Please use Ctrl+V / Cmd+V.')
+    }
+  }
+
+  // Helper 4: Copy All
+  const handleCopyAll = async () => {
+    try {
+      await navigator.clipboard.writeText(localRawContent)
+      setCopyFeedback(true)
+      showToast('Copied raw ChordPro text to clipboard')
+      setTimeout(() => setCopyFeedback(false), 2000)
+    } catch {
+      showToast('Failed to copy to clipboard')
+    }
+  }
+
+  // Helper 5: Select All
+  const handleSelectAll = () => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+    if (editorMode === 'raw') {
+      textarea.focus()
+    }
+    textarea.setSelectionRange(0, textarea.value.length)
+    selection.current = { start: 0, end: textarea.value.length }
+  }
+
+  // Helper 6: Clear
+  const handleClear = () => {
+    if (localRawContent.length > 0) {
+      if (window.confirm('Clear the entire chord and lyric sheet?')) {
+        handleRawContentChange('')
+        showToast('Editor cleared')
+      }
+    }
+  }
+
+  // Quick insert section snippet
+  const insertTextAtCursor = (insertText: string) => {
+    const textarea = textareaRef.current
+    const start = textarea ? textarea.selectionStart : selection.current.start
+    const end = textarea ? textarea.selectionEnd : selection.current.end
+    const text = localRawContent
+    const scrollTop = textarea?.scrollTop ?? 0
+    const scrollLeft = textarea?.scrollLeft ?? 0
+    const before = text.substring(0, start)
+    const after = text.substring(end)
+
+    const prefix = before.endsWith('\n') || before.length === 0 ? '' : '\n'
+    const suffix = after.startsWith('\n') || after.length === 0 ? '\n' : '\n'
+    const updated = `${before}${prefix}${insertText}${suffix}${after}`
+    const newCursorPos = start + prefix.length + insertText.length + suffix.length
+
+    pendingCaretRestoration.current = {
+      songId: editingSong.id,
+      selectionStart: newCursorPos,
+      selectionEnd: newCursorPos,
+      scrollTop,
+      scrollLeft,
+    }
+
+    handleRawContentChange(updated)
+  }
+
+  const handleUndo = () => {
+    const textarea = textareaRef.current
+    const current: ChartTextEdit = {
+      text: localRawContent,
+      start: textarea?.selectionStart ?? selection.current.start,
+      end: textarea?.selectionEnd ?? selection.current.end,
+      chartState: { key: localKey, originalKey: localOriginalKey, confirmedChartKey, transposeOffset },
+    }
+    const next = history.current.undo(current)
+    if (next) {
+      handleRawContentChange(next.text, false, (next as ChartTextEdit).chartState)
+      requestAnimationFrame(() => {
+        if (textarea) {
+          textarea.setSelectionRange(next.start, next.end)
+          selection.current = { start: next.start, end: next.end }
+        }
+      })
+    }
+    setHistoryCanUndo(history.current.canUndo())
+    setHistoryCanRedo(history.current.canRedo())
+  }
+
+  const handleRedo = () => {
+    const textarea = textareaRef.current
+    const current: ChartTextEdit = {
+      text: localRawContent,
+      start: textarea?.selectionStart ?? selection.current.start,
+      end: textarea?.selectionEnd ?? selection.current.end,
+      chartState: { key: localKey, originalKey: localOriginalKey, confirmedChartKey, transposeOffset },
+    }
+    const next = history.current.redo(current)
+    if (next) {
+      handleRawContentChange(next.text, false, (next as ChartTextEdit).chartState)
+      requestAnimationFrame(() => {
+        if (textarea) {
+          textarea.setSelectionRange(next.start, next.end)
+          selection.current = { start: next.start, end: next.end }
+        }
+      })
+    }
+    setHistoryCanUndo(history.current.canUndo())
+    setHistoryCanRedo(history.current.canRedo())
+  }
+
+  const handlePointerDownResize = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return
+    e.preventDefault()
+    const handle = e.currentTarget
+    const container = splitContainerRef.current
+    if (!container) return
+
+    const pointerId = e.pointerId
+    try {
+      handle.setPointerCapture?.(pointerId)
+    } catch {
+      // ignore
+    }
+
+    const isHorizontal = handle.getAttribute('aria-orientation') === 'vertical'
+
+    const onPointerMove = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return
+      ev.preventDefault()
+      const rect = container.getBoundingClientRect()
+      let ratio: number
+      if (isHorizontal) {
+        const offsetX = ev.clientX - rect.left
+        ratio = (offsetX / rect.width) * 100
+      } else {
+        const offsetY = ev.clientY - rect.top
+        ratio = (offsetY / rect.height) * 100
+      }
+      const clamped = Math.min(80, Math.max(20, ratio))
+      setSplitRatio(clamped)
+    }
+
+    const cleanup = (ev: PointerEvent) => {
+      handle.removeEventListener('pointermove', onPointerMove)
+      handle.removeEventListener('pointerup', onPointerUp)
+      handle.removeEventListener('pointercancel', onPointerCancel)
+      try {
+        if (handle.hasPointerCapture?.(ev.pointerId)) {
+          handle.releasePointerCapture(ev.pointerId)
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    const onPointerUp = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return
+      cleanup(ev)
+      const rect = container.getBoundingClientRect()
+      let ratio: number
+      if (isHorizontal) {
+        ratio = ((ev.clientX - rect.left) / rect.width) * 100
+      } else {
+        ratio = ((ev.clientY - rect.top) / rect.height) * 100
+      }
+      const clamped = Math.min(80, Math.max(20, Math.round(ratio)))
+      setSplitRatio(clamped)
+      try {
+        localStorage.setItem('gtar_editor_split_ratio', String(clamped))
+      } catch {
+        // ignore
+      }
+    }
+
+    const onPointerCancel = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return
+      cleanup(ev)
+    }
+
+    handle.addEventListener('pointermove', onPointerMove)
+    handle.addEventListener('pointerup', onPointerUp)
+    handle.addEventListener('pointercancel', onPointerCancel)
+  }
+
+  const handleResizeKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    let next = splitRatio
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      next = Math.max(20, splitRatio - 5)
+    } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+      e.preventDefault()
+      next = Math.min(80, splitRatio + 5)
+    } else if (e.key === 'Home') {
+      e.preventDefault()
+      next = 20
+    } else if (e.key === 'End') {
+      e.preventDefault()
+      next = 80
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      next = 50
+    }
+    setSplitRatio(next)
+    try {
+      localStorage.setItem('gtar_editor_split_ratio', String(next))
+    } catch {
+      // ignore
+    }
+  }
+
+  const handleResetSplit = () => {
+    setSplitRatio(50)
+    try {
+      localStorage.setItem('gtar_editor_split_ratio', '50')
+    } catch {
+      // ignore
+    }
+  }
+
+  const handleEditorKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.nativeEvent.isComposing) return
+    const textarea = e.currentTarget
+    const current: ChartTextEdit = {
+      text: localRawContent,
+      start: textarea.selectionStart,
+      end: textarea.selectionEnd,
+      chartState: { key: localKey, originalKey: localOriginalKey, confirmedChartKey, transposeOffset },
+    }
+    selection.current = { start: current.start, end: current.end }
+    let next: TextEdit | undefined
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 's') {
+      e.preventDefault()
+      e.stopPropagation()
+      handleSave()
+      return
+    } else if ((e.ctrlKey || e.metaKey) && !e.altKey && ['z', 'y'].includes(e.key.toLowerCase())) {
+      e.preventDefault()
+      if (e.key.toLowerCase() === 'y' || e.shiftKey) {
+        handleRedo()
+      } else {
+        handleUndo()
+      }
+      return
+    } else if (e.key === 'Tab' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault()
+      next = indentText(current.text, current.start, current.end, e.shiftKey)
+      handleRawContentChange(next.text)
+    }
+    if (next) {
+      const edit = next
+      requestAnimationFrame(() => {
+        textarea.setSelectionRange(edit.start, edit.end)
+        selection.current = { start: edit.start, end: edit.end }
+      })
+    }
+  }
+
+  const songInputs = (
+    <div className="border-b border-app-border bg-app-surface/80 px-3 py-2 sm:px-4 sm:py-2.5 flex flex-row md:flex-col items-stretch gap-2 text-xs shrink-0">
+      {/* Song Title */}
+      <div className="flex-1 min-w-0 flex items-center gap-2 bg-app-base px-2.5 py-1.5 rounded-lg border border-app-border focus-within:border-app-action transition-colors">
+        <Type className="w-3.5 h-3.5 text-app-action shrink-0" />
+        <input
+          type="text"
+          value={localTitle}
+          onChange={(e) => {
+            setLocalTitle(e.target.value)
+            autosave({ title: e.target.value })
+          }}
+          placeholder="Song Title *"
+          className="w-full bg-transparent text-app-heading font-semibold focus:outline-none placeholder-app-muted/60 text-xs sm:text-sm"
+        />
+      </div>
+
+      {/* Artist */}
+      <div className="flex-1 min-w-0 flex items-center gap-2 bg-app-base px-2.5 py-1.5 rounded-lg border border-app-border focus-within:border-app-action transition-colors">
+        <User className="w-3.5 h-3.5 text-app-muted shrink-0" />
+        <input
+          type="text"
+          value={localArtist}
+          onChange={(e) => {
+            setLocalArtist(e.target.value)
+            autosave({ artist: e.target.value })
+          }}
+          placeholder="Artist / Band"
+          className="w-full bg-transparent text-app-text focus:outline-none placeholder-app-muted/60 text-xs"
+        />
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="flex-1 flex flex-col h-[calc(100vh-4rem)] overflow-hidden bg-app-base">
+      {pendingNavigation && (
+        <div role="dialog" aria-modal="true" aria-label="Unsaved changes" className="fixed inset-0 z-[100] bg-black/70 flex items-center justify-center p-4">
+          <div className="bg-app-surface border border-app-border rounded-xl p-5 text-app-heading">
+            <p>Save unsaved changes before leaving?</p>
+            <div className="flex gap-4 mt-4">
+              <button type="button" autoFocus onClick={() => { if (handleSave()) { setPendingNavigation(null); pendingNavigation() } }}>Save</button>
+              <button type="button" onClick={() => {
+                setLocalTitle(persisted.title)
+                setLocalArtist(persisted.artist)
+                setLocalKey(persisted.key)
+                setLocalOriginalKey(persisted.originalKey)
+                setLocalYear(persisted.year)
+                setLocalTime(persisted.time)
+                setLocalBpm(persisted.bpm)
+                setLocalTags(normalizeTags(JSON.parse(persisted.tags)))
+                setLocalRawContent(persisted.rawContent)
+                history.current = new TextHistory()
+                setPendingNavigation(null)
+                pendingNavigation()
+              }}>Discard</button>
+              <button type="button" onClick={() => setPendingNavigation(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Editor navigation and save status */}
+      <div className="border-b border-app-border bg-app-surface px-3 py-1.5 sm:px-4 sm:py-2 flex items-center justify-between gap-2 sm:gap-3 select-none shrink-0 shadow-sm">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          {onClose && (
+            <button
+              type="button"
+              onClick={() => requestNavigation(onClose)}
+              className="ui-button min-h-[44px] min-w-[44px] px-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors shrink-0 whitespace-nowrap bg-app-base border-app-border text-app-text hover:border-app-action cursor-pointer"
+              aria-label="Return to Stage View"
+            >
+              <ArrowLeft className="w-4 h-4 shrink-0" />
+              <span className="hidden sm:inline">Back</span>
+            </button>
+          )}
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-app-base border border-app-action/40 flex items-center justify-center text-app-action shrink-0">
+              <FileEdit className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </div>
+            <div className="flex flex-col min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-xs sm:text-sm text-app-heading tracking-wide">
+                  Editor
+                </span>
+                {saveStatus === 'SAVING' ? (
+                  <span
+                    data-testid="editor-save-status"
+                    role="status"
+                    aria-live="polite"
+                    data-save-status="SAVING"
+                    className="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-app-surface text-app-muted border border-app-border animate-pulse"
+                  >
+                    Saving...
+                  </span>
+                ) : saveStatus === 'FAILED' ? (
+                  <span
+                    data-testid="editor-save-status"
+                    role="status"
+                    aria-live="polite"
+                    data-save-status="FAILED"
+                    className="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-status-error/20 text-status-error border border-status-error/30"
+                  >
+                    Failed (Unsaved)
+                  </span>
+                ) : saveStatus === 'UNSAVED' ? (
+                  <span
+                    data-testid="editor-save-status"
+                    role="status"
+                    aria-live="polite"
+                    data-save-status="UNSAVED"
+                    className="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-app-accent/20 text-app-accent border border-app-accent/30"
+                  >
+                    Unsaved
+                  </span>
+                ) : (
+                  <span
+                    data-testid="editor-save-status"
+                    role="status"
+                    aria-live="polite"
+                    data-save-status="SAVED"
+                    className="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-app-action/20 text-app-action border border-app-action/30"
+                  >
+                    Saved
+                  </span>
+                )}
+              </div>
+              <span className="text-[10px] sm:text-[11px] text-app-muted font-mono truncate max-w-[180px] sm:max-w-[400px]">
+                {localTitle || 'Untitled Song'} {localArtist ? `• ${localArtist}` : ''}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="md:hidden">{songInputs}</div>
+
+      {/* 3. MAIN SPLIT PANE: Raw ChordPro Editor (Left) & Live Stage Preview (Right) */}
+      <div
+        ref={splitContainerRef}
+        style={{
+          '--editor-split-ratio': `${splitRatio}%`,
+          '--preview-split-ratio': `${100 - splitRatio}%`,
+        } as React.CSSProperties}
+        className="flex-1 flex flex-col md:flex-row overflow-hidden relative"
+      >
+        {/* LEFT PANE: Raw ChordPro Editor */}
+        <div
+          data-testid="editor-pane-left"
+          className="flex flex-col border-b md:border-b-0 md:border-r border-app-border bg-app-base w-full h-[var(--editor-split-ratio)] md:w-[var(--editor-split-ratio)] md:h-full overflow-hidden shrink-0"
+        >
+          <div className="hidden md:block">{songInputs}</div>
+
+          {/* Action Editing Toolbar */}
+          <div className="px-3 py-2 bg-app-surface border-b border-app-border flex flex-wrap items-center justify-between gap-2 text-xs shrink-0 select-none">
+            <div className="flex flex-wrap items-center gap-1 bg-app-base p-1 rounded-lg border border-app-border">
+              {/* [] Bracket Wrap/Insert Action */}
+              <EditorToolbarButton
+                label="Brackets"
+                aria-label="Wrap selection or insert brackets []"
+                shortcut="[]"
+                description="Wrap selection in brackets or insert []"
+                onPointerDown={captureEditorSelection}
+                onClick={handleInsertBrackets}
+                className="flex items-center gap-1 px-2 py-1 rounded bg-app-surface hover:bg-app-action/20 text-app-action hover:text-app-action font-mono text-[11px] font-bold transition-colors cursor-pointer"
+              >
+                <SquareCode className="w-3.5 h-3.5" />
+                <span>[]</span>
+              </EditorToolbarButton>
+
+              <button
+                type="button"
+                aria-label="Insert section"
+                aria-expanded={insertOpen}
+                aria-haspopup="menu"
+                onPointerDown={captureEditorSelection}
+                onClick={(event) => {
+                  captureEditorSelection()
+                  setInsertAnchor(event.currentTarget)
+                  setInsertOpen((open) => !open)
+                }}
+                className="p-1.5 rounded bg-app-surface text-app-section cursor-pointer"
+              >
+                <MoreHorizontal className="w-3.5 h-3.5" />
+              </button>
+              <DropdownPortal anchorEl={insertAnchor} open={insertOpen} onClose={() => setInsertOpen(false)} align="left">
+                <div
+                  role="menu"
+                  aria-label="Insert section"
+                  className="min-w-32 rounded-lg border border-app-border bg-app-surface p-1 shadow-xl"
+                  onKeyDown={(event) => {
+                    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
+                    event.preventDefault()
+                    const items = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
+                    const index = items.indexOf(document.activeElement as HTMLButtonElement)
+                    const next =
+                      event.key === 'Home'
+                        ? 0
+                        : event.key === 'End'
+                        ? items.length - 1
+                        : (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length
+                    items[next]?.focus()
+                  }}
+                >
+                  {QUICK_SECTIONS.map((tag, index) => (
+                    <button
+                      key={tag}
+                      role="menuitem"
+                      autoFocus={index === 0}
+                      type="button"
+                      className="block w-full text-left px-3 py-2 rounded hover:bg-app-base text-app-heading"
+                      onClick={() => {
+                        insertTextAtCursor(tag)
+                        setInsertOpen(false)
+                      }}
+                    >
+                      {tag.slice(1, -1)}
+                    </button>
+                  ))}
+                </div>
+              </DropdownPortal>
+
+              {/* New Blank Song Action with Unsaved Changes Protection */}
+              <EditorToolbarButton
+                label="New Song"
+                aria-label="New Song"
+                description="Start a new blank canonical song"
+                data-testid="editor-new-song-button"
+                onClick={handleNewSong}
+                className="p-1.5 rounded bg-app-surface hover:bg-app-accent/20 text-app-accent hover:text-app-accent transition-colors cursor-pointer"
+              >
+                <FilePlus className="w-3.5 h-3.5" />
+              </EditorToolbarButton>
+
+              <div className="w-[1px] h-4 bg-app-border mx-0.5" />
+
+              {/* Undo Button */}
+              <EditorToolbarButton
+                label="Undo"
+                aria-label="Undo"
+                shortcut="Ctrl+Z"
+                description="Undo last text edit"
+                data-testid="editor-undo-button"
+                disabled={!historyCanUndo}
+                onClick={handleUndo}
+                className="p-1.5 rounded bg-app-surface hover:bg-app-action/20 text-app-action hover:text-app-action transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <Undo2 className="w-3.5 h-3.5" />
+              </EditorToolbarButton>
+
+              {/* Redo Button */}
+              <EditorToolbarButton
+                label="Redo"
+                aria-label="Redo"
+                shortcut="Ctrl+Y"
+                description="Redo reverted text edit"
+                data-testid="editor-redo-button"
+                disabled={!historyCanRedo}
+                onClick={handleRedo}
+                className="p-1.5 rounded bg-app-surface hover:bg-app-action/20 text-app-action hover:text-app-action transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <Redo2 className="w-3.5 h-3.5" />
+              </EditorToolbarButton>
+
+              <div className="w-[1px] h-4 bg-app-border mx-0.5" />
+
+              {/* Icon-Only Clipboard & Edit Controls with Accessible Labels */}
+              <EditorToolbarButton
+                label="Paste"
+                aria-label="Paste"
+                shortcut="Ctrl+V"
+                description="Paste and standardize ChordPro text"
+                onClick={handlePasteClipboard}
+                className="p-1.5 rounded bg-app-surface hover:bg-app-action/20 text-app-action hover:text-app-action transition-colors cursor-pointer"
+              >
+                <ClipboardPaste className="w-3.5 h-3.5" />
+              </EditorToolbarButton>
+
+              <EditorToolbarButton
+                label="Copy"
+                aria-label="Copy"
+                shortcut="Ctrl+C"
+                description="Copy entire raw ChordPro text to clipboard"
+                onClick={handleCopyAll}
+                className="p-1.5 rounded bg-app-surface hover:bg-app-base text-app-text hover:text-app-heading transition-colors cursor-pointer"
+              >
+                {copyFeedback ? <Check className="w-3.5 h-3.5 text-status-success" /> : <Copy className="w-3.5 h-3.5" />}
+              </EditorToolbarButton>
+
+              <EditorToolbarButton
+                label="Select All"
+                aria-label="Select All"
+                shortcut="Ctrl+A"
+                description="Select entire song text in editor"
+                onClick={handleSelectAll}
+                className="p-1.5 rounded bg-app-surface hover:bg-app-base text-app-text hover:text-app-heading transition-colors cursor-pointer font-mono text-[10px] font-bold"
+              >
+                <span>ALL</span>
+              </EditorToolbarButton>
+
+              <EditorToolbarButton
+                label="Clear"
+                aria-label="Clear"
+                description="Clear all chords and lyrics after confirmation"
+                onClick={handleClear}
+                className="p-1.5 rounded bg-app-surface hover:bg-red-500/20 text-status-error hover:text-status-error transition-colors cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </EditorToolbarButton>
+
+              <EditorToolbarButton
+                label="Song Details & Metadata"
+                description="Open song details, key alignment, and tags modal"
+                onClick={() => setIsMetadataModalOpen(true)}
+                className="p-1.5 rounded bg-app-surface text-app-action hover:bg-app-action/20 cursor-pointer"
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+              </EditorToolbarButton>
+
+              {/* View Mode Toggle: Code Editor (Foldable Sections) vs Raw Text */}
+              <EditorToolbarButton
+                label={editorMode === 'code' ? 'Sections View' : 'Raw Text View'}
+                description={
+                  editorMode === 'code'
+                    ? 'Switch to classic full Raw Text editor'
+                    : 'Switch to Code Editor with collapsible musical sections'
+                }
+                data-testid="editor-mode-toggle"
+                onClick={() => {
+                  setEditorMode((m) => {
+                    const next = m === 'code' ? 'raw' : 'code'
+                    if (next === 'raw') {
+                      pendingCaretRestoration.current = {
+                        songId: editingSong.id,
+                        selectionStart: selection.current.start,
+                        selectionEnd: selection.current.end,
+                        scrollTop: 0,
+                        scrollLeft: 0,
+                      }
+                    } else {
+                      pendingCaretRestoration.current = null
+                    }
+                    return next
+                  })
+                }}
+                className="p-1.5 rounded bg-app-surface hover:bg-app-base text-app-text hover:text-app-heading transition-colors cursor-pointer flex items-center gap-1 font-mono text-[10px] font-bold"
+              >
+                <Layers className="w-3.5 h-3.5 text-app-action" />
+                <span className="hidden sm:inline">{editorMode === 'code' ? 'Sections' : 'Raw'}</span>
+              </EditorToolbarButton>
+
+              {/* Compact Save Action Button */}
+              <div className="flex items-center gap-2 shrink-0">
+                <EditorToolbarButton
+                  label={isSaving ? 'Saving...' : 'Save changes'}
+                  shortcut="Ctrl+S"
+                  description="Save changes to songbook"
+                  onClick={handleSave}
+                  disabled={isSaving}
+                  className={`p-1.5 sm:p-2 rounded-lg ${
+                    saveStatus === 'FAILED'
+                      ? 'bg-status-error/20 text-status-error border border-status-error/40 hover:bg-status-error/30'
+                      : 'bg-app-button hover:bg-app-button text-app-button-text'
+                  } shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center disabled:opacity-60`}
+                >
+                  <Save
+                    className={`w-4 h-4 ${
+                      saveStatus === 'FAILED' ? 'text-status-error' : 'text-app-button-text'
+                    } stroke-[2.5] ${isSaving ? 'animate-spin' : ''}`}
+                  />
+                </EditorToolbarButton>
+              </div>
+            </div>
+          </div>
+
+          {/* Textarea & Code Editor: Standard ChordPro Notation */}
+          <div className="flex-1 relative flex overflow-hidden">
+            <textarea
+              ref={textareaRef}
+              data-testid="editor-raw-textarea"
+              value={localRawContent}
+              onChange={(e) => handleRawContentChange(e.target.value)}
+              placeholder="Enter ChordPro lyrics with [G] chords (e.g. When the [A]night has come) or standalone chord progressions..."
+              onBeforeInput={(e) => { selection.current = { start: e.currentTarget.selectionStart, end: e.currentTarget.selectionEnd } }}
+              onSelect={(e) => { selection.current = { start: e.currentTarget.selectionStart, end: e.currentTarget.selectionEnd } }}
+              onKeyDown={handleEditorKeyDown}
+              spellCheck={false}
+              className={
+                editorMode === 'raw'
+                  ? 'w-full h-full p-4 bg-app-base text-app-heading font-mono text-sm leading-relaxed focus:outline-none resize-none selection:bg-app-action/30 selection:text-app-heading overflow-y-auto'
+                  : 'sr-only'
+              }
+            />
+
+            {editorMode === 'code' && (
+              <ChordProCodeEditor
+                rawContent={localRawContent}
+                onChange={(newText) => handleRawContentChange(newText)}
+                onSelectRange={(start, end) => {
+                  selection.current = { start, end }
+                  const textarea = textareaRef.current
+                  if (textarea) {
+                    try {
+                      textarea.setSelectionRange(start, end)
+                    } catch {
+                      // headless fallback
+                    }
+                  }
+                }}
+                onShowToast={showToast}
+                onKeyDown={handleEditorKeyDown}
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Resizable Divider (Desktop) */}
+        <div
+          role="separator"
+          tabIndex={0}
+          data-testid="editor-preview-divider"
+          aria-orientation="vertical"
+          aria-label="Resize editor and preview panels"
+          aria-valuenow={Math.round(splitRatio)}
+          aria-valuemin={20}
+          aria-valuemax={80}
+          onPointerDown={handlePointerDownResize}
+          onKeyDown={handleResizeKeyDown}
+          onDoubleClick={handleResetSplit}
+          style={{ touchAction: 'none' }}
+          className="hidden md:flex w-2.5 bg-app-base hover:bg-app-action/30 active:bg-app-action/50 cursor-col-resize select-none items-center justify-center border-x border-app-border transition-colors shrink-0 group focus:outline-none focus:bg-app-action/40 touch-none"
+        >
+          <div className="w-0.5 h-6 rounded bg-app-muted/50 group-hover:bg-app-action transition-colors" />
+        </div>
+
+        {/* Resizable Divider (Mobile / Compact) */}
+        <div
+          role="separator"
+          tabIndex={0}
+          data-testid="editor-preview-divider-mobile"
+          aria-orientation="horizontal"
+          aria-label="Resize editor and preview panels"
+          aria-valuenow={Math.round(splitRatio)}
+          aria-valuemin={20}
+          aria-valuemax={80}
+          onPointerDown={handlePointerDownResize}
+          onKeyDown={handleResizeKeyDown}
+          onDoubleClick={handleResetSplit}
+          style={{ touchAction: 'none' }}
+          className="flex md:hidden min-h-[44px] h-11 bg-app-surface border-y border-app-border cursor-row-resize select-none items-center justify-between px-3 text-[10px] text-app-muted shrink-0 group focus:outline-none focus:bg-app-action/20 touch-none"
+        >
+          <span className="font-mono text-[9px] opacity-70">Editor {Math.round(splitRatio)}%</span>
+          <div className="flex items-center justify-center py-2 px-3">
+            <div className="w-10 h-1.5 rounded-full bg-app-muted/60 group-hover:bg-app-action transition-colors" />
+          </div>
+          <button
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={handleResetSplit}
+            className="min-h-[32px] px-2 py-1 text-[10px] font-mono font-medium text-app-action hover:underline cursor-pointer rounded"
+            aria-label="Reset split to 50/50"
+          >
+            50/50
+          </button>
+        </div>
+
+        {/* RIGHT PANE: Live Real-time Stage Preview Sync */}
+        <div
+          data-testid="editor-pane-right"
+          className="flex-1 flex flex-col bg-app-base w-full h-[var(--preview-split-ratio)] md:w-[var(--preview-split-ratio)] md:h-full overflow-hidden min-h-0 min-w-0"
+        >
+          <div className="flex-1 p-4 sm:p-6 md:pt-2.5 overflow-y-auto bg-app-base select-text">
+            <div className="border-b border-app-border pb-3 mb-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-base sm:text-lg font-bold text-app-heading">
+                  {localTitle || 'Untitled Song'}
+                </h2>
+                <div className="text-xs text-app-muted mt-0.5">
+                  {localArtist || 'Unknown Artist'}
+                  {` • Original Key: ${keyContext.originalConflict ? 'Conflicting' : keyContext.originalKey || 'Unknown'}`}
+                  {` • Chart Key: ${keyContext.chartKey || 'Unknown'}${keyContext.chartEstimated ? ' (estimated)' : ''}`}
+                  {transposeOffset !== 0 && <span aria-hidden="true">{` • Performance Key: ${keyContext.performanceKey || 'Unknown'} (${transposeOffset > 0 ? `+${transposeOffset}` : transposeOffset})`}</span>}
+                  <span className="sr-only">{` • Performance Key: ${keyContext.performanceKey || 'Unknown'}`}</span>
+                  {keyConflict && <span role="alert"> Resolve conflicting or invalid key metadata before saving.</span>}
+                  {localTime ? ` • ${localTime}` : ''}
+                </div>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-app-action px-2 py-0.5 rounded bg-app-surface border border-app-border">
+                  Stage Preview
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-1 text-sm font-mono">
+              <SongLineRenderer lines={parsedSong.lines} fontSizePx={14} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Song Metadata & Details Modal */}
+      {keyDeletion && (
+        <div role="dialog" aria-modal="true" aria-label="Removed Chart Key" className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 p-4">
+          <div className="bg-app-surface border border-app-border rounded-2xl max-w-md p-5 text-app-heading">
+            <p>The removed Chart Key was {keyDeletion.key}. Choose the basis of the authored chords. Current playback and chord text stay unchanged.</p>
+            <button type="button" data-testid="key-deletion-original" className="block w-full p-3 mt-3 rounded-lg border border-app-border text-left" onClick={() => {
+              handleRawContentChange(keyDeletion.text, true, undefined, '')
+              setKeyDeletion(null)
+            }}>Authored chords are now aligned with Original Key</button>
+            <button type="button" data-testid="key-deletion-legacy" className="block w-full p-3 mt-2 rounded-lg border border-app-border text-left" onClick={() => {
+              handleRawContentChange(keyDeletion.text, true, undefined, keyDeletion.key)
+              setKeyDeletion(null)
+            }}>Authored chords remain in {keyDeletion.key}</button>
+            <button type="button" data-testid="key-deletion-cancel" className="block p-3 mt-2 text-app-muted" onClick={() => setKeyDeletion(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* Song Metadata & Details Modal */}
+      {isMetadataModalOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Song Details & Metadata"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-fade-in"
+        >
+          <div className="bg-app-surface border border-app-border rounded-2xl max-w-md w-full max-h-[90dvh] overflow-y-auto p-5 shadow-2xl flex flex-col gap-4 text-xs select-none">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-app-border pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-app-base border border-app-action/40 flex items-center justify-center text-app-action">
+                  <SlidersHorizontal className="w-4 h-4" />
+                </div>
+                <span className="font-bold text-sm text-app-heading">Song Details & Metadata</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setIsMetadataModalOpen(false)}
+                  className="p-1 rounded-lg text-app-muted hover:text-app-heading hover:bg-app-base transition-colors cursor-pointer"
+                  aria-label="Close"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Authored Chart Key Confirmation & Alignment */}
+            {(keyContext.chartEstimated || declaredKey(localRawContent).present || confirmedChartKey) && (
+              <div className="rounded-xl border border-app-border bg-app-base/60 p-3 space-y-2.5">
+                <div className="flex items-center justify-between text-xs font-semibold text-app-heading">
+                  <span>Authored Chart Key Confirmation</span>
+                  {confirmedChartKey && (
+                    <span className="font-mono text-[10px] text-app-action bg-app-action/10 px-1.5 py-0.5 rounded border border-app-action/20">
+                      Confirmed: {confirmedChartKey}
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-app-muted leading-relaxed">
+                  Confirm the key of the authored chords to enable Original Key zero. Confirmation preserves current playback; selecting zero changes playback.
+                </p>
+                <div className="flex items-center gap-2">
+                  <input
+                    aria-label="Confirm authored Chart Key"
+                    value={chartConfirmation}
+                    onChange={(e) => setChartConfirmation(e.target.value)}
+                    placeholder="e.g. E or F#m"
+                    className="flex-1 bg-app-base px-2.5 py-1.5 rounded-lg border border-app-border text-app-heading font-mono text-xs focus:outline-none focus:border-app-action"
+                  />
+                  <button
+                    type="button"
+                    data-testid="confirm-chart-key"
+                    disabled={!normalizeMusicalKey(chartConfirmation)}
+                    onClick={() => {
+                      const key = normalizeMusicalKey(chartConfirmation)
+                      if (!key) return
+                      const declaration = declaredKey(localRawContent)
+                      if (declaration.present && (declaration.conflict || !keysArePitchEquivalent(declaration.key, key))) {
+                        showToast('Correct or remove the conflicting raw key directive before confirmation.')
+                        return
+                      }
+                      setConfirmedChartKey(key)
+                      setLocalKey(key)
+                      autosave({ key, confirmedChartKey: key, rawContent: localRawContent })
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-app-surface border border-app-border hover:border-app-action text-app-action font-semibold text-xs transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Confirm Chart Key
+                  </button>
+                </div>
+                {keyContext.originalRelative && (
+                  <button
+                    type="button"
+                    data-testid="transpose-chart-to-original"
+                    onClick={() => handleConfirmTransposeToOriginalKey(localOriginalKey)}
+                    className="w-full px-3 py-2 rounded-lg bg-app-surface border border-app-border hover:border-app-action text-app-action font-semibold text-xs text-center transition-colors cursor-pointer"
+                  >
+                    Transpose chord text to Original Key (preserve playback)
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Canonical Metadata Inputs */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+              {/* Chart key describes stored chord text */}
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-mono text-app-muted flex items-center gap-1">
+                  <Music className="w-3 h-3 text-app-action" />
+                  <span>Chart Key</span>
+                </label>
+                <div className="flex items-center bg-app-base px-2 py-1.5 rounded-lg border border-app-border focus-within:border-app-action transition-colors">
+                  <input
+                    type="text"
+                    value={localKey}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      const canonical = normalizeMusicalKey(val)
+                      if (canonical) {
+                        setLocalKey(canonical)
+                        setConfirmedChartKey('')
+                        autosave({ key: canonical, confirmedChartKey: '' })
+                      } else if (val.trim() === '') {
+                        handleRawContentChange(syncCanonicalDirectives(localRawContent, { key: '' }))
+                      } else {
+                        setLocalKey(val)
+                      }
+                    }}
+                    placeholder="e.g. G"
+                    className="w-full bg-transparent text-app-action font-bold font-mono focus:outline-none text-center text-xs"
+                    aria-label="Chart Key of stored chords"
+                  />
+                </div>
+              </div>
+
+              {/* Original Key */}
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-mono text-app-muted flex items-center gap-1">
+                  <Music className="w-3 h-3 text-app-action" />
+                  <span>Original Key</span>
+                </label>
+                <div className="flex items-center bg-app-base px-2 py-1.5 rounded-lg border border-app-border focus-within:border-app-action transition-colors">
+                  <input
+                    type="text"
+                    aria-label="Original Key"
+                    value={localOriginalKey}
+                    placeholder="Unknown"
+                    onChange={(e) => {
+                      const value = e.target.value
+                      setLocalOriginalKey(value)
+                      const normalized = normalizeMusicalKey(value)
+                      if (normalized !== null) {
+                        setLocalOriginalKey(normalized)
+                        const rawContent = syncCanonicalDirectives(localRawContent, { originalKey: normalized })
+                        setLocalRawContent(rawContent)
+                        autosave({ originalKey: normalized, rawContent })
+                      }
+                    }}
+                    className="w-full bg-transparent text-app-action font-bold font-mono focus:outline-none text-center text-xs"
+                  />
+                </div>
+              </div>
+
+              {/* Tempo / BPM */}
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-mono text-app-muted flex items-center gap-1">
+                  <Activity className="w-3 h-3 text-app-accent" />
+                  <span>Tempo (BPM)</span>
+                </label>
+                <div className="flex items-center bg-app-base px-2 py-1.5 rounded-lg border border-app-border focus-within:border-app-accent transition-colors">
+                  <input
+                    type="text"
+                    value={localBpm}
+                    onChange={(e) => {
+                      setLocalBpm(e.target.value)
+                      autosave({ bpm: e.target.value })
+                    }}
+                    placeholder="120"
+                    className="w-full bg-transparent text-app-accent font-mono focus:outline-none text-center text-xs"
+                  />
+                </div>
+              </div>
+
+              {/* Time Signature */}
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-mono text-app-muted flex items-center gap-1">
+                  <Clock className="w-3 h-3 text-app-section" />
+                  <span>Time</span>
+                </label>
+                <div className="flex items-center bg-app-base px-2 py-1.5 rounded-lg border border-app-border focus-within:border-app-section transition-colors">
+                  <input
+                    type="text"
+                    value={localTime}
+                    onChange={(e) => {
+                      setLocalTime(e.target.value)
+                      autosave({ time: e.target.value.trim() })
+                    }}
+                    placeholder="4/4"
+                    className="w-full bg-transparent text-app-section font-mono focus:outline-none text-center text-xs"
+                  />
+                </div>
+              </div>
+
+              {/* Release Year */}
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-mono text-app-muted flex items-center gap-1">
+                  <Calendar className="w-3 h-3 text-app-section" />
+                  <span>Release Year</span>
+                </label>
+                <div className="flex items-center bg-app-base px-2 py-1.5 rounded-lg border border-app-border focus-within:border-app-section transition-colors">
+                  <input
+                    type="text"
+                    value={localYear}
+                    onChange={(e) => {
+                      setLocalYear(e.target.value)
+                      autosave({ year: e.target.value.trim() })
+                    }}
+                    placeholder="e.g. 1979"
+                    className="w-full bg-transparent text-app-section font-mono focus:outline-none text-center text-xs"
+                  />
+                </div>
+              </div>
+
+
+            </div>
+
+            {/* Tags Input */}
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-mono text-app-muted flex items-center gap-1">
+                <Tag className="w-3 h-3 text-app-accent" />
+                <span>Tags</span>
+              </label>
+              <div className="flex items-center gap-2 bg-app-base px-2.5 py-1.5 rounded-lg border border-app-border focus-within:border-app-accent/60 transition-colors">
+                <div className="flex flex-wrap gap-2 w-full">
+                  {localTags.map(tag => <button key={tag} type="button" aria-label={`Remove tag ${tag}`} style={tagChipStyle(tagColors, tag)}
+                    className="px-2 py-2 rounded border border-app-border text-app-text text-xs"
+                    onClick={() => handleToggleTag(tag)}>{tag} ×</button>)}
+                  <input type="text" aria-label="Add tags" placeholder="Add tags, separated by commas"
+                    className="w-full bg-transparent text-app-text font-mono text-xs focus:outline-none"
+                    onKeyDown={event => {
+                      if (event.key === 'Enter') { event.preventDefault(); const input = event.currentTarget;
+                        setLocalTags(normalizeTags([...localTags, ...normalizeTags(input.value)])); input.value = '' }
+                    }}
+                    onBlur={event => { setLocalTags(normalizeTags([...localTags, ...normalizeTags(event.currentTarget.value)])); event.currentTarget.value = '' }} />
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Tag Suggestion Chips */}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[10px] font-mono text-app-muted uppercase tracking-wider">
+                Quick Tags:
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {QUICK_GENRE_TAGS.map((tag) => {
+                  const isSelected = localTags
+                    .map((t) => t.trim().toLowerCase())
+                    .includes(tag.toLowerCase())
+
+                  return (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => handleToggleTag(tag)}
+                      className={`px-2.5 py-1 rounded-md border text-xs font-semibold transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-app-accent/20 text-app-accent border-app-accent/50 shadow-sm'
+                          : 'bg-app-base text-app-muted border-app-border hover:text-app-heading hover:border-app-action/60'
+                      }`}
+                    >
+                      {tag}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Done Button */}
+            <div className="pt-2 border-t border-app-border flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsMetadataModalOpen(false)}
+                className="px-4 py-1.5 rounded-lg bg-app-action hover:bg-app-action/80 text-app-on-action font-bold text-xs transition-colors cursor-pointer"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Local Toast Notification Popup */}
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 z-50 bg-app-base border border-app-action text-app-heading px-4 py-2.5 rounded-xl shadow-2xl flex items-center gap-3 text-sm font-medium animate-fade-in">
+          <div className="w-2 h-2 rounded-full bg-app-action animate-ping" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+    </div>
+  )
+}

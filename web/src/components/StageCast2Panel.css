@@ -1,0 +1,245 @@
+/* Stage Cast / TV Presentation Canonical GTAR Theme Styling */
+.cast2 {
+  color: var(--custom-stage-text, #EEE8D5);
+  background: var(--custom-stage-bg, #002B36);
+  padding: 0;
+  overflow-wrap: anywhere;
+}
+.cast2-tv {
+  min-height: 100dvh;
+  box-sizing: border-box;
+  font-size: clamp(18px, 1.6vw, 28px);
+  padding: clamp(16px, 3vw, 48px);
+  background: var(--custom-stage-bg, #002B36);
+  color: var(--custom-stage-text, #EEE8D5);
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+.cast2 button, .cast2 input, .cast2 summary {
+  min-height: 44px;
+  font: inherit;
+}
+.cast2 button {
+  padding: 10px 18px;
+  margin: 6px;
+  border: 1px solid var(--custom-card-border, #586E75);
+  border-radius: 8px;
+  background: var(--custom-stage-surface, #073642);
+  color: var(--custom-stage-text, #EEE8D5);
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+.cast2 button:hover {
+  border-color: var(--custom-actionColor, #268BD2);
+  color: var(--custom-actionColor, #268BD2);
+}
+.cast2 :focus-visible {
+  outline: 3px solid var(--custom-control-accent, #2AA198);
+  outline-offset: 3px;
+}
+.cast2 label {
+  display: block;
+  margin-block: 8px;
+}
+.cast2 input:not([type=checkbox]) {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--custom-stage-bg, #002B36);
+  color: var(--custom-uiPrimaryText, #EEE8D5);
+  border: 1px solid var(--custom-card-border, #586E75);
+  border-radius: 8px;
+}
+.cast2 a {
+  color: var(--custom-uiLinkText, #268BD2);
+  text-decoration: underline;
+}
+.cast2-controller {
+  width: 100%;
+  box-sizing: border-box;
+  background: transparent;
+  color: var(--custom-uiPrimaryText, #EEE8D5);
+}
+.cast2-pairing {
+  max-width: 640px;
+  margin: 24px auto;
+  padding: 24px;
+  background: var(--custom-stage-surface, #073642);
+  border: 1px solid var(--custom-card-border, #586E75);
+  border-radius: 16px;
+  text-align: center;
+}
+.cast2-pairing img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto 16px auto;
+  border-radius: 12px;
+}
+.cast2-pin {
+  display: block;
+  font-size: clamp(36px, 6vw, 80px);
+  letter-spacing: .15em;
+  font-family: monospace;
+  font-weight: 700;
+  color: var(--custom-stage-chord, #E5A93C);
+}
+.cast2-check {
+  display: flex !important;
+  align-items: center;
+  gap: 12px;
+}
+
+/* TV Presentation Container & Visual Language */
+.cast2-tv-presentation-container {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* TV Title Pill — GTAR mobile fullscreen inspired design */
+.cast2-tv-title-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(6px, 1.5vh, 12px) clamp(16px, 3vw, 48px);
+  pointer-events: none;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cast2-tv-title-container {
+    transition: none !important;
+  }
+}
+
+.cast2-tv-title-pill {
+  max-width: min(85vw, 760px);
+  padding: 6px 22px;
+  border-radius: 9999px;
+  background: var(--custom-stage-surface, #073642);
+  background: color-mix(in srgb, var(--custom-stage-surface, #073642) 90%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--custom-card-border, #586E75);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+}
+
+.cast2-tv-title-text {
+  font-size: clamp(14px, 1.4vw, 20px);
+  font-weight: 700;
+  color: var(--custom-stage-text, #EEE8D5);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.03em;
+  text-align: center;
+}
+
+.cast2-tv-title-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.cast2-tv-title-hidden {
+  opacity: 0;
+  transform: translateY(-8px);
+  pointer-events: none;
+}
+
+.cast2-lyrics {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  display: grid;
+  gap: 32px;
+  padding: clamp(16px, 3vw, 48px);
+  padding-top: clamp(60px, 8vh, 84px);
+  scroll-padding-top: clamp(60px, 8vh, 84px);
+  background: var(--custom-stage-bg, #002B36);
+  border-radius: 12px;
+  box-sizing: border-box;
+}
+
+@media (max-width: 600px) {
+  .cast2-lyrics {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+.cast2-tv > h1 { flex: none; }
+.cast2-tv details { text-align: left; font-size: 1rem; }
+.cast2-tv summary { cursor: pointer; }
+.cast2-scanner video { width: 100%; max-height: 40dvh; border-radius: 8px; }
+.cast2-photo { cursor: pointer; }
+.cast2-photo input { max-width: 100%; }
+
+/* Accessibility hidden element */
+.cast2 .sr-only, .cast2-tv .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* TV Connection Status Badge for transient disconnect / reconnecting */
+.cast2-tv-status-badge {
+  position: absolute;
+  bottom: clamp(12px, 2vh, 24px);
+  right: clamp(16px, 3vw, 48px);
+  z-index: 25;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  background: var(--custom-stage-surface, #073642);
+  background: color-mix(in srgb, var(--custom-stage-surface, #073642) 90%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--custom-stage-chord, #E5A93C);
+  color: var(--custom-stage-chord, #E5A93C);
+  font-size: clamp(11px, 1.1vw, 15px);
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cast2-tv-status-badge::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--custom-stage-chord, #E5A93C);
+  opacity: 0.85;
+}
+
+.cast2-qr-fallback {
+  padding: 24px 16px;
+  border: 2px dashed var(--custom-card-border, #586E75);
+  border-radius: 12px;
+  margin: 0 auto 16px auto;
+  max-width: 280px;
+}
+

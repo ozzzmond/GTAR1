@@ -1,0 +1,56 @@
+{
+  "name": "web",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "node scripts/run-tests.cjs fast",
+    "test:scale": "node scripts/run-tests.cjs scale",
+    "test:release": "node scripts/run-tests.cjs release",
+    "test:workerd": "node scripts/run-tests.cjs workerd",
+    "test:all": "node scripts/run-tests.cjs all",
+    "dev": "vite --port 5173",
+    "dev:debug": "vite --port 5174 --mode debug",
+    "dev:api": "wrangler pages dev --port 8788",
+    "d1:migrate:local": "wrangler d1 migrations apply DB --local",
+    "admin:bootstrap:local": "node scripts/bootstrap-local-admin.cjs",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "lint:sync": "eslint src/utils/syncMerge.ts src/utils/syncJournal.ts src/utils/jsonBackup.ts src/utils/setlistSongs.ts src/utils/backupSettings.ts src/utils/stagePerformance.ts src/utils/googleAuth.ts src/utils/authPolicy.ts src/utils/bandSyncAddress.ts src/utils/songbookFoundation.ts src/utils/uuid.ts src/utils/cloudBackupFormat.ts --max-warnings 0"
+  },
+  "dependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "chordsheetjs": "^18.0.0",
+    "jsqr": "^1.4.0",
+    "lucide-react": "^1.64.0",
+    "qrcode": "^1.5.4",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "tailwindcss": "^4.3.4"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.13.3",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.2.1",
+    "eslint": "^10.9.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.4",
+    "globals": "^17.14.0",
+    "jsdom": "^30.1.3",
+    "typescript": "~6.0.2",
+    "typescript-eslint": "^8.67.0",
+    "vite": "^8.3.5",
+    "vite-plugin-pwa": "^2.0.0",
+    "wrangler": "^4.144.0"
+  },
+  "overrides": {
+    "sharp": "0.35.5",
+    "miniflare": {
+      "sharp": "0.35.5"
+    }
+  }
+}

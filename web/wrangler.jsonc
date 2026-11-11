@@ -1,0 +1,58 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "gtar1",
+  "pages_build_output_dir": "dist",
+  "compatibility_date": "2026-09-10",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "ai": {
+    "binding": "AI"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "gtar1-db-prod",
+      "database_id": "9ff3bb06-9960-498b-aece-75bc0c400188",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "env": {
+    "production": {
+      "compatibility_flags": [
+        "nodejs_compat"
+      ],
+      "ai": {
+        "binding": "AI"
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "gtar1-db-prod",
+          "database_id": "9ff3bb06-9960-498b-aece-75bc0c400188",
+          "migrations_dir": "migrations"
+        }
+      ]
+    },
+    "preview": {
+      "compatibility_flags": [
+        "nodejs_compat"
+      ],
+      "ai": {
+        "binding": "AI"
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "gtar1-db-dev",
+          "database_id": "50518af6-f7f7-4e6d-b618-b6ec8ff04367",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "vars": {
+        "VITE_GOOGLE_CLIENT_ID": "895835718654-8bru1vdlj2otgq5dk46h76nilqagg421.apps.googleusercontent.com",
+        "CAST2_MODE": "reviewed-v1"
+      }
+    }
+  }
+}

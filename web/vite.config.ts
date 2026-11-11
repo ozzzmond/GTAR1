@@ -1,0 +1,481 @@
+import tailwindcss from '@tailwindcss/vite'
+import react from '@vitejs/plugin-react'
+import { VitePWA } from 'vite-plugin-pwa'
+import { defineConfig, type Plugin } from 'vite'
+import https from 'node:https'
+import url from 'node:url'
+import os from 'node:os'
+import path from 'node:path'
+import { execFileSync } from 'node:child_process'
+import { readFileSync as gtar1ReadFileSync } from 'node:fs'
+// GTAR1 build identity: exported snapshots have no GTAR history or tags, so the version comes from
+// gtar1-release.json (written by the export script) instead of GTAR's tag-verified identity.
+const gtar1Release = JSON.parse(gtar1ReadFileSync(path.resolve(import.meta.dirname, 'gtar1-release.json'), 'utf8'))
+const resolveReleaseIdentity = (_root: string, env: Record<string, string | undefined> = process.env) => env.CF_PAGES_BRANCH === 'main'
+  ? { version: gtar1Release.version, sourceTag: gtar1Release.sourceTag, sha: gtar1Release.sourceSha }
+  : null
+type Gtar1DevIdentity = { tag?: string; version?: string; tagStatus?: string; shortSha?: string; deploymentId?: string } | null
+const resolveDevIdentity = (..._args: unknown[]): Gtar1DevIdentity => null
+const getCommittedDevVersion = (..._args: unknown[]): string => gtar1Release.version
+
+import {
+  parseSearchResults,
+  parseTabSheet,
+  validateSearchQuery,
+  validateTabUrl,
+} from './src/utils/ugCore.ts'
+
+const UG_HEADERS = {
+  'User-Agent':
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0',
+  Accept:
+    'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+  'Accept-Language': 'en-US,en;q=0.5',
+  Referer: 'https://www.ultimate-guitar.com/',
+  'Sec-Fetch-Dest': 'document',
+  'Sec-Fetch-Mode': 'navigate',
+  'Sec-Fetch-Site': 'same-origin',
+  'Sec-Fetch-User': '?1',
+  'Upgrade-Insecure-Requests': '1',
+}
+
+function fetchHttps(targetUrl: string, timeoutMs = 8000): Promise<{ status: number; data: string }> {
+  return new Promise((resolve, reject) => {
+    const req = https
+      .get(targetUrl, { headers: UG_HEADERS, timeout: timeoutMs }, (res) => {
+        let data = ''
+        res.on('data', (chunk) => (data += chunk))
+        res.on('end', () => resolve({ status: res.statusCode || 200, data }))
+      })
+      .on('timeout', () => {
+        req.destroy(new Error('ETIMEDOUT: Request timed out'))
+      })
+      .on('error', reject)
+  })
+}
+
+function ugScraperPlugin(): Plugin {
+  return {
+    name: 'ug-scraper-plugin',
+    configureServer(server) {
+      server.middlewares.use('/api/ug-search', async (req, res) => {
+        res.setHeader('Content-Type', 'application/json; charset=utf-8')
+        res.setHeader('Access-Control-Allow-Origin', '*')
+        res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        res.setHeader('Cache-Control', 'no-store')
+
+        try {
+          const parsedUrl = url.parse(req.url || '', true)
+          const validation = validateSearchQuery(parsedUrl.query.q)
+
+          if (!validation.valid) {
+            res.writeHead(400)
+            res.end(JSON.stringify({ success: false, error: validation.error }))
+            return
+          }
+
+          if (!validation.query) {
+            res.writeHead(200)
+            res.end(JSON.stringify({ success: true, results: [] }))
+            return
+          }
+
+          const target = `https://www.ultimate-guitar.com/search.php?search_type=title&value=${encodeURIComponent(validation.query)}`
+          const { status, data } = await fetchHttps(target)
+
+          if (status === 404) {
+            res.writeHead(200)
+            res.end(JSON.stringify({ success: true, results: [] }))
+            return
+          }
+
+          if (status === 403) {
+            res.writeHead(403)
+            res.end(JSON.stringify({ success: false, error: 'Ultimate Guitar access restricted by WAF' }))
+            return
+          }
+
+          if (status === 429) {
+            res.writeHead(429)
+            res.end(JSON.stringify({ success: false, error: 'Rate limit exceeded on Ultimate Guitar' }))
+            return
+          }
+
+          if (status !== 200) {
+            res.writeHead(502)
+            res.end(JSON.stringify({ success: false, error: `Upstream error from Ultimate Guitar (HTTP ${status})` }))
+            return
+          }
+
+          const results = parseSearchResults(data)
+          res.writeHead(200)
+          res.end(JSON.stringify({ success: true, results }))
+        } catch (err: unknown) {
+          const error = err instanceof Error ? (err as Error & { code?: string }) : null
+          const isTimeout = error?.code === 'ETIMEDOUT' || error?.message?.includes('timed out')
+          const statusCode = isTimeout ? 504 : 502
+          const errorMsg = isTimeout
+            ? 'Gateway timeout contacting Ultimate Guitar'
+            : (error?.message || 'Internal proxy error')
+          res.writeHead(statusCode)
+          res.end(JSON.stringify({ success: false, error: errorMsg }))
+        }
+      })
+
+      server.middlewares.use('/api/ug-tab', async (req, res) => {
+        res.setHeader('Content-Type', 'application/json; charset=utf-8')
+        res.setHeader('Access-Control-Allow-Origin', '*')
+        res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        res.setHeader('Cache-Control', 'no-store')
+
+        try {
+          const parsedUrl = url.parse(req.url || '', true)
+          const validation = validateTabUrl(parsedUrl.query.url)
+
+          if (!validation.valid || !validation.parsedUrl) {
+            res.writeHead(validation.status)
+            res.end(JSON.stringify({ success: false, error: validation.error }))
+            return
+          }
+
+          const { status, data } = await fetchHttps(validation.parsedUrl.toString())
+
+          if (status === 404) {
+            res.writeHead(404)
+            res.end(JSON.stringify({ success: false, error: 'Tab not found on Ultimate Guitar' }))
+            return
+          }
+
+          if (status === 403) {
+            res.writeHead(403)
+            res.end(JSON.stringify({ success: false, error: 'Ultimate Guitar access restricted by WAF' }))
+            return
+          }
+
+          if (status === 429) {
+            res.writeHead(429)
+            res.end(JSON.stringify({ success: false, error: 'Rate limit exceeded on Ultimate Guitar' }))
+            return
+          }
+
+          if (status !== 200) {
+            res.writeHead(502)
+            res.end(JSON.stringify({ success: false, error: `Upstream error from Ultimate Guitar (HTTP ${status})` }))
+            return
+          }
+
+          const parseResult = parseTabSheet(data, validation.parsedUrl.toString())
+          if (!parseResult.success) {
+            res.writeHead(parseResult.status)
+            res.end(JSON.stringify({ success: false, error: parseResult.error }))
+            return
+          }
+
+          res.writeHead(200)
+          res.end(JSON.stringify({ success: true, sheet: parseResult.sheet }))
+        } catch (err: unknown) {
+          const error = err instanceof Error ? (err as Error & { code?: string }) : null
+          const isTimeout = error?.code === 'ETIMEDOUT' || error?.message?.includes('timed out')
+          const statusCode = isTimeout ? 504 : 502
+          const errorMsg = isTimeout
+            ? 'Gateway timeout contacting Ultimate Guitar'
+            : (error?.message || 'Internal proxy error')
+          res.writeHead(statusCode)
+          res.end(JSON.stringify({ success: false, error: errorMsg }))
+        }
+      })
+
+      // DEV-only local LAN IP discovery endpoint for Chromecast / Smart TV receiver
+      server.middlewares.use('/api/dev-lan-ip', (_req, res) => {
+        try {
+          const interfaces = os.networkInterfaces()
+          let lanIp: string | null = null
+          for (const name of Object.keys(interfaces)) {
+            const ifaceList = interfaces[name] || []
+            for (const iface of ifaceList) {
+              if (iface.family === 'IPv4' && !iface.internal) {
+                lanIp = iface.address
+                break
+              }
+            }
+            if (lanIp) break
+          }
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ success: true, lanIp }))
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : String(err)
+          res.writeHead(500, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ success: false, error: message }))
+        }
+      })
+    },
+  }
+}
+
+function apiRoutingGuardPlugin(): Plugin {
+  return {
+    name: 'api-routing-guard-plugin',
+    configureServer(server) {
+      return () => {
+        // Intercept any /api/ requests that reached post-middleware without being handled
+        // to strictly guarantee they never fall through to Vite SPA index.html
+        server.middlewares.use((req, res, next) => {
+          const parsed = url.parse(req.url || '', true)
+          if (parsed.pathname && parsed.pathname.startsWith('/api/')) {
+            res.setHeader('Content-Type', 'application/json; charset=utf-8')
+            res.writeHead(404)
+            res.end(
+              JSON.stringify({
+                success: false,
+                error: `API route not found: ${parsed.pathname}`,
+              })
+            )
+            return
+          }
+          next()
+        })
+      }
+    },
+  }
+}
+
+// https://vite.dev/config/
+export default defineConfig(({ mode }) => {
+  const isDebug = mode === 'debug' || process.env.VITE_APP_ENV === 'debug' || process.env.CF_PAGES_BRANCH === 'dev'
+  // isDev covers both standard dev server (mode='development') and the debug variant
+  const isDev = mode === 'development' || isDebug
+  const appEnv = isDebug ? 'debug' : 'production'
+  const repoRoot = path.resolve(import.meta.dirname, '..')
+  const releaseIdentity = resolveReleaseIdentity(repoRoot, { ...process.env, GTAR_BUILD_MODE: mode })
+  // Preview identity is presentation-only: do not enable DEV behavior or verify tags over the network.
+  const previewBranch = process.env.CF_PAGES_BRANCH
+  const isPreview = Boolean(process.env.CF_PAGES && previewBranch && previewBranch !== 'main' && previewBranch !== 'dev')
+  const previewIdentity = isPreview ? {
+    tagStatus: 'UNTAGGED',
+    commitSha: (/^[0-9a-f]{40}$/i.test(process.env.CF_PAGES_COMMIT_SHA || '')
+      ? process.env.CF_PAGES_COMMIT_SHA!
+      : execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot, encoding: 'utf8' }).trim()).slice(0, 7),
+    branch: previewBranch,
+  } : null
+  const devIdentity = resolveDevIdentity(repoRoot, isPreview
+    ? { GTAR_BUILD_MODE: mode }
+    : { ...process.env, GTAR_BUILD_MODE: mode })
+  const isProd = process.env.CF_PAGES_BRANCH === 'main' || Boolean(releaseIdentity)
+  const isStageCast2Dev = !isProd && (isDev || Boolean(devIdentity) || process.env.CF_PAGES_BRANCH === 'dev' || process.env.VITE_STAGE_CAST2 === 'true')
+
+  // PWA manifest icon sets
+  const devIcons = [
+    {
+      src: '/pwa-192x192.png',
+      sizes: '192x192',
+      type: 'image/png',
+      purpose: 'any',
+    },
+    {
+      src: '/pwa-512x512.png',
+      sizes: '512x512',
+      type: 'image/png',
+      purpose: 'any',
+    },
+    {
+      src: '/pwa-512x512.png',
+      sizes: '512x512',
+      type: 'image/png',
+      purpose: 'maskable',
+    },
+  ]
+  const prodIcons = [
+    {
+      src: '/pwa-prod-192x192.png',
+      sizes: '192x192',
+      type: 'image/png',
+      purpose: 'any',
+    },
+    {
+      src: '/pwa-prod-512x512.png',
+      sizes: '512x512',
+      type: 'image/png',
+      purpose: 'any',
+    },
+    {
+      src: '/pwa-prod-512x512.png',
+      sizes: '512x512',
+      type: 'image/png',
+      purpose: 'maskable',
+    },
+  ]
+
+  return {
+    define: {
+      'import.meta.env.VITE_APP_ENV': JSON.stringify(appEnv),
+      __GTAR_STAGE_CAST2_ENABLED__: JSON.stringify(isStageCast2Dev),
+      __GTAR_PROD_VERSION__: JSON.stringify(releaseIdentity?.version ?? null),
+      __GTAR_PREVIEW_IDENTITY__: JSON.stringify(previewIdentity),
+      __GTAR_DEV_VERSION__: JSON.stringify(
+        devIdentity?.tag ? devIdentity.tag.replace(/^v/, '') : (devIdentity?.version ?? getCommittedDevVersion(repoRoot))
+      ),
+      __GTAR_DEV_PROVENANCE__: JSON.stringify(isDev && devIdentity ? {
+        tagStatus: devIdentity.tagStatus || 'UNVERIFIED',
+        tagName: devIdentity.tag || null,
+        commitSha: devIdentity.shortSha || 'unknown',
+        deploymentId: devIdentity.deploymentId || null,
+      } : null),
+    },
+    plugins: [
+      {
+        name: 'gtar-release-identity',
+        generateBundle() {
+          if (releaseIdentity) this.emitFile({ type: 'asset', fileName: 'release.json', source: JSON.stringify(releaseIdentity) })
+        },
+      },
+      tailwindcss(),
+      react(),
+      ugScraperPlugin(),
+      apiRoutingGuardPlugin(),
+      {
+        name: 'html-branding-transform',
+        transformIndexHtml(html: string) {
+          if (isDev) {
+            return html
+              .replace(/<title>.*?<\/title>/, '<title>GTAR-Dev Live Stage Companion</title>')
+          } else {
+            return html
+              .replace(/<title>.*?<\/title>/, '<title>GTAR Live Stage Companion</title>')
+              .replace(/href="\/favicon\.png"/, 'href="/favicon-prod.png"')
+              .replace(/href="\/apple-touch-icon\.png"/, 'href="/apple-touch-icon-prod.png"')
+              .replace(/href="\/favicon\.ico"/, 'href="/favicon-prod.ico"')
+          }
+        },
+      },
+      VitePWA({
+        registerType: 'autoUpdate',
+        devOptions: {
+          // Disable dev SW: the fake workbox SW (skipWaiting+clientsClaim) was
+          // claiming clients mid-session during Vite HMR, causing remounts,
+          // duplicate React root errors, and rapid /api/auth/session loops.
+          enabled: false,
+        },
+        includeAssets: [
+          'favicon.ico',
+          'favicon.png',
+          'favicon-prod.ico',
+          'favicon-prod.png',
+          'apple-touch-icon.png',
+          'apple-touch-icon-prod.png',
+          'pwa-192x192.png',
+          'pwa-512x512.png',
+          'pwa-prod-192x192.png',
+          'pwa-prod-512x512.png',
+          'prod-logo.png',
+          'dev-logo.png',
+        ],
+        manifest: {
+          id: '/',
+          scope: '/',
+          name: isDev ? 'GTAR-Dev Live Stage Companion' : 'GTAR Live Stage Companion',
+          short_name: isDev ? 'GTAR-Dev' : 'GTAR',
+          description: 'Professional Live Stage Teleprompter, Chord Transposer, BandSync, and Setlist Companion for Musicians',
+          theme_color: isDev ? '#8B0000' : '#0f172a',
+          background_color: isDev ? '#1a0000' : '#002B36',
+          display: 'standalone',
+          orientation: 'any',
+          start_url: '/',
+          icons: isDev ? devIcons : prodIcons,
+        },
+        workbox: {
+          globPatterns: [
+            '**/*.{js,css,html,ico,png,jpg,jpeg,svg,gif,webp,json,woff,woff2,ttf,eot,otf,mp3,wav,webmanifest}',
+          ],
+          navigateFallback: '/index.html',
+          navigateFallbackDenylist: [/^\/api\//],
+          cleanupOutdatedCaches: true,
+          clientsClaim: true,
+          skipWaiting: true,
+          runtimeCaching: [
+            {
+              urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'google-fonts-cache',
+                expiration: {
+                  maxEntries: 15,
+                  maxAgeSeconds: 60 * 60 * 24 * 365,
+                },
+                cacheableResponse: {
+                  statuses: [0, 200],
+                },
+              },
+            },
+            {
+              urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'gstatic-fonts-cache',
+                expiration: {
+                  maxEntries: 30,
+                  maxAgeSeconds: 60 * 60 * 24 * 365,
+                },
+                cacheableResponse: {
+                  statuses: [0, 200],
+                },
+              },
+            },
+          ],
+        },
+      }),
+    ],
+    server: {
+      port: isDebug ? 5174 : 5173,
+      strictPort: true,
+      host: isDebug ? '0.0.0.0' : false,
+      watch: {
+        // Exclude Wrangler/Miniflare runtime state from Vite's file watcher.
+        // Without this, D1 read/write activity mutates .wrangler/state/v3/d1/**
+        // sqlite-wal/sqlite-shm files; Vite detects those changes and issues a
+        // full page reload, which reinitializes AuthGate, triggers another
+        // /api/auth/session → more D1 activity → more WAL/SHM mutations → loop.
+        ignored: ['**/.wrangler/**'],
+      },
+      proxy: {
+        ...(process.env.VITE_CAST2_LOCAL_REVIEW === 'true' || isStageCast2Dev ? {
+          '/cast2-api': {
+            target: 'http://127.0.0.1:8789', ws: true,
+            rewrite: (path: string) => path.replace(/^\/cast2-api/, ''),
+            headers: { Origin: 'https://gtar.test', 'CF-Connecting-IP': '127.0.0.1' },
+          },
+        } : {}),
+        '/api/ug': {
+          target: 'https://www.ultimate-guitar.com',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/ug/, ''),
+          headers: UG_HEADERS,
+        },
+        '/api/ug-tabs': {
+          target: 'https://tabs.ultimate-guitar.com',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/ug-tabs/, ''),
+          headers: UG_HEADERS,
+        },
+        '/api': {
+          target: process.env.VITE_BACKEND_URL || 'http://127.0.0.1:8788',
+          changeOrigin: true,
+          configure: (proxy) => {
+            proxy.on('error', (_err, _req, res) => {
+              if ('writeHead' in res && !res.headersSent) {
+                res.setHeader('Content-Type', 'application/json; charset=utf-8')
+                res.writeHead(503)
+                res.end(
+                  JSON.stringify({
+                    success: false,
+                    error: 'Local API backend unavailable. Ensure wrangler pages dev is running on port 8788 (npm run dev:api).',
+                  })
+                )
+              }
+            })
+          },
+        },
+      },
+    },
+  }
+})
+

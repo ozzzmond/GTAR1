@@ -1,0 +1,342 @@
+import { previewBackupImport, confirmImportAsNew } from '../utils/legacyImport'
+import React, { useRef, useState } from 'react'
+import { FolderOpen, FileText, FolderUp, X, Check, AlertCircle } from 'lucide-react'
+import type { ActiveSongState, WebSetlist } from '../types/gtar'
+import { parseGtarSong, detectSongKey } from '../utils/songParser'
+import { extractDirectives } from '../utils/chordSheetParser'
+import { parseBackupJson } from '../utils/jsonBackup'
+import { isOnSongFile, looksLikeArchive, onsongToChordPro, SONG_FILE_EXTENSIONS } from '../utils/onsongImport'
+
+interface ImportDialogModalProps {
+  isOpen: boolean
+  onClose: () => void
+  onImportSong: (song: Partial<ActiveSongState>) => void
+  onImportAllSongs: (songs: Array<Partial<ActiveSongState>>) => void
+  onImportSingleSetlist?: (setlist: WebSetlist, songs: ActiveSongState[]) => void
+  onSmartMerge?: (songs: Array<Partial<ActiveSongState>>, setlists: WebSetlist[]) => void
+  existingSongs?: ActiveSongState[]
+  existingSetlists?: WebSetlist[]
+}
+
+export const ImportDialogModal: React.FC<ImportDialogModalProps> = ({
+  isOpen,
+  onClose,
+  onImportSong,
+  onImportAllSongs,
+  onImportSingleSetlist,
+  onSmartMerge,
+  existingSongs = [],
+  existingSetlists = [],
+}) => {
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const folderInputRef = useRef<HTMLInputElement>(null)
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(
+    null
+  )
+  // #149 S4: converted OnSong files are previewed before they are saved.
+  const [preview, setPreview] = useState<{ song: Partial<ActiveSongState>; filename: string; warnings: string[] } | null>(null)
+
+  if (!isOpen) return null
+
+  const showFeedback = (type: 'success' | 'error', message: string) => {
+    setFeedback({ type, message })
+    setTimeout(() => {
+      setFeedback(null)
+      if (type === 'success') {
+        onClose()
+      }
+    }, 1800)
+  }
+
+  // Parse a text or loose json file content into song state
+  const parseFileContent = (filename: string, original: string): Partial<ActiveSongState> | null => {
+    if (looksLikeArchive(original)) throw new Error('This looks like an OnSong backup or archive, not a song file. Export single songs as .onsong or ChordPro text.')
+    const content = isOnSongFile(filename) ? onsongToChordPro(original).content : original
+    const trimmed = content.trim()
+    if (!trimmed) return null
+
+    if (filename.toLowerCase().endsWith('.json') || trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(trimmed)
+        // Under no circumstances should raw backup JSON be parsed as a song!
+        if (parsed.metadata?.appName === 'GTAR' || parsed.app === 'GTAR' || Array.isArray(parsed.songs) || parsed.exportType === 'SINGLE_SETLIST') {
+          return null
+        }
+
+        if (parsed.title || parsed.rawContent) {
+          const rawContent = parsed.rawContent || parsed.content || ''
+          return {
+            title: parsed.title || filename.replace(/\.[^/.]+$/, ''),
+            artist: parsed.artist || '',
+            key: parsed.key || detectSongKey(rawContent),
+            capo: parsed.capo || '',
+            bpm: parsed.bpm || '120',
+            rawContent,
+            format: parsed.format || 'CHORD_PRO',
+            transposeOffset: parsed.transposeOffset || 0,
+          }
+        }
+      } catch {
+        // Fall back to text parsing if JSON parse fails
+      }
+    }
+
+    // Treat as ChordPro / text chords
+    const directives = extractDirectives(content)
+    const baseTitle = directives.title || filename.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ')
+    const parsedSong = parseGtarSong(content, 0)
+
+    return {
+      title: baseTitle,
+      artist: directives.artist || parsedSong.artist || '',
+      key: directives.key || parsedSong.key || detectSongKey(content),
+      capo: directives.capo || parsedSong.capo || 'No Capo',
+      bpm: directives.bpm || parsedSong.bpm || '120',
+      rawContent: content,
+      format: parsedSong.format || 'CHORD_PRO',
+      transposeOffset: 0,
+    }
+  }
+
+  // Handle single file import (.txt, .chordpro, .json)
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    try {
+      const text = await file.text()
+      // 1. First check if it's a valid GTAR JSON file (single setlist, backup package, or song list)
+      if (file.name.toLowerCase().endsWith('.json')) {
+        {
+          const parsed = parseBackupJson(text, { mode: 'merge', existingSongs })
+          if (!parsed.isValid) {
+            const preview = previewBackupImport(text)
+            if (!preview.isValid || !preview.importAsNew) throw new Error(preview.error || parsed.error)
+            if (!onSmartMerge) throw new Error('Import as New requires library merge support.')
+            const imported = confirmImportAsNew(preview, { songs: existingSongs, setlists: existingSetlists }, message => window.confirm(message))
+            if (imported) {
+              if (!imported.isValid) throw new Error(imported.error)
+              onSmartMerge(imported.songs, imported.setlists)
+              showFeedback('success', `Imported as new: ${imported.songs.length} songs, ${imported.setlists.length} setlists`)
+            }
+            e.target.value = ''
+            return
+          }
+          if (parsed.isValid) {
+            // A. Single Setlist package (.json)
+            if (parsed.isSingleSetlist && parsed.setlists.length > 0) {
+              if (onImportSingleSetlist) {
+                onImportSingleSetlist(parsed.setlists[0], parsed.songs as ActiveSongState[])
+              } else if (onSmartMerge) {
+                onSmartMerge(parsed.songs, parsed.setlists)
+              } else {
+                onImportAllSongs(parsed.songs)
+              }
+              showFeedback('success', `Imported setlist "${parsed.singleSetlistName || parsed.setlists[0].name}" (${parsed.songs.length} tracks)!`)
+              return
+            }
+
+            // B. Multi-setlist backup / song package (.json)
+            if (parsed.setlists.length > 0) {
+              if (onSmartMerge) {
+                onSmartMerge(parsed.songs, parsed.setlists)
+                showFeedback('success', `Imported ${parsed.songs.length} songs and ${parsed.setlists.length} setlists!`)
+                return
+              }
+            }
+
+            // C. Multi-song list (.json)
+            if (parsed.songs.length > 1) {
+              onImportAllSongs(parsed.songs)
+              showFeedback('success', `Imported ${parsed.songs.length} songs from song package!`)
+              return
+            }
+
+            // D. Single song (.json)
+            if (parsed.songs.length === 1) {
+              onImportSong(parsed.songs[0])
+              showFeedback('success', `Successfully imported "${parsed.songs[0].title}"!`)
+              return
+            }
+          }
+        }
+      }
+
+      // 2. Loose song file content (.txt, .cho, .chordpro, .onsong, loose JSON)
+      const song = parseFileContent(file.name, text)
+      if (song && isOnSongFile(file.name)) {
+        setPreview({ song, filename: file.name, warnings: onsongToChordPro(text).warnings })
+      } else if (song) {
+        onImportSong(song)
+        showFeedback('success', `Successfully imported "${song.title}"!`)
+      } else {
+        showFeedback('error', 'Could not read valid song content or setlist from file.')
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      showFeedback('error', `Failed to read file: ${msg}`)
+    }
+
+    if (e.target) e.target.value = ''
+  }
+
+  // Handle folder batch import
+  const handleFolderChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+
+    const validExtensions: readonly string[] = SONG_FILE_EXTENSIONS
+    const importedList: Array<Partial<ActiveSongState>> = []
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]
+      const lower = file.name.toLowerCase()
+      const isValidExt = validExtensions.some((ext) => lower.endsWith(ext))
+      if (!isValidExt) continue
+
+      try {
+        const text = await file.text()
+        const song = parseFileContent(file.name, text)
+        if (song && song.rawContent) {
+          importedList.push(song)
+        }
+      } catch {
+        // skip failed files
+      }
+    }
+
+    if (importedList.length > 0) {
+      onImportAllSongs(importedList)
+      showFeedback('success', `Batch imported ${importedList.length} songs from folder!`)
+    } else {
+      showFeedback('error', 'No valid chord charts or song files found in folder.')
+    }
+
+    if (e.target) e.target.value = ''
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
+      <div className="w-full max-w-md rounded-2xl bg-app-surface border border-app-border shadow-2xl overflow-hidden flex flex-col">
+        {/* Hidden inputs for native file and directory pickers */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept={`${SONG_FILE_EXTENSIONS.join(',')},text/*,application/json`}
+          onChange={handleFileChange}
+          className="hidden"
+        />
+        <input
+          ref={folderInputRef}
+          type="file"
+          // @ts-expect-error React input types omit the legacy directory attributes.
+          webkitdirectory="true"
+          directory="true"
+          multiple
+          onChange={handleFolderChange}
+          className="hidden"
+        />
+
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-app-border flex items-center justify-between bg-app-base/50">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-app-action/20 border border-app-action/30 flex items-center justify-center text-app-action">
+              <FolderOpen className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-app-heading">Import Songs</h2>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-app-muted hover:text-app-heading hover:bg-app-base transition-colors cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="p-6 space-y-4">
+          {feedback && (
+            <div
+              className={`p-3 rounded-xl border text-xs font-semibold flex items-center gap-2 ${
+                feedback.type === 'success'
+                  ? 'bg-app-action/15 border-app-action/40 text-app-action'
+                  : 'bg-[#DC6E67]/15 border-[#DC6E67]/40 text-status-error'
+              }`}
+            >
+              {feedback.type === 'success' ? (
+                <Check className="w-4 h-4 shrink-0" />
+              ) : (
+                <AlertCircle className="w-4 h-4 shrink-0" />
+              )}
+              <span>{feedback.message}</span>
+            </div>
+          )}
+
+          {preview && (
+            <div data-testid="onsong-preview" className="p-3 rounded-xl border border-app-action/40 bg-app-base space-y-2 text-xs">
+              <div className="font-bold text-app-heading">Preview: {preview.song.title}{preview.song.artist ? ` · ${preview.song.artist}` : ''}</div>
+              <div className="text-app-muted">From {preview.filename}{preview.song.key ? ` · Key ${preview.song.key}` : ''}. Converted from OnSong to ChordPro; check it before saving.</div>
+              {preview.warnings.map(w => <div key={w} className="text-status-warning">{w}</div>)}
+              <pre className="max-h-40 overflow-auto whitespace-pre-wrap p-2 rounded bg-app-surface border border-app-border text-[11px]">{preview.song.rawContent}</pre>
+              <div className="flex gap-2">
+                <button type="button" data-testid="onsong-import-confirm" onClick={() => {
+                  const { song } = preview
+                  setPreview(null)
+                  onImportSong(song)
+                  showFeedback('success', `Successfully imported "${song.title}"!`)
+                }} className="px-3 py-1.5 rounded-lg bg-app-action text-app-on-action font-bold cursor-pointer">Import song</button>
+                <button type="button" onClick={() => setPreview(null)} className="px-3 py-1.5 rounded-lg border border-app-border cursor-pointer">Cancel</button>
+              </div>
+            </div>
+          )}
+
+          {/* Option 1: Import File */}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="w-full text-left p-4 rounded-xl bg-app-base border border-app-border hover:border-app-action hover:bg-app-accent/30 transition-all flex items-center gap-3.5 group cursor-pointer"
+          >
+            <div className="w-10 h-10 rounded-xl bg-app-surface flex items-center justify-center text-app-action group-hover:scale-105 transition-transform">
+              <FileText className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-xs font-bold text-app-heading group-hover:text-app-action transition-colors">
+                Import File (.txt, .cho, .chordpro, .onsong, .json)
+              </div>
+            </div>
+          </button>
+
+          {/* Option 2: Import Folder (Batch) */}
+          <button
+            type="button"
+            onClick={() => folderInputRef.current?.click()}
+            className="w-full text-left p-4 rounded-xl bg-app-base border border-app-border hover:border-app-action hover:bg-app-accent/30 transition-all flex items-center gap-3.5 group cursor-pointer"
+          >
+            <div className="w-10 h-10 rounded-xl bg-app-surface flex items-center justify-center text-app-action group-hover:scale-105 transition-transform">
+              <FolderUp className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-xs font-bold text-app-heading group-hover:text-app-action transition-colors">
+                Import Folder (Batch)
+              </div>
+            </div>
+          </button>
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-3 border-t border-app-border bg-app-base/30 flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-1.5 rounded-xl bg-app-base border border-app-border text-xs font-semibold text-app-muted hover:text-app-heading transition-colors cursor-pointer"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}

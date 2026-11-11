@@ -1,0 +1,43 @@
+# Log Files
+*.log
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# IntelliJ IDEA files
+*.iml
+.idea/
+.idea/caches
+.idea/libraries
+.idea/modules.xml
+.idea/workspace.xml
+
+# Python bytecode and cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Web companion app
+web/node_modules/
+web/dist/
+web/dev-dist/
+web/.env.local
+web/.env
+web/.env.*
+!web/.env.example
+web/.dev.vars
+
+.npm-cache/
+lint-results.json
+
+# Local transient residue and diagnostic dumps
+/outputs/
+/web/outputs/
+
+# Root Cloudflare local runtime state
+/.wrangler/
+
+# impeccable: commit only .impeccable/config.json
+.impeccable/*
+!.impeccable/config.json
