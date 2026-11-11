@@ -12,7 +12,8 @@ const initialTheme = hydrateThemeSettings()
 applyThemeRuntime(initialTheme.mode, initialTheme.standalone)
 // Root bootstrap is a singleton entrypoint, not a component refresh boundary.
 // eslint-disable-next-line react-refresh/only-export-components -- The lazy import is rendered by the existing guarded root.
-const App = lazy(() => import('./App.tsx'))
+import { gtar1DemoReady } from './data/gtar1DemoReset'
+const App = lazy(async () => { await gtar1DemoReady; return import('./App.tsx') })
 
 import { isDevEnv } from './utils/env'
 import { requestDurableStorage } from './utils/syncJournal'
