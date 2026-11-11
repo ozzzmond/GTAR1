@@ -45,7 +45,7 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
   const environmentLabel = isDevEnv
     ? 'Development'
     : GTAR_PREVIEW_IDENTITY
-      ? 'Preview'
+      ? 'Demo'
       : 'Production'
 
   return (
@@ -70,7 +70,7 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
               <Info className="w-4 h-4" aria-hidden="true" />
             </div>
             <h2 id="about-modal-title" className="font-extrabold text-sm sm:text-base tracking-wide">
-              About GTAR
+              About GTAR1
             </h2>
           </div>
           <button
@@ -89,11 +89,11 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
           {/* App Branding */}
           <div className="flex items-center gap-3 p-3 rounded-xl bg-app-base border border-app-border">
             <div className="w-12 h-12 rounded-xl border border-app-border bg-app-surface overflow-hidden flex items-center justify-center shrink-0">
-              <img src={mascotSrc} alt="GTAR Logo" className="w-full h-full object-contain select-none scale-110" />
+              <img src={mascotSrc} alt="GTAR1 Logo" className="w-full h-full object-contain select-none scale-110" />
             </div>
             <div className="min-w-0 flex-1">
               <div className="font-extrabold text-sm text-app-heading tracking-tight flex items-center gap-2">
-                <span>GTAR Live Stage Companion</span>
+                <span>GTAR1 Live Stage Companion</span>
                 {isDevEnv && (
                   <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-app-accent/25 text-app-accent border border-app-accent/40">DEV</span>
                 )}

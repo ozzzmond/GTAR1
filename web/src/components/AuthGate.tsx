@@ -755,7 +755,7 @@ export function AuthGate({ children, deviceOwned = false }: { children: ReactNod
             className="w-full h-full object-contain rounded-xl"
           />
         </div>
-        <h1 className="text-3xl font-bold">GTAR</h1>
+        <h1 className="text-3xl font-bold">GTAR1</h1>
         <p className="text-app-muted mt-2">Songbook &amp; Live Stage Companion</p>
         <h2 className="text-lg font-semibold mt-8">Owner Access</h2>
         <p className="text-sm text-app-muted mt-2 mb-6">

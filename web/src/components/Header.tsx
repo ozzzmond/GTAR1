@@ -588,18 +588,18 @@ export const Header: React.FC<HeaderProps> = ({
             className="md:hidden relative flex w-9 h-9 items-center justify-center rounded-xl header-neutral-icon text-app-text hover:text-app-heading hover:bg-app-base transition-colors shrink-0 before:absolute before:-inset-1 before:content-['']">
             {isExplorerOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
-          <button type="button" onClick={onNavigateHome} aria-label="GTAR home"
+          <button type="button" onClick={onNavigateHome} aria-label="GTAR1 home"
             className="flex sm:flex-row flex-col items-center sm:gap-2 gap-0 text-center sm:text-left group min-h-9 cursor-pointer shrink-0">
             <div className="w-10 h-10 rounded-xl border border-app-border bg-app-base overflow-hidden flex items-center justify-center shadow-sm shrink-0 group-hover:opacity-90 transition-all">
-              <img src={mascotSrc} alt="GTAR Logo"
+              <img src={mascotSrc} alt="GTAR1 Logo"
                 className="w-full h-full object-contain p-0 select-none scale-110" />
             </div>
             <div className="hidden sm:flex items-center">
               <span className="text-base font-extrabold header-primary-text text-app-heading tracking-tight group-hover:text-app-link transition-colors">
-                GTAR
+                GTAR1
               </span>
               {(isDevEnv || GTAR_PREVIEW_IDENTITY) && (
-                <span className="ml-2 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-app-accent/25 text-app-accent border border-app-accent/40">DEV</span>
+                <span className="ml-2 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-app-accent/25 text-app-accent border border-app-accent/40">DEMO</span>
               )}
             </div>
           </button>
@@ -763,7 +763,7 @@ export const Header: React.FC<HeaderProps> = ({
                   className={popoverItem}
                 >
                   <Info className="w-4 h-4 text-app-action shrink-0" aria-hidden="true" />
-                  <span>About GTAR</span>
+                  <span>About GTAR1</span>
                 </button>
 
                 {/* Mobile/compact Trash */}

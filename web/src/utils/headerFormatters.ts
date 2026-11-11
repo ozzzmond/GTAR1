@@ -31,10 +31,10 @@ export function formatPreviewIdentity(identity: PreviewBuildIdentity): string {
   const sha = identity.commitSha || 'unknown'
   const status = identity.tagStatus
   if (status === 'UNTAGGED') {
-    return `PREVIEW · SHA: ${sha}`
+    return `DEMO · SHA: ${sha}`
   }
   if (status === 'TAGGED') {
-    return `PREVIEW · TAGGED · SHA: ${sha}`
+    return `DEMO · TAGGED · SHA: ${sha}`
   }
-  return `PREVIEW · ${status} · SHA: ${sha}`
+  return `DEMO · ${status} · SHA: ${sha}`
 }

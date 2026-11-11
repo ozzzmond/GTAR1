@@ -14,6 +14,7 @@ const gtar1Release = JSON.parse(gtar1ReadFileSync(path.resolve(import.meta.dirna
 const resolveReleaseIdentity = (_root: string, env: Record<string, string | undefined> = process.env) => env.CF_PAGES_BRANCH === 'main'
   ? { version: gtar1Release.version, sourceTag: gtar1Release.sourceTag, sha: gtar1Release.sourceSha }
   : null
+const gtar1IsDemo = process.env.CF_PAGES_BRANCH === 'demo'
 type Gtar1DevIdentity = { tag?: string; version?: string; tagStatus?: string; shortSha?: string; deploymentId?: string } | null
 const resolveDevIdentity = (..._args: unknown[]): Gtar1DevIdentity => null
 const getCommittedDevVersion = (..._args: unknown[]): string => gtar1Release.version
@@ -309,7 +310,7 @@ export default defineConfig(({ mode }) => {
     define: {
       'import.meta.env.VITE_APP_ENV': JSON.stringify(appEnv),
       __GTAR_STAGE_CAST2_ENABLED__: JSON.stringify(isStageCast2Dev),
-      __GTAR_PROD_VERSION__: JSON.stringify(releaseIdentity?.version ?? null),
+      __GTAR_PROD_VERSION__: JSON.stringify(releaseIdentity?.version ?? gtar1Release.version),
       __GTAR_PREVIEW_IDENTITY__: JSON.stringify(previewIdentity),
       __GTAR_DEV_VERSION__: JSON.stringify(
         devIdentity?.tag ? devIdentity.tag.replace(/^v/, '') : (devIdentity?.version ?? getCommittedDevVersion(repoRoot))
@@ -340,7 +341,7 @@ export default defineConfig(({ mode }) => {
               .replace(/<title>.*?<\/title>/, '<title>GTAR-Dev Live Stage Companion</title>')
           } else {
             return html
-              .replace(/<title>.*?<\/title>/, '<title>GTAR Live Stage Companion</title>')
+              .replace(/<title>.*?<\/title>/, '<title>' + (gtar1IsDemo ? 'GTAR1 Demo' : 'GTAR1 Live Stage Companion') + '</title>')
               .replace(/href="\/favicon\.png"/, 'href="/favicon-prod.png"')
               .replace(/href="\/apple-touch-icon\.png"/, 'href="/apple-touch-icon-prod.png"')
               .replace(/href="\/favicon\.ico"/, 'href="/favicon-prod.ico"')
@@ -372,8 +373,8 @@ export default defineConfig(({ mode }) => {
         manifest: {
           id: '/',
           scope: '/',
-          name: isDev ? 'GTAR-Dev Live Stage Companion' : 'GTAR Live Stage Companion',
-          short_name: isDev ? 'GTAR-Dev' : 'GTAR',
+          name: isDev ? 'GTAR-Dev Live Stage Companion' : (gtar1IsDemo ? 'GTAR1 Demo' : 'GTAR1 Live Stage Companion'),
+          short_name: isDev ? 'GTAR-Dev' : (gtar1IsDemo ? 'GTAR1 Demo' : 'GTAR1'),
           description: 'Professional Live Stage Teleprompter, Chord Transposer, BandSync, and Setlist Companion for Musicians',
           theme_color: isDev ? '#8B0000' : '#0f172a',
           background_color: isDev ? '#1a0000' : '#002B36',
