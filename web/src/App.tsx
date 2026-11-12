@@ -14,6 +14,7 @@ import { transposeContext } from './utils/songKeySemantics'
 import { parseBandSetlist } from './utils/bandSetlistImport'
 import {
   libraryRevision,
+  loadedLibraryRevision,
   reloadLibraryRevision,
   persistLibrary,
   planDanglingReferenceRepair,
@@ -66,8 +67,6 @@ import { TrashView } from './components/TrashView'
 import { KeyPickerModal } from './components/KeyPickerModal'
 import { ExplorerNavigation } from './components/ExplorerNavigation'
 import type { ExplorerTarget } from './components/MusicExplorerNav'
-import { getStoredSessionStatus } from './utils/googleAuth'
-import { useOptionalGoogleAuth } from './utils/authContext'
 import { ShareSetlistModal } from './components/ShareSetlistModal'
 import { ImportSharedSetlistModal } from './components/ImportSharedSetlistModal'
 import { validateSharedSetlistPayload, type SharedSetlistPayload } from './utils/sharedSetlist'
@@ -89,6 +88,7 @@ import { stageCast2Enabled } from './utils/stageCast2Local'
 import { stageCast } from './utils/stageCast'
 import { bandSync } from './utils/bandSync'
 import { detectSongKey } from './utils/songParser'
+import { canonicalSongKey } from './utils/musicalKey'
 import type { ActiveSongState, WebSetlist, SetlistFolder } from './types/gtar'
 import type { FetchedChordSheet } from './utils/onlineSearch'
 import { isDevEnv } from './utils/env'
@@ -245,12 +245,17 @@ function LibraryApp() {
     return () => window.removeEventListener(OPEN_RECOVERY_DATA_EVENT, open)
   }, [])
   const editorNavigationGuard = useRef<((next: () => void) => void) | null>(null)
+  // Keep the setlist page across the workspace's viewer-time unmount.
+  const [workspaceSetlistId, setWorkspaceSetlistId] = useState<string | number | null>(null)
   const navigateSafely = (next: () => void) => {
     if (editorNavigationGuard.current) editorNavigationGuard.current(next)
     else next()
   }
   // Load once so legacy songs receive the same IDs used by the setlist migration.
   const [initialLibrary] = useState(() => {
+    // #453 D1: startup repairs are saves built on the library read here; they name its revision so a
+    // newer commit from another tab is never replaced (the stale write is refused and handled on mount).
+    const loadedRevision = loadedLibraryRevision()
     let savedLibrary = readPersistedLibrary()
     if (savedLibrary) {
       const normalized = normalizeSongbookIds(savedLibrary.songs, savedLibrary.setlists)
@@ -259,7 +264,7 @@ function LibraryApp() {
       if (normalized.migrated || cleaned.songs.length !== normalized.songs.length || cleaned.setlists.length !== normalized.setlists.length) {
         savedLibrary = cleaned
         try {
-          persistLibrary(savedLibrary)
+          persistLibrary(savedLibrary, localStorage, { expectedRaw: loadedRevision })
         } catch { /* storage quota or error */ }
       }
       return { ...partitionSongs(savedLibrary.songs), setlists: bindLegacySetlists(savedLibrary.setlists, savedLibrary.songs), folders: savedLibrary.folders ?? [], tagColors: savedLibrary.tagColors }
@@ -282,7 +287,7 @@ function LibraryApp() {
     const normalized = normalizeSongbookIds(combined, storedSetlists)
     const repaired = removeUnchangedSamples(deduplicateLibrary({ songs: normalized.songs, setlists: normalized.setlists }), cloudSyncedSetlistIds())
     try {
-      persistLibrary(repaired)
+      persistLibrary(repaired, localStorage, { expectedRaw: loadedRevision })
       performStorageHousekeeping()
     } catch { /* ignore */ }
     const migrated = readPersistedLibrary() ?? repaired
@@ -552,7 +557,6 @@ function LibraryApp() {
   // True when StageView enters fullscreen or focus mode — hides the global Header
   const [isStagePerformanceMode, setIsStagePerformanceMode] = useState(false)
 
-  const authContext = useOptionalGoogleAuth()
   // Track in-flight and successfully processed tokens to prevent duplicate requests or retry loops
   const inFlightShareRef = useRef<string | null>(null)
   const resolvedShareRef = useRef<string | null>(null)
@@ -598,50 +602,44 @@ function LibraryApp() {
         return
       }
 
-      const auth = getStoredSessionStatus()
-      const authToken = authContext?.session
-        ? (authContext.session.sessionToken || authContext.session.idToken || authContext.session.token)
-        : (auth.session ? (auth.session.sessionToken || auth.session.idToken || auth.session.token) : null)
-
-      // If unauthenticated or session expired, retain pending token in sessionStorage for restoration
-      const publicShare = tokenToFetch.length === 64
-      if (!publicShare && (!authToken || auth.isExpired || !authContext?.session || authContext.accessStatus !== 'active')) {
+      // Only anonymous 64-hex shares exist (#453 N1); shorter account-era tokens are retired.
+      if (tokenToFetch.length !== 64) {
+        resolvedShareRef.current = tokenToFetch
         try {
-          if (typeof sessionStorage !== 'undefined') {
-            sessionStorage.setItem('gtar_pending_share_token', tokenToFetch)
+          if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem('gtar_pending_share_token')
+          const cleanUrl = new URL(window.location.href)
+          if (cleanUrl.searchParams.has('share')) {
+            cleanUrl.searchParams.delete('share')
+            window.history.replaceState({}, document.title, cleanUrl.pathname + (cleanUrl.search || ''))
           }
         } catch { /* ignore */ }
+        queueMicrotask(() => {
+          setToastMessage('This share link is from an older version and is no longer supported.')
+          setTimeout(() => setToastMessage(null), 4000)
+        })
         return
       }
 
       inFlightShareRef.current = tokenToFetch
 
-      const headers: Record<string, string> = {
-        Accept: 'application/json',
-        ...(!publicShare ? { Authorization: `Bearer ${authToken}` } : {}),
-      }
+      const headers: Record<string, string> = { Accept: 'application/json' }
 
       fetch(`/api/setlist/share?token=${encodeURIComponent(tokenToFetch)}`, { headers, signal: AbortSignal.timeout(15000) })
         .then(async (res) => {
           inFlightShareRef.current = null
           if (!res.ok) {
             const errData = await res.json().catch(() => ({}))
-            if (res.status === 401) {
-              // Recoverable auth failure: token must survive in sessionStorage
-              throw { type: 'RECOVERABLE_AUTH', message: 'Authentication required to view shared setlist.' }
-            }
-            if (res.status === 403) {
-              // Recoverable access approval failure: token survives for when admin approves
-              throw { type: 'RECOVERABLE_AUTH', message: 'Active account approval required to view shared setlist.' }
-            }
             if (res.status === 410) {
-              // Terminal expired or revoked token outcome
+              // Terminal expired, revoked or retired token outcome
               const isRevoked = errData?.error === 'SHARED_SETLIST_REVOKED'
+              const isRetired = errData?.error === 'LEGACY_SHARE_RETIRED'
               throw {
                 type: 'TERMINAL_EXPIRED',
-                message: isRevoked
-                  ? 'This shared setlist link has been revoked.'
-                  : 'This shared setlist link has expired.',
+                message: isRetired
+                  ? 'This share link is from an older version and is no longer supported.'
+                  : isRevoked
+                    ? 'This shared setlist link has been revoked.'
+                    : 'This shared setlist link has expired.',
               }
             }
             if (res.status === 404) {
@@ -701,7 +699,7 @@ function LibraryApp() {
     } catch {
       /* ignore */
     }
-  }, [authContext?.session, authContext?.accessStatus])
+  }, [])
 
   // Stage Cast Active Presentation State
   const [isCastActive, setIsCastActive] = useState(() => stageCast.isPresentationActive())
@@ -887,7 +885,7 @@ function LibraryApp() {
                   id: generateUUID(),
                   title: title || 'Synced Song',
                   artist: artist || '',
-                  key: msg.payload.key || detectSongKey(effectiveContent),
+                  key: canonicalSongKey(msg.payload.key || '') || detectSongKey(effectiveContent),
                   capo: msg.payload.capo || 'No Capo',
                   bpm: msg.payload.bpm || '120',
                   format: msg.payload.format || 'CHORD_PRO',
@@ -914,7 +912,7 @@ function LibraryApp() {
                 id: generateUUID(),
                 title: title || 'Synced Song',
                 artist: artist || '',
-                key: msg.payload.key || detectSongKey(effectiveContent),
+                key: canonicalSongKey(msg.payload.key || '') || detectSongKey(effectiveContent),
                 capo: msg.payload.capo || 'No Capo',
                 bpm: msg.payload.bpm || '120',
                 format: msg.payload.format || 'CHORD_PRO',
@@ -932,7 +930,9 @@ function LibraryApp() {
         } else if (msg.type === 'SETLIST_SYNC' && msg.payload) {
           try {
             const parsed = parseBandSetlist(msg.payload, importStateRef.current.songs)
-            handleSmartMerge(parsed.songs, parsed.setlists)
+            const kept = handleSmartMerge(parsed.songs, parsed.setlists).skippedSetlists[0]
+            // #453 D6: the Leader's queue is not shown as received when this device kept its own version.
+            if (kept) throw new Error(`Setlist "${kept.name}" was changed on this device; the Leader's version was not applied.`)
             setActiveSetlistId(parsed.setlists[0].id)
           } catch (error) {
             setToastMessage(error instanceof Error ? error.message : 'Setlist reception aborted; resolve import conflict explicitly.')
@@ -1134,6 +1134,7 @@ function LibraryApp() {
     setIsSetlistDrawerOpen(false)
     navigateSafely(() => {
       setExplorerSelection(target)
+      setWorkspaceSetlistId(null)
       setActiveView('songbook')
     })
   }
@@ -1201,7 +1202,7 @@ function LibraryApp() {
       id: generateUUID(),
       title: sheet.title,
       artist: sheet.artist,
-      key: sheet.key || detectSongKey(sheet.rawContent || ''),
+      key: canonicalSongKey(sheet.key || '') || detectSongKey(sheet.rawContent || ''),
       capo: sheet.capo || 'No Capo',
       bpm: sheet.bpm || '120',
       format: sheet.format,
@@ -1715,21 +1716,6 @@ function LibraryApp() {
           folders={folders}
           onCloudRestore={handleFullRestore}
           onCloudMerge={handleSmartMerge}
-          onCloudSyncApplied={(updated) => {
-            // #208 F6: adopt what is stored now, not the sync's copy: a save from another surface may have
-            // landed after the sync wrote, and the stored library already contains both.
-            const stored = readPersistedLibrary() ?? updated
-            persistedBaselineRef.current = libraryRevision()
-            setCrossTabConflict(null)
-            const partition = partitionSongs(stored.songs)
-            setSongs(partition.active)
-            setDeletedSongs(partition.deleted)
-            setSetlists(stored.setlists)
-            setTagColors(stored.tagColors)
-            setFolders(stored.folders ?? [])
-            setToastMessage('Songbook synced with Cloud')
-            setTimeout(() => setToastMessage(null), 3500)
-          }}
         />
       )}
 
@@ -1807,6 +1793,8 @@ function LibraryApp() {
               setActiveView('stage')
             }}
             onSongMembershipChange={handleSongMembership}
+            openSetlistId={workspaceSetlistId}
+            onOpenSetlistChange={setWorkspaceSetlistId}
             onCreateSetlistForSong={handleCreateSetlistForSong}
             onNewSong={handleNewSong}
             onNewSetlist={handleNewSetlist}

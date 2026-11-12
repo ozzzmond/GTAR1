@@ -32,7 +32,10 @@
           "database_id": "9ff3bb06-9960-498b-aece-75bc0c400188",
           "migrations_dir": "migrations"
         }
-      ]
+      ],
+      "vars": {
+        "UG_PROXY_MODE": "disabled"
+      }
     },
     "preview": {
       "compatibility_flags": [
@@ -51,8 +54,12 @@
       ],
       "vars": {
         "VITE_GOOGLE_CLIENT_ID": "895835718654-8bru1vdlj2otgq5dk46h76nilqagg421.apps.googleusercontent.com",
-        "CAST2_MODE": "reviewed-v1"
+        "CAST2_MODE": "reviewed-v1",
+        "UG_PROXY_MODE": "disabled"
       }
     }
+  },
+  "vars": {
+    "UG_PROXY_MODE": "disabled"
   }
 }

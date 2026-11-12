@@ -5,7 +5,7 @@ import { assertImportIds, canonicalImportId } from './importIdentity'
 import { generateUUID } from './uuid'
 import type { ActiveSongState, WebSetlist, SetlistFolder } from '../types/gtar'
 import { GTAR_APP_VERSION } from '../types/gtar'
-import { readBackupSettingsV2, settingsFromLegacy, validateBackupSettings, validateBackupSettingsV2, type BackupSettings, type BackupSettingsV2 } from './backupSettings'
+import { inspectBackupSettingsV2, readBackupSettingsV2, settingsFromLegacy, validateBackupSettings, validateBackupSettingsV2, type BackupSettings, type BackupSettingsV2 } from './backupSettings'
 import { bindLegacySetlists, ensureSongIds, partitionSongs, resolveSetlistSong } from './setlistSongs'
 import { detectSongKey } from './songParser'
 import { canonicalSongKey, normalizeMusicalKey } from './musicalKey'
@@ -156,6 +156,8 @@ export interface VerifiedBackup {
   settingsFingerprint: string
   tagColorsFingerprint?: string
   schemaVersion: number
+  /** #453 S1: storage keys of settings left out because their stored value is malformed. */
+  unreadableSettings: string[]
 }
 
 export const settingsFingerprint = (settings: BackupSettingsV2) => `c53:${cyrb53(stableStringify(settings))}`
@@ -215,7 +217,8 @@ export function buildVerifiedBackup(songs: ActiveSongState[], setlists: WebSetli
   const json = JSON.stringify(payload, null, 2)
   const counts = verifyBackupJson(json, payload)
   return { json, fileName: backupFileName(), bytes: new TextEncoder().encode(json).length, counts,
-    fingerprint: payload.contentFingerprint, tagColorsFingerprint: stableStringify(payload.tagColors), settingsFingerprint: settingsFingerprint(payload.settings), schemaVersion: payload.schemaVersion }
+    fingerprint: payload.contentFingerprint, tagColorsFingerprint: stableStringify(payload.tagColors), settingsFingerprint: settingsFingerprint(payload.settings), schemaVersion: payload.schemaVersion,
+    unreadableSettings: inspectBackupSettingsV2().unreadable }
 }
 
 /** Download-only export (menus). Verified before the download starts; records the backup status. */
@@ -326,6 +329,27 @@ function unknownBackupFields(data: Record<string, unknown> | unknown[], single: 
 }
 
 export interface BackupParseOptions { mode?: 'replace' | 'merge'; existingSongs?: ActiveSongState[] }
+
+/**
+ * Merge updates what the file carries. For a song that already exists on this device (same ID), a
+ * field the file does not have keeps the device value instead of the import default; this never
+ * resets a saved TRANSPOSE_OFFSET and never replaces the saved CHART_KEY with one detected from the
+ * chart (either would change PERFORMANCE_KEY). Replace and new songs are unaffected.
+ */
+const DEVICE_KEPT_FIELDS = ['key', 'artist', 'capo', 'bpm', 'format', 'transposeOffset'] as const
+function keepDeviceValues(songs: ActiveSongState[], sources: Partial<ActiveSongState>[], existing: ActiveSongState[]): ActiveSongState[] {
+  const device = new Map(existing.filter(song => song.id !== undefined).map(song => [String(song.id), song]))
+  return songs.map((song, index) => {
+    const saved = device.get(String(song.id))
+    if (!saved) return song
+    const kept: Partial<ActiveSongState> = {}
+    for (const field of DEVICE_KEPT_FIELDS) {
+      const inFile = sources[index]?.[field]
+      if ((inFile === undefined || inFile === null) && saved[field] !== undefined && saved[field] !== null) Object.assign(kept, { [field]: saved[field] })
+    }
+    return { ...song, ...kept }
+  })
+}
 
 export function parseBackupJson(rawText: string, options: BackupParseOptions = {}): ParsedBackupResult {
   const invalid = (errors: string[], single = false): ParsedBackupResult => ({ isValid: false, isSingleSetlist: single,
@@ -475,7 +499,8 @@ export function parseBackupJson(rawText: string, options: BackupParseOptions = {
     }
     return { isValid: true, isSingleSetlist: single, ...(single ? { singleSetlistName: data.setlist.name } : {}),
       ...legacySettingsOf(settingsV2), settings: settingsV2, ignoredFields: unknownBackupFields(data, single),
-      songs, setlists: bindLegacySetlists(boundIncoming, combined),
+      songs: options.mode === 'merge' ? keepDeviceValues(songs, sourceSongs, options.existingSongs ?? []) : songs,
+      setlists: bindLegacySetlists(boundIncoming, combined),
       ...(tagColors !== undefined ? { tagColors } : {}),
       ...(folders ? { folders } : {}),
       metadata,

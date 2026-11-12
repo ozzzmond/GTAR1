@@ -1,7 +1,7 @@
 import type { AbuseEnv } from './abuseProtection.ts'
 import { API_SECURITY_HEADERS } from './securityHeaders.ts'
 /**
- * GTAR Server-Authoritative Account & Access Control (v1.0.145-dev.3)
+ * GTAR Server-Authoritative Account & Access Control (v1.1.0-dev.2)
  * Cloudflare Pages Functions + D1 SQLite Core Library
  */
 
@@ -852,162 +852,6 @@ export async function updateUserLoginProfile(
   await stmt.run()
 }
 
-export async function listAllUsers(db: D1Database): Promise<UserRecord[]> {
-  const stmt = db.prepare(
-    `SELECT id, google_sub, email, display_name, picture_url, role, access_status, created_at, updated_at, last_login_at
-     FROM users
-     ORDER BY created_at DESC`
-  )
-  const res = await stmt.all<UserRecord>()
-  return res.results || []
-}
-
-export async function getPendingUsersCount(db: D1Database): Promise<number> {
-  const stmt = db.prepare(`SELECT count(*) as count FROM users WHERE access_status = 'pending'`)
-  const res = await stmt.first<{ count: number }>()
-  return Number(res?.count || 0)
-}
-
-export async function updateUserAccessStatus(
-  db: D1Database,
-  id: string,
-  status: 'active' | 'denied',
-  nowIso: string
-): Promise<boolean> {
-  if (status === 'denied') {
-    // Revoke all active sessions for this denied user
-    try {
-      const sessRes = await db
-        .prepare(`UPDATE sessions SET is_revoked = 1, revoked_at = ? WHERE user_id = ? AND is_revoked = 0`)
-        .bind(nowIso, id)
-        .run()
-      if (sessRes && sessRes.success === false) {
-        return false
-      }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
-      if (!/no such table/i.test(msg)) {
-        throw err
-      }
-    }
-
-    try {
-      const userRevRes = await db
-        .prepare(`UPDATE users SET sessions_revoked_at = ? WHERE id = ?`)
-        .bind(nowIso, id)
-        .run()
-      if (userRevRes && userRevRes.success === false) {
-        return false
-      }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
-      if (!/no such column/i.test(msg)) {
-        throw err
-      }
-    }
-  }
-
-  // Restoring user to active: do NOT unrevoke previously revoked sessions!
-  // Do NOT clear sessions_revoked_at.
-  const stmt = db
-    .prepare(`UPDATE users SET access_status = ?, updated_at = ? WHERE id = ?`)
-    .bind(status, nowIso, id)
-  const res = await stmt.run()
-  return res && res.success !== false
-}
-
-/**
- * Authenticates request and enforces admin privileges against authoritative D1 record
- */
-export async function authenticateAdminRequest(
-  request: Request,
-  env: AuthEnv
-): Promise<{ user: UserRecord } | { error: string; status: number }> {
-  if (!env.DB) {
-    return { error: 'Database binding DB is missing', status: 500 }
-  }
-  if (!isValidAuthSecret(env.AUTH_SECRET)) {
-    return { error: 'Authentication service is unavailable', status: 503 }
-  }
-
-  const authHeader = request.headers.get('Authorization')
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return { error: 'Missing or malformed Authorization header', status: 401 }
-  }
-
-  const token = authHeader.slice('Bearer '.length).trim()
-  if (!token) {
-    return { error: 'Empty bearer token', status: 401 }
-  }
-
-  let callerId: string | null = null
-
-  // 1. Try session token first
-  const sessionData = await verifySessionToken(token, env.AUTH_SECRET)
-  if (sessionData) {
-    try {
-      const validation = await validateSessionWithDb(env.DB, token, sessionData)
-      if (!validation.valid) {
-        if (validation.isSchemaMissing) {
-          return { error: 'Database schema migration required', status: 500 }
-        }
-        return { error: validation.reason || 'Invalid or expired session token', status: 401 }
-      }
-      callerId = sessionData.uid
-    } catch (err) {
-      console.error('Admin session validation error:', err instanceof Error ? err.name : 'UnknownError')
-      return { error: 'Authentication lookup failed', status: 500 }
-    }
-  } else {
-    // 2. Try Google ID token
-    try {
-      const now = Date.now()
-      const verified = await verifyGoogleIdToken(token, env, now, request)
-      const user = await findUserByGoogleSub(env.DB, verified.sub)
-      if (user) {
-        if (user.sessions_revoked_at && isGoogleTokenRevokedForUser(verified, user, now)) {
-          return { error: 'Session has been revoked', status: 401 }
-        }
-        callerId = user.id
-      }
-    } catch {
-      // Invalid token
-    }
-  }
-
-  if (!callerId) {
-    return { error: 'Invalid or expired session token', status: 401 }
-  }
-
-  // 3. Query authoritative D1 user record
-  try {
-    const user = await findUserById(env.DB, callerId)
-    if (!user || (sessionData && user.google_sub !== sessionData.sub)) {
-      return { error: 'Invalid or expired session token', status: 401 }
-    }
-
-    if (user.role !== 'admin' || user.access_status !== 'active') {
-      return { error: 'Forbidden: Admin access required', status: 403 }
-    }
-
-    return { user }
-  } catch (err) {
-    console.error('Admin authentication lookup error:', err instanceof Error ? err.name : 'UnknownError')
-    return { error: 'Authentication lookup failed', status: 500 }
-  }
-}
-
-/**
- * Cloud Songbook Sync Types & Operations
- */
-export interface UserSongbookRecord {
-  user_id: string
-  version: number
-  data_json: string
-  checksum: string
-  updated_at: string
-}
-
 /**
  * Authenticates request and enforces active member/admin access against authoritative D1 record
  */
@@ -1089,48 +933,10 @@ export async function authenticateUserRequest(
   }
 }
 
-export async function findUserSongbook(db: D1Database, userId: string): Promise<UserSongbookRecord | null> {
-  const stmt = db.prepare('SELECT user_id, version, data_json, checksum, updated_at FROM user_songbooks WHERE user_id = ? LIMIT 1').bind(userId)
-  return (await stmt.first<UserSongbookRecord>()) || null
-}
-
-export interface SongbookRevision {
-  version: number
-  checksum: string | null
-}
-
-export async function upsertUserSongbook(
-  db: D1Database,
-  userId: string,
-  dataJson: string,
-  checksum: string,
-  updatedAt: string,
-  expected: SongbookRevision
-): Promise<{ version: number; checksum: string; updated_at: string } | null> {
-  // One SQLite statement owns both the revision predicate and increment.
-  // RETURNING reports only this write, without a second (racy) read.
-  if (!expected || !Number.isSafeInteger(expected.version) || expected.version < 0 ||
-      (expected.version === 0 ? expected.checksum !== null :
-        typeof expected.checksum !== 'string' || !/^ck_[0-9a-f]{16}$/.test(expected.checksum))) {
-    return null
-  }
-  const statement = expected.version === 0
-    ? db.prepare(`INSERT INTO user_songbooks (user_id, version, data_json, checksum, updated_at)
-          VALUES (?, 1, ?, ?, ?) ON CONFLICT(user_id) DO NOTHING
-          RETURNING version, checksum, updated_at`).bind(userId, dataJson, checksum, updatedAt)
-    : db.prepare(`UPDATE user_songbooks SET version = version + 1,
-        data_json = ?, checksum = ?, updated_at = ?
-        WHERE user_id = ? AND version = ? AND checksum = ? AND version < 9007199254740991
-        RETURNING version, checksum, updated_at`)
-      .bind(dataJson, checksum, updatedAt, userId, expected.version, expected.checksum)
-  return statement.first<{ version: number; checksum: string; updated_at: string }>()
-}
-
 /**
  * Request payload constants and validation utilities
  */
 export const MAX_SESSION_PAYLOAD_BYTES = 32 * 1024 // 32 KB
-export const MAX_ADMIN_PAYLOAD_BYTES = 16 * 1024 // 16 KB
 
 export function isJsonObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)

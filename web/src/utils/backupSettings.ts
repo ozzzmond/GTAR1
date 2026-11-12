@@ -1,4 +1,4 @@
-import { normalizeFontSettings, applyFontSettings, validateFontSettings, type FontSettings } from './customFonts'
+import { normalizeFontSettings, validateFontSettings, type FontSettings } from './customFonts'
 import { cyrb53, stableStringify } from './contentHash'
 export const SETTINGS_KEYS = {
   themeMode: 'gtar_theme_store',
@@ -350,69 +350,6 @@ export function normalizeCustomThemeColors(
   }
 }
 
-const CANONICAL_PALETTE_KEY_ORDER: Array<keyof CustomThemeColors> = [
-  'identity',
-  'actionColor',
-  'selectionColor',
-  'sectionIconColor',
-  'uiPrimaryText',
-  'uiSecondaryText',
-  'uiSectionText',
-  'uiMutedText',
-  'uiLinkText',
-  'bgHex',
-  'textHex',
-  'chordHex',
-  'sectionHex',
-  'headerBg',
-  'headerPrimaryText',
-  'headerSecondaryText',
-  'headerIconColor',
-  'toolbarBg',
-  'searchBg',
-  'searchBorder',
-  'filterBarBg',
-  'iconColor',
-  'setlistCardBg',
-  'songCardBg',
-  'cardBorder',
-  'selectedCardBg',
-  'selectedCardBorder',
-  'buttonBg',
-  'buttonText',
-  'inputBg',
-  'inputText',
-  'inputBorder',
-  'accentColor',
-  'dockBg',
-  'dockBorder',
-  'dockBtnBg',
-  'dockBtnIcon',
-  'dockPlayBg',
-  'dockPlayIcon',
-  'fonts',
-]
-
-function canonicalizeThemePalette(raw: Partial<CustomThemeColors> | undefined, stripIdentity: boolean): CustomThemeColors {
-  const normalized = normalizeCustomThemeColors(raw)
-  const ordered: Record<string, unknown> = {}
-  for (const key of CANONICAL_PALETTE_KEY_ORDER) {
-    if (key === 'identity') {
-      if (!stripIdentity && normalized.identity) {
-        ordered.identity = {
-          factoryId: normalized.identity.factoryId,
-          displayName: normalized.identity.displayName.trim(),
-        }
-      }
-    } else if (key === 'fonts') {
-      ordered.fonts = normalizeFontSettings(normalized.fonts)
-    } else if (normalized[key] !== undefined) {
-      ordered[key] = normalized[key]
-    }
-  }
-  return ordered as unknown as CustomThemeColors
-}
-
 export function validateBackupSettings(data: Record<string, unknown>): string[] {
   const errors: string[] = []
   if ('factoryThemeOverrides' in data) {
@@ -512,273 +449,38 @@ export function validateCloudThemeSettings(value: unknown): string[] {
   return errors
 }
 
-export function normalizeCloudThemeSettings(raw: CloudThemeSettings | Partial<CloudThemeSettings>): CloudThemeSettings {
-  const errors = validateCloudThemeSettings(raw)
-  if (errors.length > 0) {
-    throw new Error(errors.join('\n'))
-  }
-  let mode: ThemeMode = raw.themeMode && THEME_MODES.includes(raw.themeMode) ? raw.themeMode : 'solarized-dark'
-  const rawOverrides = raw.factoryThemeOverrides ?? {}
-  const overridesMap = new Map<Exclude<ThemeMode, 'custom'>, CustomThemeColors>()
-  for (const slotId of THEME_MODES) {
-    if (slotId === 'custom') continue
-    const palette = rawOverrides[slotId]
-    if (palette) {
-      overridesMap.set(slotId, canonicalizeThemePalette(palette, false))
-    }
-  }
-
-  let standaloneSource: Partial<CustomThemeColors> | undefined = raw.customThemeColors
-  if (raw.customThemeColors?.identity) {
-    const slotId = raw.customThemeColors.identity.factoryId
-    if (!overridesMap.has(slotId)) {
-      overridesMap.set(slotId, canonicalizeThemePalette(raw.customThemeColors, false))
-    }
-    if (mode === 'custom') {
-      mode = slotId
-    }
-    standaloneSource = DEFAULT_CUSTOM_COLORS
-  }
-
-  const sortedOverrides: FactoryThemeOverrides = {}
-  for (const slotId of THEME_MODES) {
-    if (slotId === 'custom') continue
-    const palette = overridesMap.get(slotId)
-    if (palette) {
-      sortedOverrides[slotId] = palette
-    }
-  }
-
-  return {
-    version: CLOUD_THEME_SETTINGS_VERSION,
-    themeMode: mode,
-    customThemeColors: canonicalizeThemePalette(standaloneSource, true),
-    factoryThemeOverrides: sortedOverrides,
-  }
-}
-
-export function cloudThemeSettingsEquals(
-  a?: CloudThemeSettings | null,
-  b?: CloudThemeSettings | null
-): boolean {
-  if (!a && !b) return true
-  if (!a || !b) return false
-  try {
-    return JSON.stringify(normalizeCloudThemeSettings(a)) === JSON.stringify(normalizeCloudThemeSettings(b))
-  } catch {
-    return false
-  }
-}
-
-const DEFAULT_NORMALIZED_CLOUD_THEME_JSON = JSON.stringify(
-  normalizeCloudThemeSettings({
-    version: CLOUD_THEME_SETTINGS_VERSION,
-    themeMode: 'solarized-dark',
-    customThemeColors: DEFAULT_CUSTOM_COLORS,
-    factoryThemeOverrides: {},
-  })
-)
-
-export function isCustomizedThemeSettings(settings?: CloudThemeSettings | null): boolean {
-  if (!settings) return false
-  try {
-    return JSON.stringify(normalizeCloudThemeSettings(settings)) !== DEFAULT_NORMALIZED_CLOUD_THEME_JSON
-  } catch {
-    return false
-  }
-}
-
-export function readCloudThemeSettings(storage: Pick<Storage, 'getItem'> = localStorage): CloudThemeSettings | undefined {
-  const rawMode = storage.getItem(SETTINGS_KEYS.themeMode)
-  const rawColors = storage.getItem(SETTINGS_KEYS.customThemeColors)
-  const rawOverrides = storage.getItem(SETTINGS_KEYS.factoryThemeOverrides)
-  const rawStandalone = storage.getItem(STANDALONE_PALETTE_KEY)
-
-  if (rawMode === null && rawColors === null && rawOverrides === null && rawStandalone === null) {
-    return undefined
-  }
-
-  let parsedColors: CustomThemeColors | undefined
-  if (rawColors !== null) {
-    try {
-      parsedColors = JSON.parse(rawColors) as CustomThemeColors
-    } catch {
-      throw new Error('customThemeColors: malformed JSON in local storage')
-    }
-  }
-
-  let parsedOverrides: FactoryThemeOverrides | undefined
-  if (rawOverrides !== null) {
-    try {
-      parsedOverrides = JSON.parse(rawOverrides) as FactoryThemeOverrides
-    } catch {
-      throw new Error('factoryThemeOverrides: malformed JSON in local storage')
-    }
-  }
-
-  let parsedStandalone: CustomThemeColors | undefined
-  if (rawStandalone !== null) {
-    try {
-      parsedStandalone = JSON.parse(rawStandalone) as CustomThemeColors
-    } catch {
-      throw new Error('standaloneCustomThemeColors: malformed JSON in local storage')
-    }
-    const standaloneErrors = validateBackupSettings({ customThemeColors: parsedStandalone })
-    if (standaloneErrors.length > 0 || parsedStandalone?.identity) {
-      throw new Error(standaloneErrors[0] || 'standaloneCustomThemeColors: must not carry factory identity')
-    }
-  }
-
-  const candidate: Partial<CloudThemeSettings> = {
-    version: CLOUD_THEME_SETTINGS_VERSION,
-    ...(rawMode !== null ? { themeMode: rawMode as ThemeMode } : {}),
-    ...(parsedColors !== undefined ? { customThemeColors: parsedColors } : parsedStandalone !== undefined ? { customThemeColors: parsedStandalone } : {}),
-    ...(parsedOverrides !== undefined ? { factoryThemeOverrides: parsedOverrides } : {}),
-  }
-
-  const normalized = normalizeCloudThemeSettings(candidate)
-  if (parsedColors?.identity && parsedStandalone !== undefined) {
-    return {
-      ...normalized,
-      customThemeColors: canonicalizeThemePalette(parsedStandalone, true),
-    }
-  }
-  return normalized
-}
-
-export function tryReadCloudThemeSettings(storage: Pick<Storage, 'getItem'> = localStorage): CloudThemeSettings | undefined {
-  try {
-    return readCloudThemeSettings(storage)
-  } catch {
-    return undefined
-  }
-}
-
-function applyCloudThemePaletteToDocument(mode: ThemeMode, colors: CustomThemeColors): void {
-  if (typeof document === 'undefined') return
-  if (document.body) {
-    document.body.classList.remove(...THEME_MODES.map(theme => `theme-${theme}`))
-    document.body.classList.add('theme-custom')
-    document.body.dataset.theme = mode
-  }
-  const root = document.documentElement
-  if (!root || !root.style) return
-  applyFontSettings(colors.fonts, root)
-  for (const [key, value] of Object.entries({
-    ...typographyDefaults(colors),
-    ...headerDefaults(colors),
-    actionColor: colors.actionColor!,
-    selectionColor: colors.selectionColor!,
-    sectionIconColor: colors.sectionIconColor!,
-  })) {
-    root.style.setProperty('--custom-' + key, value)
-  }
-  root.style.setProperty('--custom-stage-bg', colors.bgHex)
-  root.style.setProperty('--custom-stage-text', colors.textHex)
-  root.style.setProperty('--custom-stage-chord', colors.chordHex)
-  root.style.setProperty('--custom-stage-section', colors.sectionHex)
-  root.style.setProperty('--custom-chrome-header-bg', colors.headerBg || DEFAULT_CUSTOM_COLORS.headerBg!)
-  root.style.setProperty('--custom-chrome-toolbar-bg', colors.toolbarBg || DEFAULT_CUSTOM_COLORS.toolbarBg!)
-  root.style.setProperty('--custom-chrome-search-bg', colors.searchBg || DEFAULT_CUSTOM_COLORS.searchBg!)
-  root.style.setProperty('--custom-chrome-search-border', colors.searchBorder || DEFAULT_CUSTOM_COLORS.searchBorder!)
-  root.style.setProperty('--custom-chrome-filter-bg', colors.filterBarBg || DEFAULT_CUSTOM_COLORS.filterBarBg!)
-  root.style.setProperty('--custom-chrome-icon', colors.iconColor || DEFAULT_CUSTOM_COLORS.iconColor!)
-  root.style.setProperty('--custom-card-setlist-bg', colors.setlistCardBg || DEFAULT_CUSTOM_COLORS.setlistCardBg!)
-  root.style.setProperty('--custom-card-song-bg', colors.songCardBg || DEFAULT_CUSTOM_COLORS.songCardBg!)
-  root.style.setProperty('--custom-card-border', colors.cardBorder || DEFAULT_CUSTOM_COLORS.cardBorder!)
-  root.style.setProperty('--custom-card-selected-bg', colors.selectedCardBg || DEFAULT_CUSTOM_COLORS.selectedCardBg!)
-  root.style.setProperty('--custom-card-selected-border', colors.selectedCardBorder || DEFAULT_CUSTOM_COLORS.selectedCardBorder!)
-  root.style.setProperty('--custom-control-button-bg', colors.buttonBg || DEFAULT_CUSTOM_COLORS.buttonBg!)
-  root.style.setProperty('--custom-control-button-text', colors.buttonText || DEFAULT_CUSTOM_COLORS.buttonText!)
-  root.style.setProperty('--custom-control-input-bg', colors.inputBg || DEFAULT_CUSTOM_COLORS.inputBg!)
-  root.style.setProperty('--custom-control-input-text', colors.inputText || DEFAULT_CUSTOM_COLORS.inputText!)
-  root.style.setProperty('--custom-control-input-border', colors.inputBorder || DEFAULT_CUSTOM_COLORS.inputBorder!)
-  root.style.setProperty('--custom-control-accent', colors.accentColor || DEFAULT_CUSTOM_COLORS.accentColor!)
-  root.style.setProperty('--custom-dock-bg', colors.dockBg || DEFAULT_CUSTOM_COLORS.dockBg!)
-  root.style.setProperty('--custom-dock-border', colors.dockBorder || DEFAULT_CUSTOM_COLORS.dockBorder!)
-  root.style.setProperty('--custom-dock-btn-bg', colors.dockBtnBg || DEFAULT_CUSTOM_COLORS.dockBtnBg!)
-  root.style.setProperty('--custom-dock-btn-icon', colors.dockBtnIcon || DEFAULT_CUSTOM_COLORS.dockBtnIcon!)
-  root.style.setProperty('--custom-dock-play-bg', colors.dockPlayBg || DEFAULT_CUSTOM_COLORS.dockPlayBg!)
-  root.style.setProperty('--custom-dock-play-icon', colors.dockPlayIcon || DEFAULT_CUSTOM_COLORS.dockPlayIcon!)
-}
-
-export function persistCloudThemeSettings(
-  settings: CloudThemeSettings,
-  storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> = localStorage
-): CloudThemeSettings {
-  const normalized = normalizeCloudThemeSettings(settings)
-  const prevOverrides = storage.getItem(SETTINGS_KEYS.factoryThemeOverrides)
-  const prevColors = storage.getItem(SETTINGS_KEYS.customThemeColors)
-  const prevMode = storage.getItem(SETTINGS_KEYS.themeMode)
-  const prevStandalone = storage.getItem(STANDALONE_PALETTE_KEY)
-
-  const nextOverridesRaw = JSON.stringify(normalized.factoryThemeOverrides ?? {})
-  const nextColorsRaw = JSON.stringify(normalized.customThemeColors ?? canonicalizeThemePalette(DEFAULT_CUSTOM_COLORS, true))
-  const nextModeRaw = normalized.themeMode ?? 'solarized-dark'
-
-  const restoreKey = (key: string, prev: string | null) => {
-    try {
-      if (prev === null) {
-        if (typeof storage.removeItem === 'function') storage.removeItem(key)
-      } else {
-        storage.setItem(key, prev)
-      }
-    } catch { /* Best-effort rollback */ }
-  }
-
-  try {
-    storage.setItem(SETTINGS_KEYS.factoryThemeOverrides, nextOverridesRaw)
-    storage.setItem(SETTINGS_KEYS.customThemeColors, nextColorsRaw)
-    storage.setItem(SETTINGS_KEYS.themeMode, nextModeRaw)
-    if (prevStandalone !== null && typeof storage.removeItem === 'function') {
-      storage.removeItem(STANDALONE_PALETTE_KEY)
-    }
-    if (
-      storage.getItem(SETTINGS_KEYS.factoryThemeOverrides) !== nextOverridesRaw ||
-      storage.getItem(SETTINGS_KEYS.customThemeColors) !== nextColorsRaw ||
-      storage.getItem(SETTINGS_KEYS.themeMode) !== nextModeRaw
-    ) {
-      throw new Error('Theme settings save could not be verified in localStorage')
-    }
-  } catch (err) {
-    restoreKey(SETTINGS_KEYS.factoryThemeOverrides, prevOverrides)
-    restoreKey(SETTINGS_KEYS.customThemeColors, prevColors)
-    restoreKey(SETTINGS_KEYS.themeMode, prevMode)
-    restoreKey(STANDALONE_PALETTE_KEY, prevStandalone)
-    throw err
-  }
-
-  const activePalette =
-    nextModeRaw === 'custom'
-      ? normalized.customThemeColors!
-      : normalized.factoryThemeOverrides?.[nextModeRaw as Exclude<ThemeMode, 'custom'>] ?? normalized.customThemeColors!
-  applyCloudThemePaletteToDocument(nextModeRaw, activePalette)
-
-  if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
-    const Evt = typeof window.Event === 'function' ? window.Event : Event
-    window.dispatchEvent(new Evt(SETTINGS_CHANGED))
-  }
-
-  return normalized
-}
-
-export function readBackupSettings(storage: Pick<Storage, 'getItem'> = localStorage): BackupSettings {
+/**
+ * #453 S1: reads each v1 setting on its own. A stored value that does not parse or validate is
+ * left out and its storage key is listed in `unreadable`; it never hides the other settings.
+ * Nothing is repaired or removed in storage.
+ */
+export function inspectBackupSettings(storage: Pick<Storage, 'getItem'> = localStorage): { settings: BackupSettings; unreadable: string[] } {
   const data: Record<string, unknown> = {}
-  const theme = storage.getItem(SETTINGS_KEYS.themeMode)
-  const colors = storage.getItem(SETTINGS_KEYS.customThemeColors)
-  if (theme !== null) data.themeMode = theme
-  if (colors !== null) data.customThemeColors = JSON.parse(colors)
-  const overrides = storage.getItem(SETTINGS_KEYS.factoryThemeOverrides)
-  if (overrides !== null) data.factoryThemeOverrides = JSON.parse(overrides)
   const stage: Record<string, unknown> = {}
+  const unreadable: string[] = []
+  const take = (key: string, parse: (raw: string) => unknown, check: (value: unknown) => Record<string, unknown>, keep: (value: unknown) => void) => {
+    const raw = storage.getItem(key)
+    if (raw === null) return
+    try {
+      const value = parse(raw)
+      if (validateBackupSettings(check(value)).length) unreadable.push(key)
+      else keep(value)
+    } catch { unreadable.push(key) }
+  }
+  const text = (raw: string) => raw
+  take(SETTINGS_KEYS.themeMode, text, themeMode => ({ themeMode }), value => { data.themeMode = value })
+  take(SETTINGS_KEYS.customThemeColors, JSON.parse, customThemeColors => ({ customThemeColors }), value => { data.customThemeColors = value })
+  take(SETTINGS_KEYS.factoryThemeOverrides, JSON.parse, factoryThemeOverrides => ({ factoryThemeOverrides }), value => { data.factoryThemeOverrides = value })
   for (const key of ['fontStyle', 'fontSizePx', 'scrollSpeed', 'isTwoColumn'] as const) {
-    const value = storage.getItem(SETTINGS_KEYS[key])
-    if (value !== null) stage[key] = key === 'fontStyle' ? value : JSON.parse(value)
+    take(SETTINGS_KEYS[key], key === 'fontStyle' ? text : JSON.parse, value => ({ stageSettings: { [key]: value } }), value => { stage[key] = value })
   }
   if (Object.keys(stage).length) data.stageSettings = stage
-  const errors = validateBackupSettings(data)
-  if (errors.length) throw new Error(errors.join('\n'))
-  return data as BackupSettings
+  return { settings: data as BackupSettings, unreadable }
+}
+
+/** The readable v1 settings; a malformed stored value is skipped (see inspectBackupSettings). */
+export function readBackupSettings(storage: Pick<Storage, 'getItem'> = localStorage): BackupSettings {
+  return inspectBackupSettings(storage).settings
 }
 
 export function restoreBackupSettings(settings: BackupSettings, storage: Pick<Storage, 'setItem'> = localStorage) {
@@ -923,9 +625,15 @@ export function settingsFromLegacy(settings: BackupSettings): BackupSettingsV2 {
   return { appearance, preferences: {} }
 }
 
-/** Reads every backed-up setting. v1 fields throw on malformed storage (as before); v2-only fields the app would ignore are skipped. */
+/** Reads every backed-up setting; values the app would ignore and malformed stored values are skipped. */
 export function readBackupSettingsV2(storage: Pick<Storage, 'getItem'> = localStorage): BackupSettingsV2 {
-  const appearance: AppearanceSettings = { ...readBackupSettings(storage) }
+  return inspectBackupSettingsV2(storage).settings
+}
+
+/** #453 S1: the settings a backup holds, plus the storage keys left out because their stored value is malformed. */
+export function inspectBackupSettingsV2(storage: Pick<Storage, 'getItem'> = localStorage): { settings: BackupSettingsV2; unreadable: string[] } {
+  const v1 = inspectBackupSettings(storage)
+  const appearance: AppearanceSettings = { ...v1.settings }
   for (const [field, spec] of Object.entries(APPEARANCE_EXTRA_SETTINGS)) {
     const raw = storage.getItem(spec.key)
     const value = raw === null ? undefined : spec.read(raw)
@@ -937,7 +645,7 @@ export function readBackupSettingsV2(storage: Pick<Storage, 'getItem'> = localSt
     const value = raw === null ? undefined : spec.read(raw)
     if (value !== undefined) Object.assign(preferences, { [field]: value })
   }
-  return { appearance, preferences }
+  return { settings: { appearance, preferences }, unreadable: v1.unreadable }
 }
 
 /** Stage typography fields for live reload after a restore. */
@@ -952,8 +660,6 @@ export function readStageAppearanceExtras(storage: Pick<Storage, 'getItem'> = lo
   }
   return out
 }
-
-export interface SettingsRestoreResult { written: string[]; groups: BackupSettingsGroup[] }
 
 /**
  * #251 F2 / #257: previous values of exactly the keys a settings restore is about to write.
@@ -1149,6 +855,7 @@ export function restorePreviousSettings(storage: SettingsStorage, options: Setti
   expectedRaw: string
 }): Promise<PreviousSettingsResult> {
   return withSettingsLock(options, () => {
+    options.beforeWrite?.()
     const recovery = inspectSettingsRecovery(storage)
     if (recovery.state === 'none') throw new Error('No previous-settings copy on this device')
     // Checked under the lock, before any write: a copy replaced or changed since it was shown is never applied.
@@ -1166,7 +873,7 @@ export function restorePreviousSettings(storage: SettingsStorage, options: Setti
 
 /** Explicit user choice only: removes the copy whose exact bytes the user was shown. No setting changes. */
 export function discardSettingsRecovery(expectedRaw: string, storage: SettingsStorage = localStorage, options?: SettingsLockOptions): Promise<boolean> {
-  return withSettingsLock(options, () => clearSnapshot(storage, expectedRaw))
+  return withSettingsLock(options, () => { options?.beforeWrite?.(); return clearSnapshot(storage, expectedRaw) })
 }
 
 export type RecoveryCopyOutcome = 'removed' | 'kept-committed' | 'stale'
@@ -1260,6 +967,8 @@ export async function restoreBackupSettingsV2(settings: BackupSettingsV2, choice
           clearSnapshot(storage, snapshotRaw)
           throw new SettingsRestoreError('rolled-back', `saving ${key} failed (${errorText(error)}); every setting was put back and verified`, { cause: error, failedKey: key })
         }
+        // #453 S2: storage now differs from the running UI; let it reload what is actually stored.
+        settingsChanged()
         throw new SettingsRestoreError('partial', `saving ${key} failed (${errorText(error)}) and ${unresolvedKeys.length} setting(s) could not be put back (${unresolvedKeys.join(', ')})`,
           { cause: error, failedKey: key, unresolvedKeys })
       }

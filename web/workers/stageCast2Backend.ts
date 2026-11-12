@@ -2,7 +2,9 @@ import { CAST2_VERSION, validateCast2Message } from '../src/utils/stageCast2Prot
 import type { ReceiverSnapshot } from '../src/utils/stageCast2Protocol'
 
 export const POLICY = Object.freeze({ pairingMs: 120_000, idleTimeoutMs: 600_000, sessionMs: 600_000,
-  maxLifetimeMs: 5_400_000, ticketMs: 15_000, heartbeatMs: 45_000, sessions: 32, guesses: 5, requests: 120, buckets: 512,
+  maxLifetimeMs: 5_400_000, ticketMs: 15_000, heartbeatMs: 45_000, sessions: 32, guesses: 5, requests: 120,
+  // Anonymous (no-account) traffic shares one pool across every receiver and controller since #467; ~30 req/min per live session.
+  anonRequests: 32 * 30, buckets: 512,
   // Controller sockets stay authorized only while authenticated HTTP keeps renewing this lease (#84).
   authLeaseMs: 30_000, storedSessions: 128 })
 export type State = 'CREATED' | 'WAITING_FOR_CONTROLLER' | 'AWAITING_TV_APPROVAL' | 'PAIRED' | 'DISCONNECTED' | 'EXPIRED' | 'REVOKED'
@@ -55,6 +57,8 @@ const runtime: Runtime = {
     return { server: pair[1], response: new Response(null, { status: 101, webSocket: pair[0] } as ResponseInit) }
   },
 }
+/** Sentinel owner for controllers without an active account; never a real user id. */
+export const ANON_OWNER = 'anonymous-controller-v1'
 export const digest = async (value: string): Promise<string> => Array.from(new Uint8Array(
   await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))), b => b.toString(16).padStart(2, '0')).join('')
 const secret = (): string => Array.from(crypto.getRandomValues(new Uint8Array(32)), b => b.toString(16).padStart(2, '0')).join('')
@@ -209,7 +213,7 @@ export class StageCast2Hub {
   }
   private async authorize(s: Session, role: Role, credential: unknown, owner: string): Promise<void> {
     if (!opaque(credential) || await digest(credential) !== (role === 'receiver' ? s.receiverHash : s.controllerHash) ||
-      (role === 'controller' && (!owner || owner !== s.owner))) throw new Denial()
+      (role === 'controller' && (!owner || (s.owner !== ANON_OWNER && owner !== s.owner)))) throw new Denial()
   }
   async fetch(request: Request): Promise<Response> {
     try { return await this.serial(async () => {
@@ -220,8 +224,9 @@ export class StageCast2Hub {
       const owner = request.headers.get('x-cast-owner') || ''
       // Per-client limit first, so one client's rejected flood never consumes shared admission.
       // Anonymous and gateway-authenticated traffic draw from separate global pools.
-      this.limit('ip:' + ip, 40, !!owner)
-      this.limit(owner ? 'global:auth' : 'global:anon', POLICY.requests, !!owner)
+      const account = !!owner && owner !== ANON_OWNER
+      this.limit('ip:' + ip, 40, account)
+      this.limit(account ? 'global:auth' : 'global:anon', account ? POLICY.requests : POLICY.anonRequests, account)
       if (url.pathname === '/socket' && request.method === 'GET') return this.connect(request)
       if (request.method !== 'POST') throw new Denial('INVALID_REQUEST', 400)
       const b = await body(request)
@@ -247,7 +252,8 @@ export class StageCast2Hub {
       if (url.pathname === '/claim') {
         shape(b, ['ref', 'pin'])
         if (!owner) throw new Denial('AUTH_REQUIRED', 401)
-        this.limit('owner:' + await digest(owner), 10)
+        // Anonymous claims are limited per client; a shared owner bucket would let one caller lock everyone out.
+        this.limit(account ? 'owner:' + await digest(owner) : 'claim:' + ip, 10)
         if (s.state !== 'WAITING_FOR_CONTROLLER') throw new Denial()
         if (++s.guesses > POLICY.guesses) { this.end(s, 'REVOKED'); throw new Denial() }
         if (typeof b.pin !== 'string' || !/^\d{6}$/.test(b.pin) || await digest(s.ref + b.pin) !== s.pinHash) {
@@ -258,7 +264,7 @@ export class StageCast2Hub {
         // Possession of the displayed PIN plus an active server-authorized account is consent.
         // Serial persistence binds the first claim to its owner and burns the PIN before reply.
         s.state = transition(s.state, 'PAIRED')
-        s.deadline = Math.min(s.maxDeadline, this.rt.now() + POLICY.idleTimeoutMs)
+        s.deadline = Math.min(this.ensureMaxDeadline(s), this.rt.now() + POLICY.idleTimeoutMs)
         const credential = secret()
         s.controllerHash = await digest(credential); s.owner = owner; s.requestId = secret(); s.pinHash = ''
         this.renewLease(s)
