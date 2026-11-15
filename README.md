@@ -34,9 +34,11 @@ AI tools help with coding, testing, debugging, and documentation. The project ma
 
 AI-generated code can contain mistakes, so changes are reviewed and tested as the project evolves.
 
-## Credits
+## Credits and Acknowledgements
 
 GTAR1 uses third-party libraries and data under their respective licenses. Guitar chord voicings are sourced from [tombatossals/chords-db](https://github.com/tombatossals/chords-db) and [chordbook/chords-db](https://github.com/chordbook/chords-db), identified as MIT-licensed in the [bundled data attribution](web/src/data/importedChords.ts). See the [demo sample content credits](web/scripts/gtar1-assets/demo-seed/LICENSES.md) for song sources and permissions.
+
+Development-tool acknowledgements: [Matt Pocock Skills](https://github.com/mattpocock/skills) ([MIT](https://github.com/mattpocock/skills/blob/main/LICENSE)) and [Impeccable](https://github.com/pbakaus/impeccable) ([Apache-2.0](https://github.com/pbakaus/impeccable/blob/main/LICENSE)).
 
 ## License
 
