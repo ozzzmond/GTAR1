@@ -62,6 +62,6 @@ AI-generated code can contain mistakes, so changes are reviewed and tested as th
 
 ## Credits and License
 
-GTAR1 uses third-party libraries and data under their respective licenses. Guitar chord voicings are sourced from [chords-db](https://github.com/tombatossals/chords-db) and its [chordbook fork](https://github.com/chordbook/chords-db), identified as MIT-licensed in the [bundled data attribution](web/src/data/importedChords.ts). See the [demo sample content credits](web/scripts/gtar1-assets/demo-seed/LICENSES.md) for song sources and permissions.
+GTAR1 uses third-party libraries and data under their respective licenses. Guitar chord voicings are sourced from [tombatossals/chords-db](https://github.com/tombatossals/chords-db) and [chordbook/chords-db](https://github.com/chordbook/chords-db), identified as MIT-licensed in the [bundled data attribution](web/src/data/importedChords.ts). See the [demo sample content credits](web/scripts/gtar1-assets/demo-seed/LICENSES.md) for song sources and permissions.
 
 This repository currently has no project-level license file. Public visibility does not grant a general license to reuse, modify, or redistribute GTAR1. Third-party components and content retain their own license terms.
