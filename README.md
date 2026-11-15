@@ -26,32 +26,6 @@ Open the app online first so its service worker can cache the application. Use y
 
 Browser storage can be cleared or evicted. Export backups regularly, especially before clearing site data or changing devices. The interactive demo resets its library and is intended for trying the app.
 
-## Getting Started
-
-The app lives in [`web/`](web/). It uses React, TypeScript, Vite, and Tailwind CSS, with IndexedDB for the device library. Optional server features use Cloudflare Pages Functions and D1.
-
-Use Node.js 22 and npm. From the repository root:
-
-```bash
-cd web
-npm ci
-npm run dev
-```
-
-Open `http://localhost:5173`. This starts the frontend for local songbook use; it does not start the API.
-
-For local API development on Windows, run `Run_Full_Stack_Dev.bat` from `web/` after dependency and environment setup. It applies local D1 migrations and starts the frontend on port 5173 and API on port 8788. `Run_API_Dev.bat` starts the API only.
-
-See the [Web/PWA development guide](web/README.md) for backend bindings and local setup. The tracked launchers and [`package.json`](web/package.json) provide the development commands.
-
-To build the app locally, from `web/`:
-
-```bash
-npm run build
-```
-
-Advanced Tools remains an area of ongoing development. Feature availability can depend on the build, browser support, and optional service configuration.
-
 ## AI-Assisted Development
 
 GTAR1 is independently developed with extensive assistance from AI coding agents.
