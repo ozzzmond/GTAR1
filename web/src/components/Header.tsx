@@ -1,12 +1,13 @@
+import { ExtensionRows, ExtensionSettingsDialog } from '../extensions/host/ExtensionRows'
+import { useExtensionHost } from '../extensions/host/useExtensionHost'
 import type { SetlistFolder } from '../types/gtar'
 import { recoveryDotClass, useRecoveryAttention } from '../utils/recoveryAttention'
 import { OPEN_BACKUP_CENTER_EVENT } from '../utils/backupCenter'
-import React, { useState, useRef, useEffect, useMemo } from 'react'
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { SearchResults } from './SearchResults'
 import {
   Search,
   X,
-  Globe,
   Palette,
   Wrench,
   Command,
@@ -19,7 +20,6 @@ import {
   Settings,
   FolderArchive,
   Info,
-  Layers,
 } from 'lucide-react'
 import {
   SETTINGS_KEYS,
@@ -48,19 +48,30 @@ import {
   formatPreviewIdentity,
 } from '../utils/headerFormatters'
 import {
-  searchOnlineChords,
+  searchConfiguredSources,
+  summarizeSearchErrors,
   type OnlineChordResult,
   type FetchedChordSheet,
 } from '../utils/onlineSearch'
 import { setOnlineSourcesEnabled, useOnlineSourcesEnabled } from '../utils/onlineSources'
+import { getSearchLinks, useOnlineSourceSettings } from '../utils/onlineSourceSettings'
 import { ChordPreviewModal } from './ChordPreviewModal'
 import { DebugLogsModal } from './DebugLogsModal'
+import { OnlineSourcesDialog, OnlineSourcesRow } from './OnlineSourcesRow'
+import { StageToolRows } from './StageToolRows'
+import { MidiRow } from '../midi/MidiRow'
+import { MidiDialog } from '../midi/MidiDialog'
+import { STAGE_TOOLS } from '../stageTools/registry'
 import { AboutModal } from './AboutModal'
+import { AdvancedToolsHelp, SettingsHelp } from './menuHelp'
 import { CloudSyncModal } from './CloudSyncModal'
 import { resolveThemePalette } from './ThemeModal'
 import devMascot from '../assets/bebegirl1-transparent.png'
 import prodMascot from '../assets/bebeboy-transparent.png'
 import { isDevEnv } from '../utils/env'
+
+/** Advanced Tools menu width: Settings proportions, plus room for each row's switch. */
+const ADVANCED_TOOLS_WIDTH = 320
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>
@@ -109,13 +120,9 @@ interface HeaderProps {
   searchQuery: string
   onSearchQueryChange: (query: string) => void
   onSelectSearchSong?: (songIndex: number) => void
-  onSearchWebExternal?: (query: string) => void
   onNavigateHome?: () => void
-  onOpenWebsiteUrlSource: () => void
-  onOpenStageTools: () => void
   onToggleTheme: () => void
   onOpenStageSettings?: () => void
-  onOpenImportModal: () => void
   /** Library (songs including trash) for the Backup & Restore center's file card. */
   backupSongs?: ActiveSongState[]
   onImportAllSongs?: (songs: Array<Partial<ActiveSongState>>) => void
@@ -131,7 +138,6 @@ interface HeaderProps {
   activeSetlistSongs?: Array<{ title: string; artist?: string; key?: string }>
   onSelectSetlistSong?: (setlistId: string | number, songIdx: number) => void
   onSelectSetlist?: (setlistId: string | number) => void
-  onPushSetlistToBandSync?: (setlistId?: string | number) => void
   onDirectImportOnlineSong?: (sheet: FetchedChordSheet, openStage?: boolean) => void
   onCloudRestore?: (songs: Array<Partial<ActiveSongState>>, setlists: WebSetlist[], folders?: SetlistFolder[]) => void | Promise<void>
   onCloudMerge?: (songs: Array<Partial<ActiveSongState>>, setlists: WebSetlist[], folders?: SetlistFolder[]) => unknown
@@ -157,12 +163,8 @@ export const Header: React.FC<HeaderProps> = ({
   searchQuery,
   onSearchQueryChange,
   onSelectSearchSong,
-  onSearchWebExternal,
   onNavigateHome,
-  onOpenWebsiteUrlSource,
-  onOpenStageTools,
   onToggleTheme,
-  onOpenImportModal,
   backupSongs,
   onImportAllSongs,
   onOverlayChange,
@@ -185,14 +187,19 @@ export const Header: React.FC<HeaderProps> = ({
   customColors,
 }) => {
   void activeView
-  void onOpenStageTools
   void onOpenCast
   void isCastActive
   const [showBackupRestoreModal, setShowBackupRestoreModal] = useState(false)
   const [showDebugLogsModal, setShowDebugLogsModal] = useState(false)
   const [showAboutModal, setShowAboutModal] = useState(false)
   const [showSettingsMenu, setShowSettingsMenu] = useState(false)
-  const [showAdvancedTools, setShowAdvancedTools] = useState(false)
+  const [showAdvancedToolsMenu, setShowAdvancedToolsMenu] = useState(false)
+  const [advancedToolsShift, setAdvancedToolsShift] = useState(0)
+  // Advanced Tools dialog: 'online-sources', 'midi' or an extension id. Held here so it outlives the popover.
+  const [advancedToolsDialog, setAdvancedToolsDialog] = useState<string | null>(null)
+  const openAdvancedToolsDialog = (dialog: string) => { setShowAdvancedToolsMenu(false); setAdvancedToolsDialog(dialog) }
+  const openOnlineSourcesDialog = () => openAdvancedToolsDialog('online-sources')
+  const closeAdvancedToolsDialog = () => setAdvancedToolsDialog(null)
 
   const effectiveTheme: ThemeMode = currentTheme ||
     (typeof localStorage !== 'undefined' ? (localStorage.getItem(SETTINGS_KEYS.themeMode) as ThemeMode | null) : null) ||
@@ -267,7 +274,7 @@ export const Header: React.FC<HeaderProps> = ({
   useEffect(() => { if (mobileSearchOpen) searchInputRef.current?.focus({ preventScroll: true }) }, [mobileSearchOpen])
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
-      if (shortcutsBlocked || showBackupRestoreModal || showDebugLogsModal || showAboutModal) return
+      if (shortcutsBlocked || showBackupRestoreModal || showDebugLogsModal || showAboutModal || advancedToolsDialog) return
       const target = event.target instanceof HTMLElement ? event.target : null
       if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'k') {
         if (target?.closest('dialog, [role=dialog]') || target?.id === 'multi-song-search-input') return
@@ -284,8 +291,9 @@ export const Header: React.FC<HeaderProps> = ({
     }
     window.addEventListener('keydown', keydown)
     return () => window.removeEventListener('keydown', keydown)
-  }, [shortcutsBlocked, compact, onSearchQueryChange, showBackupRestoreModal, showDebugLogsModal, showAboutModal])
+  }, [shortcutsBlocked, compact, onSearchQueryChange, showBackupRestoreModal, showDebugLogsModal, showAboutModal, advancedToolsDialog])
   const onlineSourcesEnabled = useOnlineSourcesEnabled()
+  const onlineSourceSettings = useOnlineSourceSettings()
   const [onlineResults, setOnlineResults] = useState<OnlineChordResult[]>([])
   const [onlineError, setOnlineError] = useState<string | null>(null)
   const [isSearchingOnline, setIsSearchingOnline] = useState(false)
@@ -298,7 +306,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   // Header dialog overlay blocks Stage keyboard/pedal shortcuts
   const showCloudSyncModal = showBackupRestoreModal
-  const headerOverlayOpen = showCloudSyncModal || showDebugLogsModal || showAboutModal
+  const headerOverlayOpen = showCloudSyncModal || showDebugLogsModal || showAboutModal || advancedToolsDialog !== null
   const overlayCallback = useRef(onOverlayChange)
   useEffect(() => { overlayCallback.current = onOverlayChange }, [onOverlayChange])
   useEffect(() => { overlayCallback.current?.(headerOverlayOpen) }, [headerOverlayOpen])
@@ -321,6 +329,8 @@ export const Header: React.FC<HeaderProps> = ({
     }
   }, [])
 
+  // Settings and Advanced Tools share one header and one row style.
+  const popoverHeader = 'pl-1 pb-2 mb-2 border-b border-app-border/60 flex items-center justify-between gap-2'
   const popoverItem = 'w-full min-h-11 px-3 py-2 rounded-xl bg-app-base hover:bg-app-surface text-app-heading ui-primary-text text-xs font-semibold flex items-center gap-2.5 border border-app-border transition-colors cursor-pointer mb-2'
 
   // Recovery Data: accessible within Debug Logs
@@ -328,45 +338,37 @@ export const Header: React.FC<HeaderProps> = ({
   const showRecoveryData = isDevEnv || isSuperAdmin || true
   const recoveryAttention = useRecoveryAttention(showRecoveryData)
 
-  // Advanced Tools: future home for optional Web Sources, ProPresenter, and modular integrations
-  const advancedTools = (
-    <div data-testid="advanced-tools" className="w-full">
-      <button
-        type="button"
-        data-testid="advanced-tools-button"
-        aria-expanded={showAdvancedTools}
-        onClick={() => setShowAdvancedTools(open => !open)}
-        className={`${popoverItem} justify-between`}
-      >
-        <span className="flex items-center gap-2.5">
-          <Wrench className="w-4 h-4 text-app-action shrink-0" aria-hidden="true" />
-          <span>Advanced Tools</span>
-        </span>
-        <span className="text-app-muted text-[10px]">{showAdvancedTools ? '▲' : '▼'}</span>
-      </button>
-      {showAdvancedTools && (
-        <div className="pl-3 border-l-2 border-app-border/60 my-1 space-y-1">
-          <button
-            type="button"
-            data-testid="profile-web-sources"
-            onClick={() => { setShowSettingsMenu(false); onOpenWebsiteUrlSource() }}
-            className={popoverItem}
-          >
-            <Globe className="w-4 h-4 text-app-action shrink-0" />
-            <span>Web Sources</span>
-          </button>
-          <div
-            data-testid="settings-propresenter-stub"
-            className="w-full min-h-11 px-3 py-2 rounded-xl bg-app-base/40 text-app-muted text-xs flex items-center justify-between border border-app-border/40 opacity-70 mb-2 cursor-not-allowed"
-          >
-            <span className="flex items-center gap-2.5">
-              <Layers className="w-4 h-4 text-app-muted shrink-0" aria-hidden="true" />
-              <span>ProPresenter</span>
-            </span>
-            <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-app-surface text-app-muted ui-secondary-text border border-app-border">Modular</span>
-          </div>
+  const extensionHost = useExtensionHost()
+
+  // Advanced Tools: optional sources and registry-driven extension rows
+  const advancedToolsPopover = (
+    <div
+      role="menu"
+      aria-label="Advanced Tools"
+      data-testid="advanced-tools-popover"
+      className="avatar-popover animate-scale-in max-h-[85vh] overflow-y-auto"
+      style={{ width: `min(${ADVANCED_TOOLS_WIDTH}px, calc(100vw - 24px))`, right: -advancedToolsShift }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className={popoverHeader}>
+        <div className="flex items-center gap-2 min-w-0">
+          <Wrench className="w-4 h-4 text-app-accent shrink-0" aria-hidden="true" />
+          <span className="text-xs font-bold text-app-heading">Advanced Tools</span>
         </div>
-      )}
+        <AdvancedToolsHelp stageTools={STAGE_TOOLS.map(tool => tool.name)} extensions={extensionHost.entries.map(entry => entry.manifest)} />
+      </div>
+
+      {/* Online song sources: opt-in, off by default; the row opens its app-level dialog (#516) */}
+      <OnlineSourcesRow rowClass={popoverItem} enabled={onlineSourcesEnabled} onToggle={setOnlineSourcesEnabled} onOpenDialog={openOnlineSourcesDialog} />
+
+      {/* Stage tools: each switch puts that tool's button on the Stage toolbar */}
+      <StageToolRows rowClass={popoverItem} />
+
+      {/* MIDI: off by default; the row opens its app-level dialog (#536) */}
+      <MidiRow rowClass={popoverItem} onOpenDialog={() => openAdvancedToolsDialog('midi')} />
+
+      {/* Extension registry rows (e.g. ProPresenter) */}
+      <ExtensionRows host={extensionHost} rowClass={popoverItem} onOpenDialog={openAdvancedToolsDialog} />
     </div>
   )
 
@@ -418,6 +420,8 @@ export const Header: React.FC<HeaderProps> = ({
   const searchContainerRef = useRef<HTMLElement>(null)
   const settingsMenuContainerRef = useRef<HTMLDivElement>(null)
   const settingsButtonRef = useRef<HTMLButtonElement>(null)
+  const advancedToolsContainerRef = useRef<HTMLDivElement>(null)
+  const advancedToolsButtonRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     if (!showSettingsMenu) return
@@ -431,6 +435,35 @@ export const Header: React.FC<HeaderProps> = ({
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [showSettingsMenu])
+
+  // The Advanced Tools menu hangs from the wrench's right edge. The wrench is not the last header
+  // button, so on a phone the menu would run off the left edge; slide it right just enough to keep
+  // a 12px gutter. Its width (min(ADVANCED_TOOLS_WIDTH, 100vw - 24px)) always fits between the gutters.
+  const placeAdvancedToolsMenu = useCallback(() => {
+    const anchor = advancedToolsContainerRef.current?.getBoundingClientRect()
+    if (!anchor) return
+    const gutter = 12
+    const width = Math.min(ADVANCED_TOOLS_WIDTH, window.innerWidth - gutter * 2)
+    setAdvancedToolsShift(Math.max(0, Math.round(gutter - (anchor.right - width))))
+  }, [])
+  useEffect(() => {
+    if (!showAdvancedToolsMenu) return
+    window.addEventListener('resize', placeAdvancedToolsMenu)
+    return () => window.removeEventListener('resize', placeAdvancedToolsMenu)
+  }, [showAdvancedToolsMenu, placeAdvancedToolsMenu])
+
+  useEffect(() => {
+    if (!showAdvancedToolsMenu) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setShowAdvancedToolsMenu(false)
+        advancedToolsButtonRef.current?.focus({ preventScroll: true })
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [showAdvancedToolsMenu])
 
   // Filter matching songs for real-time search dropdown overlay
   const matchingSearchSongs = useMemo(() => {
@@ -473,26 +506,34 @@ export const Header: React.FC<HeaderProps> = ({
 
     setIsSearchingOnline(true)
     setOnlineError(null)
+    let cancelled = false
     const timeout = setTimeout(() => {
-      searchOnlineChords(trimmed)
-        .then((res) => {
-          setOnlineResults(res)
-          setOnlineError(null)
+      searchConfiguredSources(trimmed, onlineSourceSettings)
+        .then((outcome) => {
+          if (cancelled) return
+          setOnlineResults(outcome.results)
+          setOnlineError(summarizeSearchErrors(outcome))
           setIsSearchingOnline(false)
         })
         .catch((err) => {
+          if (cancelled) return
           setOnlineResults([])
           setOnlineError(err instanceof Error ? err.message : 'Network error — unable to reach search service')
           setIsSearchingOnline(false)
         })
     }, 350)
 
-    return () => clearTimeout(timeout)
-  }, [searchQuery, onlineSourcesEnabled])
+    return () => {
+      cancelled = true
+      clearTimeout(timeout)
+    }
+  }, [searchQuery, onlineSourcesEnabled, onlineSourceSettings])
 
   // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
+      // A menu's contextual help panel is portaled to <body>; using it must not dismiss the menu.
+      if ((e.target as HTMLElement | null)?.closest?.('[data-contextual-help]')) return
       if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
         setIsSearchFocused(false)
       }
@@ -501,6 +542,12 @@ export const Header: React.FC<HeaderProps> = ({
           return
         }
         setShowSettingsMenu(false)
+      }
+      if (advancedToolsContainerRef.current && !advancedToolsContainerRef.current.contains(e.target as Node)) {
+        if (advancedToolsButtonRef.current && advancedToolsButtonRef.current.contains(e.target as Node)) {
+          return
+        }
+        setShowAdvancedToolsMenu(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -530,6 +577,7 @@ export const Header: React.FC<HeaderProps> = ({
       isSearchingOnline={isSearchingOnline}
       isOffline={isOffline}
       onlineError={onlineError}
+      searchLinks={onlineSourcesEnabled ? getSearchLinks(onlineSourceSettings, searchQuery) : []}
       onSelectSong={(originalIdx) => {
         dismissResults()
         onSelectSearchSong?.(originalIdx)
@@ -545,12 +593,6 @@ export const Header: React.FC<HeaderProps> = ({
         }
       }}
       onPreviewOnline={(result) => { dismissResults(); setPreviewResult(result) }}
-      onOpenImport={() => { dismissResults(); onOpenImportModal() }}
-      onOpenSources={() => {
-        dismissResults()
-        if (onSearchWebExternal && searchQuery.trim()) onSearchWebExternal(searchQuery)
-        else onOpenWebsiteUrlSource()
-      }}
     />
   )
   const showResults = isSearchFocused && searchQuery.trim().length > 0
@@ -687,6 +729,24 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           )}
 
+          {/* Advanced Tools Wrench Button & Popover */}
+          <div ref={advancedToolsContainerRef} className="avatar-wrapper flex items-center justify-center shrink-0">
+            <button
+              ref={advancedToolsButtonRef}
+              type="button"
+              aria-label="Advanced Tools"
+              aria-haspopup="menu"
+              aria-expanded={showAdvancedToolsMenu}
+              data-testid="header-advanced-tools"
+              onClick={() => { if (!showAdvancedToolsMenu) placeAdvancedToolsMenu(); setShowAdvancedToolsMenu(!showAdvancedToolsMenu) }}
+              className="relative w-9 h-9 shrink-0 rounded-xl border border-app-border bg-app-base hover:border-app-action flex items-center justify-center cursor-pointer transition-colors active:scale-95 before:absolute before:-inset-1 before:content-['']"
+            >
+              <Wrench className="w-5 h-5 text-app-action header-neutral-icon" aria-hidden="true" />
+            </button>
+
+            {showAdvancedToolsMenu && advancedToolsPopover}
+          </div>
+
           {/* Settings Gear Button & Dropdown */}
           <div ref={settingsMenuContainerRef} className="avatar-wrapper flex items-center justify-center shrink-0">
             <button
@@ -709,9 +769,12 @@ export const Header: React.FC<HeaderProps> = ({
                 className="avatar-popover animate-scale-in"
                 onClick={(e) => e.stopPropagation()}
               >
-                <div className="px-1 py-1.5 mb-2 border-b border-app-border/60 flex items-center gap-2">
-                  <Settings className="w-4 h-4 text-app-accent" aria-hidden="true" />
-                  <span className="text-xs font-bold text-app-heading">Settings</span>
+                <div className={popoverHeader}>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Settings className="w-4 h-4 text-app-accent shrink-0" aria-hidden="true" />
+                    <span className="text-xs font-bold text-app-heading">Settings</span>
+                  </div>
+                  <SettingsHelp showInstall={!isAppInstalled} />
                 </div>
 
                 {/* 1. Theme */}
@@ -736,24 +799,6 @@ export const Header: React.FC<HeaderProps> = ({
                   <span>Backup &amp; Restore</span>
                 </button>
 
-                {/* Online song sources: opt-in, off by default */}
-                <button
-                  type="button"
-                  role="menuitemcheckbox"
-                  aria-checked={onlineSourcesEnabled}
-                  data-testid="settings-online-sources"
-                  onClick={() => setOnlineSourcesEnabled(!onlineSourcesEnabled)}
-                  className={`${popoverItem} justify-between`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <Globe className="w-4 h-4 text-app-action shrink-0" aria-hidden="true" />
-                    <span>Online song sources</span>
-                  </div>
-                  <span className="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] leading-none bg-app-surface border border-app-border text-app-muted font-mono">
-                    {onlineSourcesEnabled ? 'On' : 'Off'}
-                  </span>
-                </button>
-
                 {/* 3. Debug Logs (includes Recovery Data management) */}
                 <button
                   type="button"
@@ -769,10 +814,7 @@ export const Header: React.FC<HeaderProps> = ({
                   {recoveryAttention && <span data-testid="settings-debug-logs-dot" aria-hidden="true" className={recoveryDotClass} />}
                 </button>
 
-                {/* 4. Advanced Tools */}
-                {advancedTools}
-
-                {/* 5. About GTAR */}
+                {/* 4. About GTAR */}
                 <button
                   type="button"
                   data-testid="settings-about-button"
@@ -888,6 +930,17 @@ export const Header: React.FC<HeaderProps> = ({
         isOpen={showAboutModal}
         onClose={() => setShowAboutModal(false)}
       />
+
+      {/* Advanced Tools dialogs: app-level, independent of the Advanced Tools popover */}
+      {advancedToolsDialog === 'online-sources' && (
+        <OnlineSourcesDialog onClose={closeAdvancedToolsDialog} returnFocusRef={advancedToolsButtonRef} />
+      )}
+      {advancedToolsDialog === 'midi' && (
+        <MidiDialog onClose={closeAdvancedToolsDialog} returnFocusRef={advancedToolsButtonRef} />
+      )}
+      {advancedToolsDialog !== null && advancedToolsDialog !== 'online-sources' && advancedToolsDialog !== 'midi' && (
+        <ExtensionSettingsDialog host={extensionHost} id={advancedToolsDialog} onClose={closeAdvancedToolsDialog} returnFocusRef={advancedToolsButtonRef} />
+      )}
 
       {/* Backup & Restore Modal */}
       <CloudSyncModal

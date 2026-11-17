@@ -1,0 +1,74 @@
+export const CONTRACT_VERSION = 1 as const
+export type Capability = 'events:song' | 'events:section' | 'events:setlist' | 'events:transpose' | 'net:lan' | 'net:https' | 'device:midi' | 'device:bluetooth' | 'device:audio-in' | 'device:audio-out' | 'ui:panel'
+export type SettingField =
+  | { key: string; type: 'boolean'; label: string; default: boolean }
+  | { key: string; type: 'text' | 'host'; label: string; default: string; placeholder?: string }
+  | { key: string; type: 'port' | 'number'; label: string; default: number; min?: number; max?: number; readOnly?: boolean; note?: string }
+  | { key: string; type: 'select'; label: string; default: string; options: { value: string; label: string }[] }
+  | { key: string; type: 'secret'; label: string }
+export interface ExtensionManifest {
+  id: string
+  name: string
+  version: string
+  contractVersion: typeof CONTRACT_VERSION
+  summary: string
+  capabilities: readonly Capability[]
+  settings: readonly SettingField[]
+}
+export type ExtensionSettings = Readonly<Record<string, string | number | boolean>>
+export type Availability = { available: true } | { available: false; reason: string }
+// Feature flags only: no browser objects, permissions or core state cross this boundary.
+export interface HostEnv { readonly capabilities: readonly Capability[] }
+export type ExtensionState = 'absent' | 'disabled' | 'unavailable' | 'starting' | 'active' | 'offline' | 'error'
+// Ephemeral panel data/actions; never persisted or connected to core state.
+export interface ExtensionPanel {
+  qr?: { label: string; src: string }
+  inputs?: readonly { label: string; value: string; maxLength: number; change(value: string): void; submit?(): void }[]
+  fields: readonly { label: string; value: string }[]
+  actions: readonly { label: string; disabled?: boolean; run(): void }[]
+}
+// Narrow, memory-only observation. Independent feeds are NOT asserted to be correlated.
+export interface FollowObservation {
+  // A fresh status GET completed with the observed identity unchanged; not atomic membership.
+  readonly currentReadIdentityRevision?: number
+  readonly currentReadSequence?: number
+  readonly identityRevision?: number
+  readonly live: boolean
+  readonly presentation: Readonly<{ uuid: string; title: string; slideIndex: number | null }> | null
+  readonly current: Readonly<{ uuid: string; text: string }> | null
+}
+export interface FollowSnapshot extends FollowObservation { readonly session: number; readonly connection: number; readonly identityRevision: number }
+export interface ExtensionContext {
+  /** Approved Band Sync transport only; no library or Stage control API. */
+  startBandSync?(): () => void
+  settings: { read(): ExtensionSettings; subscribe(listener: () => void): () => void }
+  signal: AbortSignal
+  reportStatus(state: 'active' | 'offline' | 'error', message?: string): void
+  log(message: string): void
+  setPanel(panel: ExtensionPanel): void
+  publishFollowSnapshot?(snapshot: FollowObservation): void
+  setFollowRefresh?(refresh: () => void): void
+  setCurrentSlideRead?(read: (signal: AbortSignal) => Promise<void>): void
+  recordSuccessfulConnection?(host: string): void
+}
+export interface StageSyncPosition {
+  readonly lineIndex: number; readonly scrollFraction: number
+  readonly autoscroll: Readonly<{ on: boolean; speed: number }>
+  readonly setlist: Readonly<{ id: string | null; index: number; count: number }>
+}
+export interface StageSongEvent extends StageSyncPosition {
+  readonly songId: string | number | null; readonly contentHash: string; readonly displayTitle: string
+  readonly transposeOffset: number; readonly effectiveKey: string; readonly chordsVisible: boolean
+}
+// Only band-sync is approved for the read-only song/transpose publisher.
+export interface ExtensionModule {
+  manifest: ExtensionManifest
+  checkAvailability(env: HostEnv): Availability
+  activate(ctx: ExtensionContext): void | (() => void)
+}
+export interface RegistryEntry {
+  manifest: ExtensionManifest
+  checkAvailability(env: HostEnv): Availability
+  // Omitted for a manifest whose implementation has not shipped.
+  load?: () => Promise<ExtensionModule>
+}

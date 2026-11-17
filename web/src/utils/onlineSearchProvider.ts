@@ -15,6 +15,7 @@ export interface OnlineChordResult {
   offlineExample?: boolean
   tonality?: string
   providerId?: string
+  providerName?: string
 }
 
 export type OnlineSearchResult = OnlineChordResult
@@ -516,6 +517,10 @@ class SearchProviderRegistry {
   getRegistered(): OnlineSearchProvider[] {
     return Array.from(this.providers.values())
   }
+
+  get(id: string): OnlineSearchProvider | undefined {
+    return this.providers.get(id)
+  }
 }
 
 const registry = new SearchProviderRegistry()
@@ -534,6 +539,10 @@ export function registerSearchProvider(provider: OnlineSearchProvider): void {
 
 export function resetSearchProvider(): void {
   registry.reset()
+}
+
+export function getSearchProviderById(id: string): OnlineSearchProvider | undefined {
+  return registry.get(id)
 }
 
 export function getRegisteredSearchProviders(): OnlineSearchProvider[] {

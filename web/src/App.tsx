@@ -1,3 +1,8 @@
+import { useBandSyncGate } from './extensions/host/useBandSyncGate'
+import { projectFollowSetlist, type FollowSelection } from './utils/setlistAutoFollow'
+import { setlistAutoFollowDev } from './utils/setlistAutoFollowDev'
+import { ExtensionHostProvider } from './extensions/host/ExtensionHostProvider'
+import { startMidi } from './midi/loader'
 import { sharedSongToActiveSong } from './utils/sharedSetlistLibrary'
 import { SetlistTrashConfirmation } from './components/SetlistTrashConfirmation'
 import { ExplorerDragDrop } from './components/ExplorerDragDrop'
@@ -11,7 +16,6 @@ import { SetlistManager } from './components/SetlistManager'
 import { OPEN_RECOVERY_DATA_EVENT } from './utils/recoveryReview'
 import { isPresentationLocation } from './utils/presentationRoute'
 import { transposeContext } from './utils/songKeySemantics'
-import { parseBandSetlist } from './utils/bandSetlistImport'
 import {
   libraryRevision,
   loadedLibraryRevision,
@@ -47,7 +51,6 @@ import {
   loadThemeModeAssignments,
   isLightTheme,
 } from './utils/backupSettings'
-import { createSingleSetlistPayload } from './utils/jsonBackup'
 import { setSongMembership, resolveSetlistSong, partitionSongs, transitionSongLibrary, type SongLifecycleOperation } from './utils/setlistSongs'
 import {
   readStageSession,
@@ -55,7 +58,7 @@ import {
   clearStageSession,
   validateAndResolveStageSession,
 } from './utils/stageSession'
-import { useState, useEffect, useMemo, useRef, useCallback, lazy, Suspense } from 'react'
+import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback, lazy, Suspense } from 'react'
 import { DEFAULT_SAMPLE_SETLISTS, DEFAULT_SETLIST, EMPTY_LIBRARY_SONG, cloudSyncedSetlistIds, removeUnchangedSamples } from './data/defaultLibrary'
 import { checkRecovery } from './utils/recoveryNotice'
 import { Header } from './components/Header'
@@ -82,11 +85,9 @@ import {
   applyThemeRuntime,
   hydrateThemeSettings,
 } from './components/ThemeModal'
-import { BandSyncModal } from './components/BandSyncModal'
 import { TvPresentationModal } from './components/TvPresentationModal'
 import { stageCast2Enabled } from './utils/stageCast2Local'
 import { stageCast } from './utils/stageCast'
-import { bandSync } from './utils/bandSync'
 import { detectSongKey } from './utils/songParser'
 import { canonicalSongKey } from './utils/musicalKey'
 import type { ActiveSongState, WebSetlist, SetlistFolder } from './types/gtar'
@@ -154,7 +155,7 @@ function LibraryStartup() {
   return <>
     {storageNotice && <aside role="alert" data-testid="library-store-fallback" className="p-4 bg-amber-100 text-black">{storageNotice}</aside>}
     <OldRecoveryExportPrompt />
-    <LibraryStartupReadyInner />
+    <ExtensionHostProvider><LibraryStartupReadyInner /></ExtensionHostProvider>
   </>
 }
 
@@ -177,6 +178,8 @@ function LibraryStartupReadyInner() {
   const [repairPreview, setRepairPreview] = useState<DanglingReferenceRepair | null>(null)
   const [repairError, setRepairError] = useState<string | null>(null)
   const [status, setStatus] = useState(() => { performStorageHousekeeping(); return checkRecovery() })
+  // #536: MIDI left ON reconnects here without a prompt; with MIDI off this loads and asks nothing.
+  useEffect(() => startMidi(), [])
   useEffect(() => {
     // #300: with large IndexedDB libraries a full recovery review per save is costly; coalesce bursts of saves.
     let timer: ReturnType<typeof setTimeout> | null = null
@@ -236,6 +239,7 @@ function LibraryStartupReadyInner() {
 }
 
 function LibraryApp() {
+  const { active: bandSyncEnabled, remote: bandRemote } = useBandSyncGate()
   const [recoveryDataOpen, setRecoveryDataOpen] = useState(false)
   // #303: Backup & Restore center / debug logs are owned by the header; Stage shortcuts pause while they are open.
   const [isHeaderOverlayOpen, setIsHeaderOverlayOpen] = useState(false)
@@ -327,6 +331,12 @@ function LibraryApp() {
   const [activeView, setActiveView] = useState<'songbook' | 'editor' | 'stage' | 'trash'>(
     initialStageSession.isValid ? initialStageSession.view : 'songbook'
   )
+  useEffect(() => {
+    if (bandRemote && bandSyncEnabled) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- A host-mediated remote session opens its transient Stage view.
+      setActiveView('stage')
+    }
+  }, [bandRemote, bandSyncEnabled])
 
   // DEV.5a: mirror view changes into browser history (Back semantics, no hardcoded route).
   const viewFromHistoryRef = useRef(false)
@@ -528,6 +538,10 @@ function LibraryApp() {
     })
   }, [activeSetlist, songs])
 
+  const followSetlist = useMemo(() => projectFollowSetlist(activeSetlistId, queueMode, activeSetlist, activeSetlistSongs), [activeSetlistId, queueMode, activeSetlist, activeSetlistSongs])
+  const [followManualRevision, setFollowManualRevision] = useState(0)
+  const [followOrigin, setFollowOrigin] = useState<{ context: typeof followSetlist; index: number } | null>(null)
+
   const isInSetlistMode =
     queueMode === 'setlist' && Boolean(activeSetlist) && activeSetlistSongs.length > 0
 
@@ -546,7 +560,6 @@ function LibraryApp() {
   // Stays mounted after first open so the dialog keeps its state across opens, as before.
   const [importDialogMounted, setImportDialogMounted] = useState(false)
   if (isImportModalOpen && !importDialogMounted) setImportDialogMounted(true)
-  const [isStageToolsModalOpen, setIsStageToolsModalOpen] = modals.stageTools
   const [isThemeModalOpen, setIsThemeModalOpen] = modals.theme
   const [isHeaderKeyPickerOpen, setIsHeaderKeyPickerOpen] = modals.headerKeyPicker
 
@@ -799,6 +812,7 @@ function LibraryApp() {
   // Band Sync: listen to leader song sync events when client
   // Transpose handler
   const handleTransposeChange = useCallback((newOffset: number) => {
+    if (bandRemote) return
     if (!Number.isSafeInteger(newOffset) || newOffset < -11 || newOffset > 11) return
     if (isInSetlistMode) {
       const target = activeSetlistSongs[activeSetlistSongIndex]
@@ -812,153 +826,18 @@ function LibraryApp() {
         prev.map((s, idx) => (idx === activeSongIndex ? { ...s, transposeOffset: newOffset } : s))
       )
     }
-  }, [isInSetlistMode, activeSetlistSongs, activeSetlistSongIndex, activeSongIndex])
-
-  useEffect(() => {
-    const unsub = bandSync.onMessage((msg) => {
-      if (bandSync.getRole() === 'CLIENT') {
-        if (msg.type === 'SONG_SYNC' && msg.payload) {
-          // Auto Route: immediately switch directly to Stage View without needing to open setlist drawer
-          setActiveView('stage')
-          setIsSetlistDrawerOpen(false)
-
-          const title: string = msg.payload.title || msg.payload.songTitle || ''
-          const artist: string = msg.payload.artist || ''
-          const queueType: string = (msg.payload.queueType || 'LIBRARY').toUpperCase()
-          const queueIndex: number =
-            msg.payload.queueIndex ?? msg.payload.setlistIndex ?? msg.payload.songIndex ?? 0
-          const transpose: number = msg.payload.transpose ?? msg.payload.transposeOffset ?? 0
-          const rawContent: string = msg.payload.rawContent || msg.payload.content || ''
-
-          const normTitle = title.trim().toLowerCase()
-          const normArtist = artist.trim().toLowerCase()
-
-          if (queueType === 'SETLIST') {
-            setQueueMode('setlist')
-            let matched = false
-
-            // Try matching in active setlist songs
-            if (activeSetlist && activeSetlistSongs.length > 0) {
-              const idx = activeSetlistSongs.findIndex(
-                (s) =>
-                  s.title.trim().toLowerCase() === normTitle &&
-                  (!normArtist || s.artist.trim().toLowerCase() === normArtist)
-              )
-              if (idx !== -1) {
-                setActiveSetlistSongIndex(idx)
-                matched = true
-              } else if (queueIndex >= 0 && queueIndex < activeSetlistSongs.length) {
-                setActiveSetlistSongIndex(queueIndex)
-                matched = true
-              }
-            }
-
-            // If not found in active setlist, check other setlists
-            if (!matched) {
-              for (const sl of setlists) {
-                const slIdx = sl.songs.findIndex(
-                  (s) =>
-                    s.title.trim().toLowerCase() === normTitle &&
-                    (!normArtist || (s.artist || '').trim().toLowerCase() === normArtist)
-                )
-                if (slIdx !== -1) {
-                  setActiveSetlistId(sl.id)
-                  setActiveSetlistSongIndex(slIdx)
-                  matched = true
-                  break
-                }
-              }
-            }
-
-            // If still not matched, check songs library
-            if (!matched) {
-              const libIdx = songs.findIndex(
-                (s) =>
-                  s.title.trim().toLowerCase() === normTitle &&
-                  (!normArtist || s.artist.trim().toLowerCase() === normArtist)
-              )
-              if (libIdx !== -1) {
-                setActiveSongIndex(libIdx)
-              } else {
-                const effectiveContent = rawContent || `{title: ${title || 'Synced Song'}}\n{artist: ${artist || ''}}\n\n[Verse]\n`
-                const newSong: ActiveSongState = {
-                  id: generateUUID(),
-                  title: title || 'Synced Song',
-                  artist: artist || '',
-                  key: canonicalSongKey(msg.payload.key || '') || detectSongKey(effectiveContent),
-                  capo: msg.payload.capo || 'No Capo',
-                  bpm: msg.payload.bpm || '120',
-                  format: msg.payload.format || 'CHORD_PRO',
-                  transposeOffset: transpose,
-                  rawContent: effectiveContent,
-                }
-                setSongs((prev) => [...prev, newSong])
-                setActiveSongIndex(songs.length)
-              }
-            }
-          } else {
-            // LIBRARY mode
-            setQueueMode('library')
-            const libIdx = songs.findIndex(
-              (s) =>
-                s.title.trim().toLowerCase() === normTitle &&
-                (!normArtist || s.artist.trim().toLowerCase() === normArtist)
-            )
-            if (libIdx !== -1) {
-              setActiveSongIndex(libIdx)
-            } else {
-              const effectiveContent = rawContent || `{title: ${title || 'Synced Song'}}\n{artist: ${artist || ''}}\n\n[Verse]\n`
-              const newSong: ActiveSongState = {
-                id: generateUUID(),
-                title: title || 'Synced Song',
-                artist: artist || '',
-                key: canonicalSongKey(msg.payload.key || '') || detectSongKey(effectiveContent),
-                capo: msg.payload.capo || 'No Capo',
-                bpm: msg.payload.bpm || '120',
-                format: msg.payload.format || 'CHORD_PRO',
-                transposeOffset: transpose,
-                rawContent: effectiveContent,
-              }
-              setSongs((prev) => [...prev, newSong])
-              setActiveSongIndex(songs.length)
-            }
-          }
-
-          if (typeof transpose === 'number') {
-            handleTransposeChange(transpose)
-          }
-        } else if (msg.type === 'SETLIST_SYNC' && msg.payload) {
-          try {
-            const parsed = parseBandSetlist(msg.payload, importStateRef.current.songs)
-            const kept = handleSmartMerge(parsed.songs, parsed.setlists).skippedSetlists[0]
-            // #453 D6: the Leader's queue is not shown as received when this device kept its own version.
-            if (kept) throw new Error(`Setlist "${kept.name}" was changed on this device; the Leader's version was not applied.`)
-            setActiveSetlistId(parsed.setlists[0].id)
-          } catch (error) {
-            setToastMessage(error instanceof Error ? error.message : 'Setlist reception aborted; resolve import conflict explicitly.')
-            return
-          }
-          setActiveSetlistSongIndex(0)
-          setQueueMode('setlist')
-          setActiveView('stage')
-
-          // Toast: "Received new setlist from Leader"
-          setToastMessage('Received new setlist from Leader')
-          setTimeout(() => setToastMessage(null), 5000)
-        }
-      }
-    })
-    return unsub
-  }, [songs, activeSetlist, activeSetlistSongs, setlists, deletedSongs, handleTransposeChange, handleSmartMerge, importStateRef, setIsSetlistDrawerOpen])
+  }, [isInSetlistMode, activeSetlistSongs, activeSetlistSongIndex, activeSongIndex, bandRemote])
 
   // Select a song from library (switches queue scope to full library)
   const handleSelectLibrarySong = (idx: number) => {
+    setFollowManualRevision(value => value + 1); setFollowOrigin(null)
     setActiveSongIndex(idx)
     setQueueMode('library')
   }
 
   // Select a song from a setlist (switches queue scope to active setlist)
   const handleSelectSetlistSong = (setlistId: string | number, songIdx: number) => {
+    setFollowManualRevision(value => value + 1); setFollowOrigin(null)
     setActiveSetlistId(setlistId)
     setActiveSetlistSongIndex(songIdx)
     setQueueMode('setlist')
@@ -1137,43 +1016,6 @@ function LibraryApp() {
       setWorkspaceSetlistId(null)
       setActiveView('songbook')
     })
-  }
-
-  // Band Leader Action: Push Setlist to Members
-  const handlePushSetlistToMembers = (
-    targetSetlistId?: string | number
-  ): { success: boolean; message: string } => {
-    const targetSetlist = targetSetlistId
-      ? setlists.find((s) => String(s.id) === String(targetSetlistId)) || activeSetlist || setlists[0]
-      : activeSetlist || setlists[0]
-
-    if (bandSync.getState().role !== 'HOST') {
-      const msg = 'Followers cannot broadcast setlists. Only the Band Leader can push setlists.'
-      setToastMessage(msg)
-      setTimeout(() => setToastMessage(null), 4000)
-      return { success: false, message: msg }
-    }
-
-    if (!targetSetlist || targetSetlist.songs.length === 0) {
-      const msg = 'No setlist available to push. Please create or select a setlist first.'
-      setToastMessage(msg)
-      setTimeout(() => setToastMessage(null), 4000)
-      return { success: false, message: msg }
-    }
-
-    let payloadSongs: ActiveSongState[]
-    try { payloadSongs = createSingleSetlistPayload(targetSetlist, songs).setlist.songs }
-    catch (error) {
-      const message = error instanceof Error ? error.message : 'Setlist contains a missing song'
-      setToastMessage(message)
-      return { success: false, message }
-    }
-
-    bandSync.broadcastSetlist(targetSetlist.name, payloadSongs, targetSetlist.id)
-    const successMsg = `Pushed setlist '${targetSetlist.name}' (${payloadSongs.length} songs) to band members via BandSync!`
-    setToastMessage(successMsg)
-    setTimeout(() => setToastMessage(null), 4000)
-    return { success: true, message: successMsg }
   }
 
   // Import online chord sheet directly into songbook library
@@ -1625,6 +1467,19 @@ function LibraryApp() {
     }
   }
 
+  const followBoundaryRef = useRef({ context: followSetlist, queueMode, activeView, activeSetlistId, index: activeSetlistSongIndex, manualRevision: followManualRevision, blocked: false })
+  useLayoutEffect(() => { followBoundaryRef.current = { context: followSetlist, queueMode, activeView, activeSetlistId, index: activeSetlistSongIndex, manualRevision: followManualRevision,
+    blocked: isSetlistDrawerOpen || isThemeModalOpen || isWebsiteUrlModalOpen || isImportModalOpen || isHeaderKeyPickerOpen || isTvPresentationModalOpen || isHeaderOverlayOpen || recoveryDataOpen || isSetlistManagerOpen } })
+  const handleFollowSetlistEntry = (request: FollowSelection): boolean => {
+    const current = followBoundaryRef.current
+    if (!setlistAutoFollowDev || !document.fullscreenElement || document.hidden || current.activeView !== 'stage' || current.queueMode !== 'setlist' || current.blocked ||
+      !current.context || current.context !== request.context || current.activeSetlistId !== current.context.id || current.index !== request.fromIndex || current.manualRevision !== request.manualRevision ||
+      !current.context.entries[request.index]?.eligible || stageCast.isPresentationActive() || !request.isCurrent()) return false
+    setFollowOrigin({ context: current.context, index: request.index })
+    setActiveSetlistSongIndex(request.index)
+    return true
+  }
+
   return (
     <TagLibraryContext.Provider value={{ colors: tagColors, onColorChange: handleTagColor, onAddToTag: handleBulkAddToTag }}>
     {activeView === 'songbook' && <ExplorerDragDrop songs={songs} setlists={setlists} folders={folders}
@@ -1676,25 +1531,18 @@ function LibraryApp() {
           onSelectSearchSong={(songIdx) => {
             navigateSafely(() => { handleSelectLibrarySong(songIdx); setActiveView('stage') })
           }}
-          onSearchWebExternal={(query) => {
-            setSearchQuery(query)
-            setIsWebsiteUrlModalOpen(true)
-          }}
           onNavigateHome={() => navigateSafely(handleNavigateHome)}
-          onOpenWebsiteUrlSource={() => setIsWebsiteUrlModalOpen(true)}
-          onOpenStageTools={() => setIsStageToolsModalOpen(true)}
           onToggleTheme={() => setIsThemeModalOpen(true)}
           currentTheme={stageTheme}
           themeModeAssignments={themeAssignments}
           onToggleThemeMode={handleToggleThemeMode}
           customColors={customThemeColors}
-          onOpenImportModal={() => navigateSafely(() => setIsImportModalOpen(true))}
           backupSongs={backupDialogSongs}
           onImportAllSongs={handleImportAllSongs}
           onOverlayChange={setIsHeaderOverlayOpen}
           onOpenSetlistDrawer={() => navigateSafely(() => { setIsSetlistDrawerOpen(true) })}
           isExplorerOpen={isSetlistDrawerOpen}
-          shortcutsBlocked={isSetlistDrawerOpen || isSetlistManagerOpen || isImportModalOpen || isStageToolsModalOpen || isThemeModalOpen || isWebsiteUrlModalOpen}
+          shortcutsBlocked={isSetlistDrawerOpen || isSetlistManagerOpen || isImportModalOpen || isThemeModalOpen || isWebsiteUrlModalOpen}
           setlists={setlists}
           activeSetlistId={activeSetlistId}
           activeSetlistName={activeSetlist?.name}
@@ -1704,7 +1552,6 @@ function LibraryApp() {
             setActiveView('stage')
           })}
           onSelectSetlist={(id) => navigateSafely(() => handleSelectSetlist(id))}
-          onPushSetlistToBandSync={handlePushSetlistToMembers}
           onDirectImportOnlineSong={handleImportOnlineChordSheet}
           onOpenCast={handleTogglePresentation}
           isCastActive={isCastActive}
@@ -1864,8 +1711,13 @@ function LibraryApp() {
               isInSetlistMode={isInSetlistMode}
               activeSetlistSongs={activeSetlistSongs}
               activeSetlistSongIndex={activeSetlistSongIndex}
-              onSelectSetlistSongIndex={setActiveSetlistSongIndex}
+              onSelectSetlistSongIndex={(index) => { setFollowManualRevision(value => value + 1); setFollowOrigin(null); setActiveSetlistSongIndex(index) }}
+              followSetlist={followSetlist}
+              followManualRevision={followManualRevision}
+              onFollowSetlistEntry={handleFollowSetlistEntry}
+              isProPresenterSelection={followOrigin?.context === followSetlist && followOrigin?.index === activeSetlistSongIndex}
               activeSetlistName={activeSetlist?.name}
+              activeSetlistId={activeSetlist?.id ?? null}
               setlists={setlists}
               onSelectSetlist={(id) => navigateSafely(() => handleSelectSetlist(id))}
               onOpenSetlistDrawer={
@@ -1876,7 +1728,6 @@ function LibraryApp() {
               isSetlistDrawerOpen={isSetlistDrawerOpen}
               isAnyModalOpen={
                 isSetlistDrawerOpen ||
-                isStageToolsModalOpen ||
                 isThemeModalOpen ||
                 isWebsiteUrlModalOpen ||
                 isImportModalOpen ||
@@ -1894,7 +1745,6 @@ function LibraryApp() {
               onSelectFontStyle={setFontStyle}
               isTwoColumn={isTwoColumn}
               onToggleTwoColumn={setIsTwoColumn}
-              onOpenBandSync={() => setIsStageToolsModalOpen(true)}
               onPerformanceModeChange={setIsStagePerformanceMode}
             />
           </StageErrorBoundary>
@@ -1937,15 +1787,6 @@ function LibraryApp() {
         existingSetlists={setlists}
       /></Suspense>}
 
-      {/* Stage Tools & Band Sync Modal */}
-      <BandSyncModal
-        isOpen={isStageToolsModalOpen}
-        onClose={() => setIsStageToolsModalOpen(false)}
-        initialTab="sync"
-        onPushSetlist={handlePushSetlistToMembers}
-        activeSetlistName={activeSetlist?.name}
-        activeSetlistSongCount={activeSetlistSongs.length}
-      />
 
       {/* Header Key Picker Modal */}
       <KeyPickerModal

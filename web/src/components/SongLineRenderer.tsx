@@ -13,7 +13,10 @@ export type StageFontWeight = 'regular' | 'medium' | 'bold'
 export type StageLineSpacing = 'compact' | 'normal' | 'relaxed'
 
 export interface SongLineRendererProps {
+  readOnly?: boolean
   lines: SongLine[]
+  lineOffset?: number
+  activeLineIds?: ReadonlySet<number>
   fontSizePx: number
   fontFamily?: 'mono' | 'sans' | 'serif'
   onChordClick?: (chord: string, targetEl?: HTMLElement) => void
@@ -107,12 +110,14 @@ function renderInteractiveChordLine(
   notation: StageNotationMode = 'chords',
   referenceKey?: string | null,
   onChordHover?: (chord: string, targetEl: HTMLElement) => void,
-  onChordLeave?: (chord: string) => void
+  onChordLeave?: (chord: string) => void,
+  readOnly = false
 ): React.ReactNode[] {
   const elements: React.ReactNode[] = []
   let i = 0
   let pendingSpacingCompensation = 0
   const isNumbersMode = notation === 'numbers' && isValidMusicalKey(referenceKey)
+  const interactive = !readOnly && !isNumbersMode
 
   while (i < text.length) {
     if (text[i] === ' ' || text[i] === '\t') {
@@ -158,13 +163,13 @@ function renderInteractiveChordLine(
               <span
                 key={`chord-${start}-${sIdx}`}
                 id={`stage-chord-${start}-${sIdx}`}
-                tabIndex={isNumbersMode ? undefined : 0}
-                role={isNumbersMode ? undefined : 'button'}
-                onClick={isNumbersMode ? undefined : () => onChordClick?.(cleanSub, typeof document !== 'undefined' ? document.getElementById(`stage-chord-${start}-${sIdx}`) || undefined : undefined)}
-                onMouseEnter={isNumbersMode ? undefined : (e) => onChordHover?.(cleanSub, e.currentTarget as HTMLElement)}
-                onMouseLeave={isNumbersMode ? undefined : () => onChordLeave?.(cleanSub)}
+                tabIndex={!interactive ? undefined : 0}
+                role={!interactive ? undefined : 'button'}
+                onClick={!interactive ? undefined : () => onChordClick?.(cleanSub, typeof document !== 'undefined' ? document.getElementById(`stage-chord-${start}-${sIdx}`) || undefined : undefined)}
+                onMouseEnter={!interactive ? undefined : (e) => onChordHover?.(cleanSub, e.currentTarget as HTMLElement)}
+                onMouseLeave={!interactive ? undefined : () => onChordLeave?.(cleanSub)}
                 onKeyDown={
-                  isNumbersMode
+                  !interactive
                     ? undefined
                     : (e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
@@ -173,7 +178,7 @@ function renderInteractiveChordLine(
                         }
                       }
                 }
-                className={`stage-chord-token ${isNumbersMode ? 'stage-number-token cursor-default' : 'cursor-pointer'} select-none`}
+                className={`stage-chord-token ${isNumbersMode ? 'stage-number-token cursor-default' : readOnly ? 'cursor-default' : 'cursor-pointer'} select-none`}
                 style={{
                   ...(chordScale !== 1.0
                     ? {
@@ -204,13 +209,13 @@ function renderInteractiveChordLine(
             <span
               key={`chord-${start}`}
               id={`stage-chord-${start}`}
-              tabIndex={isNumbersMode ? undefined : 0}
-              role={isNumbersMode ? undefined : 'button'}
-              onClick={isNumbersMode ? undefined : () => onChordClick?.(cleanToken, typeof document !== 'undefined' ? document.getElementById(`stage-chord-${start}`) || undefined : undefined)}
-              onMouseEnter={isNumbersMode ? undefined : (e) => onChordHover?.(cleanToken, e.currentTarget as HTMLElement)}
-              onMouseLeave={isNumbersMode ? undefined : () => onChordLeave?.(cleanToken)}
+              tabIndex={!interactive ? undefined : 0}
+              role={!interactive ? undefined : 'button'}
+              onClick={!interactive ? undefined : () => onChordClick?.(cleanToken, typeof document !== 'undefined' ? document.getElementById(`stage-chord-${start}`) || undefined : undefined)}
+              onMouseEnter={!interactive ? undefined : (e) => onChordHover?.(cleanToken, e.currentTarget as HTMLElement)}
+              onMouseLeave={!interactive ? undefined : () => onChordLeave?.(cleanToken)}
               onKeyDown={
-                isNumbersMode
+                !interactive
                   ? undefined
                   : (e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
@@ -219,7 +224,7 @@ function renderInteractiveChordLine(
                       }
                     }
               }
-              className={`stage-chord-token ${isNumbersMode ? 'stage-number-token cursor-default' : 'cursor-pointer'} select-none`}
+              className={`stage-chord-token ${isNumbersMode ? 'stage-number-token cursor-default' : readOnly ? 'cursor-default' : 'cursor-pointer'} select-none`}
               style={{
                 ...(chordScale !== 1.0
                   ? {
@@ -260,6 +265,9 @@ function renderInteractiveChordLine(
  */
 export const SongLineRenderer: React.FC<SongLineRendererProps> = ({
   lines,
+  lineOffset = 0,
+  readOnly = false,
+  activeLineIds,
   fontSizePx,
   fontFamily = 'mono',
   onChordClick,
@@ -283,7 +291,7 @@ export const SongLineRenderer: React.FC<SongLineRendererProps> = ({
   const isHighContrast = chordScale >= 1.2 && fontWeight === 'bold'
 
   const renderAnchored = (segments: ChordSegment[], key: number) => (
-    <div key={key} data-stage-line="true" data-line-index={key} className={`${fontClass} stage-anchored-line select-text`}
+    <div key={key} data-stage-line="true" data-line-index={key + lineOffset} data-live-lyric={activeLineIds?.has(key + lineOffset) || undefined} className={`${fontClass} stage-anchored-line select-text`}
       style={{ fontSize: fontSizePx, padding: spacing.chordProPadding, display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start' }}>
       {chordLyricWords(segments).map((word, wordIndex) => (
         <span key={wordIndex} className="stage-anchored-word" style={{ display: 'inline-flex', maxWidth: '100%', minWidth: 0 }}>
@@ -293,7 +301,7 @@ export const SongLineRenderer: React.FC<SongLineRendererProps> = ({
               <span className={`stage-chord-text stage-mono ${weightConfig.chordClass} select-none`}
                 style={{ fontSize: `${chordScale * 0.9}em`, lineHeight: 1.2, minHeight: '1.2em', whiteSpace: 'pre',
                   paddingRight: segment.chord ? '0.35em' : undefined, color: 'var(--custom-stage-chord)' }}>
-                {segment.chord ? renderInteractiveChordLine(segment.chord, onChordClick, 1, isHighContrast, notation, referenceKey, onChordHover, onChordLeave) : '\u00a0'}
+                {segment.chord ? renderInteractiveChordLine(segment.chord, onChordClick, 1, isHighContrast, notation, referenceKey, onChordHover, onChordLeave, readOnly) : '\u00a0'}
               </span>
               <span className={`stage-lyric-text ${weightConfig.lyricClass}`}
                 style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', lineHeight: spacing.lineHeightMultiplier, color: 'var(--custom-stage-text)' }}>
@@ -316,7 +324,7 @@ export const SongLineRenderer: React.FC<SongLineRendererProps> = ({
         if (line.type === 'LYRIC' && previous?.type === 'CHORD_ROW' && previous.isOverLyric) return null
         switch (line.type) {
           case 'EMPTY':
-            return <div key={idx} data-stage-line="true" data-line-index={idx} style={{ height: spacing.emptySpacerHeight }} />
+            return <div key={idx} data-stage-line="true" data-line-index={idx + lineOffset} style={{ height: spacing.emptySpacerHeight }} />
 
           case 'SECTION_HEADER':
             return (
@@ -325,7 +333,7 @@ export const SongLineRenderer: React.FC<SongLineRendererProps> = ({
                 data-stage-section="true"
                 data-section-title={line.title}
                 data-section-index={idx}
-                data-line-index={idx}
+                data-line-index={idx + lineOffset}
                 className={`${fontClass} stage-section-header select-none`}
                 style={{
                   fontSize: `${fontSizePx}px`, lineHeight: `${fontSizePx * spacing.lineHeightMultiplier}px`,
@@ -346,7 +354,7 @@ export const SongLineRenderer: React.FC<SongLineRendererProps> = ({
               <div
                 key={idx}
                 data-stage-line="true"
-                data-line-index={idx}
+                data-line-index={idx + lineOffset}
                 style={{
                   paddingTop: spacing.chordRowPt,
                   paddingBottom: spacing.chordRowPb,
@@ -360,7 +368,7 @@ export const SongLineRenderer: React.FC<SongLineRendererProps> = ({
                 }}
                 className={`stage-mono stage-chord-text ${weightConfig.chordClass} whitespace-pre-wrap select-text`}
               >
-                {renderInteractiveChordLine(line.raw, onChordClick, chordScale, isHighContrast, notation, referenceKey, onChordHover, onChordLeave)}
+                {renderInteractiveChordLine(line.raw, onChordClick, chordScale, isHighContrast, notation, referenceKey, onChordHover, onChordLeave, readOnly)}
               </div>
             )
 
@@ -373,7 +381,7 @@ export const SongLineRenderer: React.FC<SongLineRendererProps> = ({
               <div
                 key={idx}
                 data-stage-line="true"
-                data-line-index={idx}
+                data-line-index={idx + lineOffset}
                 style={{
                   paddingTop: spacing.lyricRowPt,
                   paddingBottom: spacing.lyricRowPb,
@@ -385,6 +393,7 @@ export const SongLineRenderer: React.FC<SongLineRendererProps> = ({
                   overflowWrap: 'break-word',
                   wordBreak: 'break-word',
                 }}
+                data-live-lyric={activeLineIds?.has(idx + lineOffset) || undefined}
                 className={`${fontClass} stage-lyric-text ${weightConfig.lyricClass} whitespace-pre-wrap select-text`}
               >
                 {line.lyrics}
@@ -399,7 +408,7 @@ export const SongLineRenderer: React.FC<SongLineRendererProps> = ({
                 <div
                   key={idx}
                   data-stage-line="true"
-                  data-line-index={idx}
+                  data-line-index={idx + lineOffset}
                   style={{
                     paddingTop: '1.5px',
                     paddingBottom: '1.5px',

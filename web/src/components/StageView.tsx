@@ -1,3 +1,16 @@
+import { useBandSyncGate } from '../extensions/host/useBandSyncGate'
+import { projectCast2Presentation } from '../utils/stageCast2Projection'
+import { BandSyncRemoteView } from './BandSyncRemoteView'
+import { StagePreviewHelp } from './menuHelp'
+import { stageSectionHeaderOffset, stageSectionScrollTop } from '../utils/liveLyricScroll'
+import { useAutoLiveLyrics } from '../utils/useAutoLiveLyrics'
+import { SetlistAutoFollowControl } from './SetlistAutoFollowControl'
+import { useSetlistAutoFollow } from '../utils/useSetlistAutoFollow'
+import { setlistAutoFollowDev } from '../utils/setlistAutoFollowDev'
+import type { FollowSelection, FollowSetlist } from '../utils/setlistAutoFollow'
+import { useLiveLyricScroll } from '../utils/useLiveLyricScroll'
+import { LiveLyricsControl } from './LiveLyrics'
+import { useLiveLyrics } from '../utils/useLiveLyrics'
 import { TvPresentationOptions } from './TvPresentationOptions'
 import { transposeContext } from '../utils/songKeySemantics'
 import { SETTINGS_KEYS, SETTINGS_CHANGED, readBackupSettings, readStageAppearanceExtras } from '../utils/backupSettings'
@@ -24,10 +37,11 @@ import {
   Gauge,
   ArrowLeft,
   FileEdit,
-  Radio,
 } from 'lucide-react'
-import { StageControlDock } from './StageControlDock'
+import { StageControlDock, readPersistedDockPosition } from './StageControlDock'
 import { StageOptionsSheet } from './StageOptionsSheet'
+import { useExtensionHost } from '../extensions/host/useExtensionHost'
+import { getProPresenterStatus } from '../utils/proPresenterStorage'
 import { STAGE_CONTROLS_AUTO_HIDE_KEY } from '../utils/syncJournal'
 import { formatTransposeOffset } from '../utils/chordTransposer'
 import { navigateBack } from '../utils/viewHistory'
@@ -38,8 +52,9 @@ import {
 import { parseGtarSong, splitSongLinesForColumns } from '../utils/songParser'
 import { formatTempoLabel } from '../utils/chordProMetadata'
 import { metronome } from '../utils/metronome'
-import { bandSync, type BandSyncState } from '../utils/bandSync'
+import { StageToolButtons } from './StageToolButtons'
 import { stageCast } from '../utils/stageCast'
+import { registerStageCommandRunner, type StageCommand } from '../utils/stageCommands'
 import type { ChordVoicing } from '../utils/chordDictionary'
 
 // The voicing catalog (~270 KB of chord data) loads in its own chunk, preloaded when Stage mounts (#85).
@@ -56,13 +71,16 @@ import {
 import { KeyPickerModal } from './KeyPickerModal'
 import { FretboardDiagramModal } from './FretboardDiagramModal'
 import { ChordQuickPreview, type ChordQuickPreviewAnchor } from './ChordQuickPreview'
-import { BandSyncModal } from './BandSyncModal'
 import { TvPresentationModal } from './TvPresentationModal'
 import { stageCast2Enabled } from '../utils/stageCast2Local'
 import type { ActiveSongState, WebSetlist } from '../types/gtar'
 
 interface StageViewProps {
   song: ActiveSongState
+  followSetlist?: FollowSetlist | null
+  followManualRevision?: number
+  onFollowSetlistEntry?: (request: FollowSelection) => boolean
+  isProPresenterSelection?: boolean
   songs: ActiveSongState[]
   activeSongIndex: number
   onSelectSongIndex: (index: number) => void
@@ -73,6 +91,7 @@ interface StageViewProps {
   activeSetlistSongIndex?: number
   onSelectSetlistSongIndex?: (index: number) => void
   activeSetlistName?: string
+  activeSetlistId?: string | number | null
   setlists?: WebSetlist[]
   onSelectSetlist?: (setlistId: string | number) => void
   onOpenSetlistDrawer?: () => void
@@ -86,7 +105,6 @@ interface StageViewProps {
   isTwoColumn?: boolean
   onToggleTwoColumn?: (enabled: boolean) => void
   onOpenEditor?: () => void
-  onOpenBandSync?: () => void
   onBack?: () => void
   /** Called whenever the stage enters or exits "performance mode" (fullscreen or focus). */
   onPerformanceModeChange?: (isActive: boolean) => void
@@ -120,8 +138,18 @@ export const LINE_SPACING_OPTIONS: { value: StageLineSpacing; label: string }[] 
   { value: 'relaxed', label: 'Relaxed' },
 ]
 
+/** Stage commands never fire while the player is typing in a field (same rule as the keyboard listener). */
+const isTypingTarget = (target: EventTarget | null): boolean =>
+  target instanceof HTMLInputElement ||
+  target instanceof HTMLTextAreaElement ||
+  Boolean((target as HTMLElement | null)?.isContentEditable)
+
 export const StageView: React.FC<StageViewProps> = ({
   song,
+  followSetlist = null,
+  followManualRevision = 0,
+  onFollowSetlistEntry,
+  isProPresenterSelection = false,
   songs,
   activeSongIndex,
   onSelectSongIndex,
@@ -131,6 +159,7 @@ export const StageView: React.FC<StageViewProps> = ({
   activeSetlistSongIndex = 0,
   onSelectSetlistSongIndex,
   activeSetlistName,
+  activeSetlistId = null,
   onOpenSetlistDrawer,
   isSetlistDrawerOpen = false,
   isStageSettingsModalOpen = false,
@@ -142,10 +171,10 @@ export const StageView: React.FC<StageViewProps> = ({
   isTwoColumn: externalIsTwoColumn,
   onToggleTwoColumn: externalOnToggleTwoColumn,
   onOpenEditor,
-  onOpenBandSync,
   onBack,
   onPerformanceModeChange,
 }) => {
+  const { host: bandHost, active: bandSyncEnabled, leader: bandLeader, remote: bandRemote } = useBandSyncGate()
   const isInSetlistMode = propIsInSetlistMode || queueMode === 'setlist'
   // Stage view configuration & controls (matching Jetpack Compose SongViewerScreen.kt)
   const [isAutoScrolling, setIsAutoScrolling] = useState(false)
@@ -459,7 +488,6 @@ export const StageView: React.FC<StageViewProps> = ({
   }, [])
   const [isSpeedPromptOpen, setIsSpeedPromptOpen] = useState(false)
   const [speedInputText, setSpeedInputText] = useState('35')
-  const [isBandSyncModalOpen, setIsBandSyncModalOpen] = useState(false)
   const [isTvPresentationModalOpen, setIsTvPresentationModalOpen] = useState(() => typeof window !== 'undefined' && window.location.hash.includes('cast2='))
   // Stage floating options menu (replaces top HUD)
   const [isStageMenuOpen, setIsStageMenuOpen] = useState(false)
@@ -512,10 +540,10 @@ export const StageView: React.FC<StageViewProps> = ({
 
   // Track whether any modal, drawer, or dialog overlay is active
   const isAnyOverlayActive = Boolean(
+    bandRemote ||
     isKeyPickerOpen ||
     selectedVoicing ||
     selectedChordName ||
-    isBandSyncModalOpen ||
     isTvPresentationModalOpen ||
     isStageMenuOpen ||
     isSpeedPromptOpen ||
@@ -523,9 +551,6 @@ export const StageView: React.FC<StageViewProps> = ({
     isStageSettingsModalOpen ||
     isAnyModalOpen
   )
-
-  // Band Sync State
-  const [syncState, setSyncState] = useState<BandSyncState>(() => bandSync.getState())
 
   // Stage Cast Active Presentation State
   const [isCastActive, setIsCastActive] = useState(() => stageCast.isPresentationActive())
@@ -564,121 +589,48 @@ export const StageView: React.FC<StageViewProps> = ({
         accumulatedScrollRef.current = targetScrollTop
         const fraction = maxScroll > 0 ? targetScrollTop / maxScroll : 0
         stageCast.broadcastScroll(targetScrollTop, fraction)
-        if (syncState.role === 'HOST' && maxScroll > 0) {
-          bandSync.broadcastScroll(fraction, targetScrollTop)
-        }
       }
     }
     // Clean up anchor after reflow resolution
     fontResizeAnchorRef.current = null
-  }, [fontSizePx, syncState.role])
+  }, [fontSizePx])
 
   // Parse song with native v1.0.42 parser and active transpose offset
-  const parsedSong = parseGtarSong(song.rawContent, transposeOffset)
+  const parsedSong = useMemo(() => parseGtarSong(song.rawContent, transposeOffset), [song.rawContent, transposeOffset])
+  const manualLyrics = useLiveLyrics(song, parsedSong.lines, isFullscreen,
+    isAnyOverlayActive || isCastActive,
+    JSON.stringify([queueMode, activeSongIndex, activeSetlistSongIndex]))
 
-  // Band Sync subscriptions
-  useEffect(() => {
-    const unsub = bandSync.subscribe((st) => setSyncState(st))
-    return unsub
-  }, [])
+  const autoFollow = useSetlistAutoFollow(manualLyrics.snapshot, followSetlist, activeSetlistSongIndex, followManualRevision,
+    isFullscreen, isAnyOverlayActive || isCastActive, onFollowSetlistEntry)
 
-  // Listen to incoming messages for Band Member (Client)
-  useEffect(() => {
-    const unsubMsg = bandSync.onMessage((msg) => {
-      if (syncState.role === 'CLIENT') {
-        if (msg.type === 'SONG_SYNC' && msg.payload) {
-          if (typeof msg.payload.transposeOffset === 'number') {
-            onTransposeChange(msg.payload.transposeOffset)
-          }
-          if (typeof msg.payload.scrollProgress === 'number') {
-            const fraction = msg.payload.scrollProgress
-            const container = scrollContainerRef.current
-            if (container) {
-              const maxScroll = container.scrollHeight - container.clientHeight
-              if (maxScroll > 0) {
-                container.scrollTo({
-                  top: fraction * maxScroll,
-                  behavior: 'smooth',
-                })
-              }
-            }
-            if (typeof window !== 'undefined') {
-              const winMax = document.documentElement.scrollHeight - window.innerHeight
-              if (winMax > 0) {
-                window.scrollTo({ top: fraction * winMax, behavior: 'smooth' })
-              }
-            }
-          }
-        } else if (msg.type === 'SCROLL_SYNC' && msg.payload) {
-          const fraction =
-            typeof msg.payload.scrollFraction === 'number'
-              ? msg.payload.scrollFraction
-              : typeof msg.payload.scrollProgress === 'number'
-              ? msg.payload.scrollProgress
-              : typeof msg.payload.scroll === 'number'
-              ? msg.payload.scroll
-              : 0
+  const liveLyrics = useAutoLiveLyrics(manualLyrics, song, autoFollow, followSetlist, activeSetlistSongIndex)
 
-          const container = scrollContainerRef.current
-          if (container) {
-            const maxScroll = container.scrollHeight - container.clientHeight
-            if (maxScroll > 0) {
-              const targetTop =
-                msg.payload.scrollTop !== undefined && msg.payload.scrollTop > 0
-                  ? msg.payload.scrollTop
-                  : fraction * maxScroll
-              container.scrollTo({ top: targetTop, behavior: 'smooth' })
-            }
-          }
-          if (typeof window !== 'undefined') {
-            const winMax = document.documentElement.scrollHeight - window.innerHeight
-            if (winMax > 0) {
-              window.scrollTo({ top: fraction * winMax, behavior: 'smooth' })
-            }
-          }
-        } else if (msg.type === 'AUTOSCROLL_SYNC' && msg.payload) {
-          setIsAutoScrolling(Boolean(msg.payload.isAutoScrolling))
-          if (msg.payload.scrollSpeed) {
-            setScrollSpeed(msg.payload.scrollSpeed)
-          }
-        }
-      }
-    })
-    return unsubMsg
-  }, [syncState.role, onTransposeChange])
+  const liveScroll = useLiveLyricScroll(scrollContainerRef, {
+    enabled: liveLyrics.confirmed, session: liveLyrics.verificationScope,
+    slideKey: liveLyrics.slideKey, range: liveLyrics.scrollRange, speedScrolling: isAutoScrolling,
+    sectionMode: liveLyrics.automaticMode && isFullscreen && !autoFollow.state.paused,
+    section: liveLyrics.section ? { ...liveLyrics.section, offset: stageSectionHeaderOffset(inPerformanceMode, showStageOverlays) } : null,
+    preservePause: autoFollow.state.mode === 'auto' && isFullscreen,
+  })
 
-  // Broadcast song change when role is HOST
-  useEffect(() => {
-    if (syncState.role === 'HOST') {
-      const container = scrollContainerRef.current
-      const maxScroll = container ? container.scrollHeight - container.clientHeight : 1
-      const progress = container && maxScroll > 0 ? container.scrollTop / maxScroll : 0
-      bandSync.broadcastSong(
-        isInSetlistMode ? activeSetlistSongIndex : activeSongIndex,
-        song.title,
-        transposeOffset,
-        {
-          artist: song.artist,
-          queueType: isInSetlistMode ? 'SETLIST' : 'LIBRARY',
-          scrollProgress: progress,
-          rawContent: song.rawContent,
-          key: song.key,
-          capo: song.capo,
-        }
-      )
-    }
-  }, [
-    activeSongIndex,
-    activeSetlistSongIndex,
-    isInSetlistMode,
-    song.title,
-    song.artist,
-    song.rawContent,
-    song.key,
-    song.capo,
-    transposeOffset,
-    syncState.role,
-  ])
+  const extensionHost = useExtensionHost()
+  const proPresenterSnapshot = React.useSyncExternalStore(
+    extensionHost.subscribe,
+    () => extensionHost.getSnapshot('propresenter-follower'),
+    () => extensionHost.getSnapshot('propresenter-follower')
+  )
+  const isProPresenterMasterEnabled = ['starting', 'active', 'offline'].includes(proPresenterSnapshot.state)
+  const [isPpPopoverOpen, setIsPpPopoverOpen] = useState(false)
+
+  const proPresenterStatus = useMemo(() => getProPresenterStatus({
+    enabled: isProPresenterMasterEnabled,
+    hostState: proPresenterSnapshot.state,
+    liveSnapshot: manualLyrics.snapshot,
+    autoFollowState: autoFollow.state,
+    liveConfirmed: liveLyrics.confirmed,
+    liveScrollPaused: liveScroll.paused,
+  }), [isProPresenterMasterEnabled, proPresenterSnapshot.state, manualLyrics.snapshot, autoFollow.state, liveLyrics.confirmed, liveScroll.paused])
 
   // Metronome sync with song BPM
   useEffect(() => {
@@ -775,7 +727,24 @@ export const StageView: React.FC<StageViewProps> = ({
   // Broadcast scroll position to Stage Cast teleprompter & BandSync when HOST.
   // Also keeps the sub-pixel accumulator in sync after a user manually drags
   // the scroll position (e.g. touch-scroll during autoscroll pause).
+  const publishBandPosition = useCallback((lineIndex: number, scrollFraction: number) => {
+    if (!bandSyncEnabled || !bandLeader) return
+    const count = isInSetlistMode && activeSetlistId !== null ? activeSetlistSongs.length : 0
+    bandHost.publishBandPosition({ lineIndex, scrollFraction: Math.min(1, Math.max(0, scrollFraction)),
+      autoscroll: { on: isAutoScrolling, speed: scrollSpeed },
+      setlist: { id: count ? String(activeSetlistId) : null, index: count ? Math.min(count - 1, Math.max(0, activeSetlistSongIndex)) : 0, count } })
+  }, [bandHost, bandSyncEnabled, bandLeader, isInSetlistMode, activeSetlistId, activeSetlistSongs.length, activeSetlistSongIndex, isAutoScrolling, scrollSpeed])
+  const bandLineIndex = useRef(0)
+  const bandSongId = useRef(song.id)
+  useEffect(() => {
+    if (!bandSyncEnabled || !bandLeader) return
+    if (bandSongId.current !== song.id) { bandLineIndex.current = 0; bandSongId.current = song.id }
+    const viewport = scrollContainerRef.current
+    const max = viewport ? viewport.scrollHeight - viewport.clientHeight : 0
+    publishBandPosition(bandLineIndex.current, max > 0 && viewport ? viewport.scrollTop / max : 0)
+  }, [publishBandPosition, song.id, bandSyncEnabled, bandLeader])
   const handleContainerScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const isLiveLyricScroll = liveScroll.controller.handleScroll()
     const target = e.currentTarget
     const currentTop = target.scrollTop
     const isScrollingDown = currentTop > lastScrollTopRef.current + 5
@@ -808,6 +777,9 @@ export const StageView: React.FC<StageViewProps> = ({
       accumulatedScrollRef.current = target.scrollTop
     }
 
+    // Keep local section/scroll bookkeeping, but never echo ProPresenter-owned movement.
+    if (isLiveLyricScroll) return
+
     // Mirror to Stage Cast teleprompter screen in real time with active line/section anchor
     let activeLineIndex = 0
     const lineElements = Array.from(target.querySelectorAll<HTMLElement>('[data-stage-line="true"]'))
@@ -822,13 +794,12 @@ export const StageView: React.FC<StageViewProps> = ({
         activeLineIndex = parseInt(rawIdx, 10)
       }
     }
+    if (Number.isSafeInteger(activeLineIndex) && activeLineIndex >= 0) {
+      bandLineIndex.current = activeLineIndex
+      publishBandPosition(activeLineIndex, fraction)
+    }
     stageCast.broadcastScroll(target.scrollTop, fraction, activeLineIndex)
 
-    if (syncState.role === 'HOST') {
-      if (maxScroll > 0) {
-        bandSync.broadcastScroll(fraction, target.scrollTop)
-      }
-    }
   }
 
   // Touch-cancel guard: stop autoscroll when the user deliberately drags the
@@ -854,16 +825,14 @@ export const StageView: React.FC<StageViewProps> = ({
   // Toggle autoscroll and broadcast if HOST
   const handleToggleAutoScroll = useCallback(() => {
     const nextVal = !isAutoScrolling
+    if (nextVal) liveScroll.controller.pause()
     setIsAutoScrolling(nextVal)
     if (nextVal) {
       // Record activation time so the touch-cancel guard knows not to kill this
       // immediately when the FAB touch-end event propagates to the scroll container.
       autoScrollStartedAtRef.current = performance.now()
     }
-    if (syncState.role === 'HOST') {
-      bandSync.broadcastAutoScroll(nextVal, scrollSpeed)
-    }
-  }, [isAutoScrolling, syncState.role, scrollSpeed])
+  }, [isAutoScrolling, liveScroll.controller])
 
   // Adjust scroll speed and broadcast if HOST
   const handleAdjustSpeed = useCallback((newSpeed: number) => {
@@ -872,10 +841,7 @@ export const StageView: React.FC<StageViewProps> = ({
     if (typeof window !== 'undefined') {
       localStorage.setItem(SETTINGS_KEYS.scrollSpeed, String(clamped))
     }
-    if (syncState.role === 'HOST') {
-      bandSync.broadcastAutoScroll(isAutoScrolling, clamped)
-    }
-  }, [isAutoScrolling, syncState.role])
+  }, [])
 
   // Structural sections in document order matching Android SongParser.kt
   const sectionHeaders = useMemo(() => {
@@ -883,6 +849,7 @@ export const StageView: React.FC<StageViewProps> = ({
   }, [parsedSong.lines])
 
   const handlePrevSection = useCallback(() => {
+    liveScroll.controller.pause()
     const container = scrollContainerRef.current
     if (!container) return
 
@@ -894,12 +861,11 @@ export const StageView: React.FC<StageViewProps> = ({
     const containerRect = container.getBoundingClientRect()
     const currentScrollTop = container.scrollTop
     const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight)
-    const headerOffset = inPerformanceMode ? (showStageOverlays ? 56 : 24) : 16
+    const headerOffset = stageSectionHeaderOffset(inPerformanceMode, showStageOverlays)
 
     const targets = sectionEls.map((el) => {
       const elRect = el.getBoundingClientRect()
-      const distanceFromTop = elRect.top - containerRect.top
-      const targetScrollTop = Math.round(currentScrollTop + distanceFromTop - headerOffset)
+      const targetScrollTop = stageSectionScrollTop(currentScrollTop, elRect.top, containerRect.top, headerOffset)
       return { el, targetScrollTop }
     })
 
@@ -956,9 +922,10 @@ export const StageView: React.FC<StageViewProps> = ({
     stageCast.broadcastScroll(targetTop, prevFraction, targetSectionIndex)
     container.scrollTo({ top: targetTop, behavior: 'smooth' })
     triggerOverlaysShow()
-  }, [inPerformanceMode, showStageOverlays, triggerOverlaysShow])
+  }, [inPerformanceMode, showStageOverlays, triggerOverlaysShow, liveScroll.controller])
 
   const handleNextSection = useCallback(() => {
+    liveScroll.controller.pause()
     const container = scrollContainerRef.current
     if (!container) return
 
@@ -970,12 +937,11 @@ export const StageView: React.FC<StageViewProps> = ({
     const containerRect = container.getBoundingClientRect()
     const currentScrollTop = container.scrollTop
     const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight)
-    const headerOffset = inPerformanceMode ? (showStageOverlays ? 56 : 24) : 16
+    const headerOffset = stageSectionHeaderOffset(inPerformanceMode, showStageOverlays)
 
     const targets = sectionEls.map((el) => {
       const elRect = el.getBoundingClientRect()
-      const distanceFromTop = elRect.top - containerRect.top
-      const targetScrollTop = Math.round(currentScrollTop + distanceFromTop - headerOffset)
+      const targetScrollTop = stageSectionScrollTop(currentScrollTop, elRect.top, containerRect.top, headerOffset)
       return { el, targetScrollTop }
     })
 
@@ -993,7 +959,7 @@ export const StageView: React.FC<StageViewProps> = ({
     stageCast.broadcastScroll(targetTop, nextFraction, nextSectionIndex)
     container.scrollTo({ top: targetTop, behavior: 'smooth' })
     triggerOverlaysShow()
-  }, [inPerformanceMode, showStageOverlays, triggerOverlaysShow])
+  }, [inPerformanceMode, showStageOverlays, triggerOverlaysShow, liveScroll.controller])
 
   const executePrevSong = useCallback(() => {
     if (isInSetlistMode && onSelectSetlistSongIndex) {
@@ -1059,6 +1025,7 @@ export const StageView: React.FC<StageViewProps> = ({
   useEffect(() => {
     if (previousSongKeyRef.current !== null && previousSongKeyRef.current !== currentSongKey) {
       if (scrollContainerRef.current) {
+        if (isProPresenterSelection) liveScroll.controller.markProgrammaticPosition(0)
         scrollContainerRef.current.scrollTop = 0
       }
       lastScrollTopRef.current = 0
@@ -1078,12 +1045,13 @@ export const StageView: React.FC<StageViewProps> = ({
         clearTimeout(transitionTimeoutRef.current)
         transitionTimeoutRef.current = null
       }
-      stageCast.broadcastScroll(0, 0, 0)
+      if (!isProPresenterSelection) stageCast.broadcastScroll(0, 0, 0)
     }
     previousSongKeyRef.current = currentSongKey
-  }, [currentSongKey])
+  }, [currentSongKey, isProPresenterSelection, liveScroll.controller])
 
   const triggerSongSlide = useCallback((direction: 'next' | 'prev') => {
+    autoFollow.controller.override()
     const slideEl = slideContentRef.current
     const container = scrollContainerRef.current
 
@@ -1156,10 +1124,52 @@ export const StageView: React.FC<StageViewProps> = ({
         }, slideInDuration + 30)
       })
     }, slideOutDuration)
-  }, [])
+  }, [autoFollow.controller])
 
   const handlePrevSong = useCallback(() => triggerSongSlide('prev'), [triggerSongSlide])
   const handleNextSong = useCallback(() => triggerSongSlide('next'), [triggerSongSlide])
+
+  // Manual scroll nudge: one arrow-key step (80 px).
+  const handleNudgeScroll = useCallback((direction: 'up' | 'down') => {
+    scrollContainerRef.current?.scrollBy({ top: direction === 'up' ? -80 : 80, behavior: 'smooth' })
+  }, [])
+
+  // One semitone from the displayed offset. The key context is recomputed on press (same pure
+  // function as keyContext below) so this callback only changes with the song or its offset.
+  const handleTransposeStep = useCallback((step: 1 | -1) => {
+    const context = transposeContext(song, transposeOffset)
+    onTransposeChange(context.toStoredOffset(context.displayOffset + step))
+  }, [song, transposeOffset, onTransposeChange])
+
+  // Stage command seam (#536): the keyboard listener and utils/stageCommands both end here, so
+  // every route passes the same typing and overlay guards and reaches the same handlers.
+  const runStageCommand = useCallback((command: StageCommand, target: EventTarget | null = document.activeElement): boolean => {
+    if (isTypingTarget(target) || isAnyOverlayActive) return false
+    switch (command) {
+      case 'nextSong': handleNextSong(); return true
+      case 'prevSong': handlePrevSong(); return true
+      case 'nextSection': handleNextSection(); return true
+      case 'prevSection': handlePrevSection(); return true
+      case 'toggleAutoScroll': handleToggleAutoScroll(); return true
+      case 'scrollUp': handleNudgeScroll('up'); return true
+      case 'scrollDown': handleNudgeScroll('down'); return true
+      case 'transposeUp': handleTransposeStep(1); return true
+      case 'transposeDown': handleTransposeStep(-1); return true
+      default: return false
+    }
+  }, [
+    isAnyOverlayActive,
+    handleNextSong,
+    handlePrevSong,
+    handleNextSection,
+    handlePrevSection,
+    handleToggleAutoScroll,
+    handleNudgeScroll,
+    handleTransposeStep,
+  ])
+
+  // Registered while Stage is mounted; removed on unmount so outside callers get false.
+  useEffect(() => registerStageCommandRunner(runStageCommand), [runStageCommand])
 
   // Pinch-to-Zoom & Interactive Touch Drag Physics Gesture Listener
   useEffect(() => {
@@ -1301,6 +1311,7 @@ export const StageView: React.FC<StageViewProps> = ({
         const isNext = (deltaX <= -60 || (deltaX <= -30 && velocity >= 0.45)) && canNextNow
         const isPrev = (deltaX >= 60 || (deltaX >= 30 && velocity >= 0.45)) && canPrevNow
 
+        if (isNext || isPrev) autoFollow.controller.override()
         if (slideEl) {
           if (isNext) {
             isAnimatingRef.current = true
@@ -1401,7 +1412,7 @@ export const StageView: React.FC<StageViewProps> = ({
         clearTimeout(transitionTimeoutRef.current)
       }
     }
-  }, [])
+  }, [autoFollow.controller])
 
   // Keyboard stage controls:
   // - Spacebar: Toggle Auto-Scroll (Play / Pause)
@@ -1444,34 +1455,34 @@ export const StageView: React.FC<StageViewProps> = ({
       // Spacebar: Toggle Auto-Scroll (Play / Pause)
       if (e.code === 'Space' || e.key === ' ') {
         e.preventDefault()
-        handleToggleAutoScroll()
+        runStageCommand('toggleAutoScroll', e.target)
         return
       }
 
       // ArrowRight or 'n': Next song in setlist or library
       if (e.key === 'ArrowRight' || e.key === 'n' || e.key === 'N') {
         e.preventDefault()
-        handleNextSong()
+        runStageCommand('nextSong', e.target)
         return
       }
 
       // ArrowLeft or 'p': Previous song in setlist or library
       if (e.key === 'ArrowLeft' || e.key === 'p' || e.key === 'P') {
         e.preventDefault()
-        handlePrevSong()
+        runStageCommand('prevSong', e.target)
         return
       }
 
       // PageUp / PageDown: Navigate structural sections; prevents browser default scroll
       if (e.key === 'PageDown') {
         e.preventDefault()
-        handleNextSection()
+        runStageCommand('nextSection', e.target)
         return
       }
 
       if (e.key === 'PageUp') {
         e.preventDefault()
-        handlePrevSection()
+        runStageCommand('prevSection', e.target)
         return
       }
 
@@ -1480,8 +1491,8 @@ export const StageView: React.FC<StageViewProps> = ({
         e.preventDefault()
         if (e.shiftKey) {
           handleAdjustSpeed(Math.min(180, scrollSpeed + 5))
-        } else if (scrollContainerRef.current) {
-          scrollContainerRef.current.scrollBy({ top: -80, behavior: 'smooth' })
+        } else {
+          runStageCommand('scrollUp', e.target)
         }
         return
       }
@@ -1491,8 +1502,8 @@ export const StageView: React.FC<StageViewProps> = ({
         e.preventDefault()
         if (e.shiftKey) {
           handleAdjustSpeed(Math.max(5, scrollSpeed - 5))
-        } else if (scrollContainerRef.current) {
-          scrollContainerRef.current.scrollBy({ top: 80, behavior: 'smooth' })
+        } else {
+          runStageCommand('scrollDown', e.target)
         }
         return
       }
@@ -1518,7 +1529,6 @@ export const StageView: React.FC<StageViewProps> = ({
     onSelectSetlistSongIndex,
     isAutoScrolling,
     scrollSpeed,
-    syncState.role,
     handleNextSong,
     handlePrevSong,
     handleNextSection,
@@ -1526,6 +1536,8 @@ export const StageView: React.FC<StageViewProps> = ({
     handleToggleAutoScroll,
     handleAdjustSpeed,
     isAnyOverlayActive,
+    runStageCommand,
+    bandRemote,
     captureFontResizeAnchor,
   ])
 
@@ -1575,6 +1587,12 @@ export const StageView: React.FC<StageViewProps> = ({
   const keyContext = transposeContext(song, transposeOffset)
   const effectivePerformanceKey = keyContext.performanceKey
   const effectiveKey = effectivePerformanceKey
+  useEffect(() => {
+    if (!bandSyncEnabled || bandRemote) return
+    const content = projectCast2Presentation({ song, transposeOffset, effectiveKey, isTwoColumn, notation, fontSizePx, fontStyle },
+      { lineIndex: 0, scrollTop: 0, scrollFraction: 0, chordsVisible: true })
+    if (content.ok) void bandHost.publishBandStage(content.value)
+  }, [bandHost, bandSyncEnabled, bandRemote, song, transposeOffset, effectiveKey, isTwoColumn, notation, fontSizePx, fontStyle])
   const offsetStr = formatTransposeOffset(keyContext.displayOffset)
   void offsetStr
 
@@ -1585,6 +1603,7 @@ export const StageView: React.FC<StageViewProps> = ({
 
   // Mirror stage state to secondary screen / Cast Presentation window in real-time
   useEffect(() => {
+    if (isProPresenterSelection && !isCastActive) return
     stageCast.broadcastState({
       song,
       effectiveKey,
@@ -1597,7 +1616,7 @@ export const StageView: React.FC<StageViewProps> = ({
       lineSpacing,
       notation,
     })
-  }, [song, effectiveKey, transposeOffset, fontSizePx, fontStyle, isTwoColumn, chordScale, fontWeight, lineSpacing, notation])
+  }, [song, effectiveKey, transposeOffset, fontSizePx, fontStyle, isTwoColumn, chordScale, fontWeight, lineSpacing, notation, isProPresenterSelection, isCastActive])
 
   useEffect(() => {
     // Listen for REQUEST_STATE from external teleprompter window
@@ -1763,6 +1782,8 @@ export const StageView: React.FC<StageViewProps> = ({
     setIsSpeedPromptOpen(false)
   }
 
+  if (bandSyncEnabled && bandRemote) return <BandSyncRemoteView view={bandRemote} />
+
   return (
     <div className="flex-1 flex flex-col bg-app-base select-none relative overflow-hidden"
       style={{ height: inPerformanceMode ? '100vh' : 'calc(100vh - 4rem)' }}
@@ -1924,7 +1945,7 @@ export const StageView: React.FC<StageViewProps> = ({
           inPerformanceMode ? 'opacity-0 pointer-events-none h-0 py-0 overflow-hidden border-0' : 'opacity-100'
         }`}
       >
-        {/* Left Side: Back, Editor, Band Sync */}
+        {/* Left Side: Back */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           <button
             type="button"
@@ -1936,6 +1957,10 @@ export const StageView: React.FC<StageViewProps> = ({
             <ArrowLeft className="w-4 h-4 shrink-0" />
             <span className="hidden sm:inline">Back</span>
           </button>
+        </div>
+
+        {/* Right Side: Editor, Metronome/Tuner (when switched on), Help, Key, Chords/Numbers, speed, Stage Options, Cast, Fullscreen toggle */}
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 flex-wrap justify-end">
           <button
             type="button"
             onClick={onOpenEditor}
@@ -1945,19 +1970,8 @@ export const StageView: React.FC<StageViewProps> = ({
             <FileEdit className="w-4 h-4 shrink-0" />
             <span className="hidden sm:inline">Editor</span>
           </button>
-          <button
-            type="button"
-            onClick={onOpenBandSync}
-            aria-label="Band Sync"
-            className="ui-button min-h-11 sm:min-h-9 min-w-11 sm:min-w-9 px-2.5 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors shrink-0 whitespace-nowrap bg-app-base border-app-border text-app-text hover:border-app-action cursor-pointer"
-          >
-            <Radio className="w-4 h-4 shrink-0" />
-            <span className="hidden sm:inline">Band Sync</span>
-          </button>
-        </div>
-
-        {/* Right Side: Key, Chords/Numbers, speed, Stage Options, Cast, Fullscreen toggle */}
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 flex-wrap">
+          <StageToolButtons hidden={inPerformanceMode} buttonClass="ui-button min-h-11 sm:min-h-9 min-w-11 sm:min-w-9 px-2.5 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors shrink-0 whitespace-nowrap bg-app-base border-app-border text-app-text hover:border-app-action cursor-pointer" />
+          <StagePreviewHelp />
           {/* Key Chip (Tapping opens KeyPickerModal) */}
           <button
             type="button"
@@ -1988,7 +2002,7 @@ export const StageView: React.FC<StageViewProps> = ({
           )}
           <button
             type="button"
-            onClick={() => onTransposeChange(keyContext.toStoredOffset(keyContext.displayOffset - 1))}
+            onClick={() => handleTransposeStep(-1)}
             className="sr-only"
             aria-label="Step Key Down (-1 semitone)"
           >
@@ -1996,7 +2010,7 @@ export const StageView: React.FC<StageViewProps> = ({
           </button>
           <button
             type="button"
-            onClick={() => onTransposeChange(keyContext.toStoredOffset(keyContext.displayOffset + 1))}
+            onClick={() => handleTransposeStep(1)}
             className="sr-only"
             aria-label="Step Key Up (+1 semitone)"
           >
@@ -2081,7 +2095,7 @@ export const StageView: React.FC<StageViewProps> = ({
           <button
             type="button"
             onClick={toggleFullscreen}
-            className="ui-button min-w-[44px] min-h-[44px] w-11 h-11 rounded-xl border border-app-border bg-app-base text-app-text hover:border-app-action transition-colors flex items-center justify-center shrink-0 cursor-pointer"
+            className="ui-button min-w-11 sm:min-w-9 min-h-11 sm:min-h-9 w-11 sm:w-9 h-11 sm:h-9 rounded-lg border border-app-border bg-app-base text-app-text hover:border-app-action transition-colors flex items-center justify-center shrink-0 cursor-pointer"
             aria-label={
               iosPwa || iosOnly
                 ? isDistractionFree
@@ -2104,6 +2118,13 @@ export const StageView: React.FC<StageViewProps> = ({
       {/* =================================================================== */}
       {/* 2. MAIN SCROLLING CANVAS (Exact SongLinesColumn from Compose)        */}
       {/* =================================================================== */}
+      {isFullscreen && liveLyrics.confirmed && liveScroll.paused && !liveLyrics.automaticMode && (
+        <button type="button" onClick={liveScroll.controller.resume}
+          disabled={isAutoScrolling || !liveLyrics.scrollRange}
+          aria-label={isAutoScrolling ? 'Resume auto-scroll unavailable while speed scrolling' : !liveLyrics.scrollRange ? 'Resume auto-scroll unavailable without a unique lyric match' : 'Resume auto-scroll'}
+          className="ui-button absolute bottom-24 left-3 z-40 min-h-11 px-3 rounded-xl border border-app-border bg-app-surface text-app-text shadow-lg disabled:opacity-50"
+        >Resume auto-scroll</button>
+      )}
       <div
         ref={scrollContainerRef}
         onScroll={handleContainerScroll}
@@ -2206,6 +2227,7 @@ export const StageView: React.FC<StageViewProps> = ({
                 <div className="min-w-0">
                   <SongLineRenderer
                     lines={col1Lines}
+                    activeLineIds={liveLyrics.activeLineIds}
                     fontSizePx={fontSizePx}
                     fontFamily={fontStyle}
                     onChordClick={handleChordClick}
@@ -2222,6 +2244,8 @@ export const StageView: React.FC<StageViewProps> = ({
                 <div className="min-w-0 md:border-l md:border-app-border/60 md:pl-6 lg:pl-10">
                   <SongLineRenderer
                     lines={col2Lines}
+                    lineOffset={col1Lines.length}
+                    activeLineIds={liveLyrics.activeLineIds}
                     fontSizePx={fontSizePx}
                     fontFamily={fontStyle}
                     onChordClick={handleChordClick}
@@ -2238,6 +2262,7 @@ export const StageView: React.FC<StageViewProps> = ({
             ) : (
               <SongLineRenderer
                 lines={parsedSong.lines}
+                activeLineIds={liveLyrics.activeLineIds}
                 fontSizePx={fontSizePx}
                 fontFamily={fontStyle}
                 onChordClick={handleChordClick}
@@ -2355,6 +2380,28 @@ export const StageView: React.FC<StageViewProps> = ({
         </div>
       )}
 
+      {/* Live Lyrics Control Popover */}
+      {(isFullscreen || inPerformanceMode) && (
+        /* isFullscreen && <LiveLyricsControl */
+        <LiveLyricsControl
+          live={liveLyrics}
+          songTitle={song.title}
+          onConfirmed={autoFollow.controller.associateCurrent}
+          isOpen={isPpPopoverOpen}
+          onToggleOpen={setIsPpPopoverOpen}
+          onClose={() => setIsPpPopoverOpen(false)}
+          statusLevel={proPresenterStatus.level === 'disabled' ? 'red' : proPresenterStatus.level}
+          statusLabel={proPresenterStatus.label}
+          dockMode={showDock ? 'vertical' : 'horizontal'}
+          dockPosition={showDock ? readPersistedDockPosition() : undefined}
+          liveScrollPaused={liveScroll.paused}
+          onResumeScroll={liveScroll.controller.resume}
+          canResumeScroll={!isAutoScrolling && Boolean(liveLyrics.scrollRange)}
+        >
+          {setlistAutoFollowDev && <SetlistAutoFollowControl follow={autoFollow} />}
+        </LiveLyricsControl>
+      )}
+
       {/* Draggable Minimal Stage Control Dock (Prev Section • Autoscroll FAB • Next Section) */}
       {showDock && (
         <StageControlDock
@@ -2370,6 +2417,11 @@ export const StageView: React.FC<StageViewProps> = ({
           canNextSection={sectionHeaders.length > 0 && canNextSection}
           visible={inPerformanceMode ? (!controlsAutoHide || showStageOverlays) : true}
           onUserInteraction={triggerOverlaysShow}
+          showProPresenter={isProPresenterMasterEnabled}
+          proPresenterStatusLevel={proPresenterStatus.level === 'disabled' ? undefined : proPresenterStatus.level}
+          proPresenterStatusLabel={proPresenterStatus.label}
+          onToggleProPresenter={() => setIsPpPopoverOpen((prev) => !prev)}
+          isProPresenterOpen={isPpPopoverOpen}
         />
       )}
 
@@ -2414,7 +2466,7 @@ export const StageView: React.FC<StageViewProps> = ({
             {/* Transpose - */}
             <button
               type="button"
-              onClick={() => onTransposeChange(keyContext.toStoredOffset(keyContext.displayOffset - 1))}
+              onClick={() => handleTransposeStep(-1)}
               aria-label="Transpose down one semitone"
               data-testid="stage-bottom-transpose-down-btn"
               className="p-3 min-w-[44px] min-h-[44px] rounded-2xl active:scale-95 flex items-center justify-center transition-all border text-app-text hover:text-app-action"
@@ -2452,7 +2504,7 @@ export const StageView: React.FC<StageViewProps> = ({
             {/* Transpose + */}
             <button
               type="button"
-              onClick={() => onTransposeChange(keyContext.toStoredOffset(keyContext.displayOffset + 1))}
+              onClick={() => handleTransposeStep(1)}
               aria-label="Transpose up one semitone"
               data-testid="stage-bottom-transpose-up-btn"
               className="p-3 min-w-[44px] min-h-[44px] rounded-2xl active:scale-95 flex items-center justify-center transition-all border text-app-text hover:text-app-action"
@@ -2483,6 +2535,39 @@ export const StageView: React.FC<StageViewProps> = ({
             >
               <ChevronDown className="w-6 h-6 stroke-[2.5]" />
             </button>
+
+            {/* ProPresenter Follower Button */}
+            {isProPresenterMasterEnabled && (
+              <button
+                type="button"
+                onClick={() => {
+                  triggerOverlaysShow()
+                  setIsPpPopoverOpen((prev) => !prev)
+                }}
+                aria-expanded={isPpPopoverOpen}
+                aria-haspopup="dialog"
+                aria-label={proPresenterStatus.label}
+                data-testid="stage-bottom-propresenter-btn"
+                className="p-3 min-w-[44px] min-h-[44px] rounded-2xl active:scale-95 flex items-center justify-center gap-1.5 transition-all border text-app-text hover:text-app-action cursor-pointer"
+                style={{
+                  backgroundColor: 'var(--custom-dock-btn-bg, var(--custom-control-button-bg, #1e293b))',
+                  borderColor: 'var(--custom-dock-border, var(--custom-card-border, #334155))',
+                }}
+              >
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    proPresenterStatus.level === 'green'
+                      ? 'bg-emerald-500'
+                      : proPresenterStatus.level === 'yellow'
+                      ? 'bg-amber-400'
+                      : 'bg-rose-500'
+                  }`}
+                  aria-hidden="true"
+                />
+                <span className="font-mono font-bold text-xs tracking-tight">PP</span>
+                <span className="sr-only">{proPresenterStatus.label}</span>
+              </button>
+            )}
           </div>
         </nav>
       )}
@@ -2632,18 +2717,10 @@ export const StageView: React.FC<StageViewProps> = ({
         onReset={() => onTransposeChange(keyContext.resetOffset)}
       />
 
-      {/* Stage Tools & Band Sync Modal */}
-      <BandSyncModal
-        isOpen={isBandSyncModalOpen}
-        onClose={() => setIsBandSyncModalOpen(false)}
-        initialTab="sync"
-      />
-
       {/* Secondary TV Browser Pairing & AirPlay Modal */}
       <TvPresentationModal
         isOpen={isTvPresentationModalOpen}
         onClose={() => setIsTvPresentationModalOpen(false)}
-        detectedLanIp={syncState.detectedLanIp || syncState.customHostIp}
       />
     </div>
   )

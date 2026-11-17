@@ -311,6 +311,7 @@ export default defineConfig(({ mode }) => {
       'import.meta.env.VITE_APP_ENV': JSON.stringify(appEnv),
       'import.meta.env.VITE_GTAR1_DEMO': JSON.stringify(gtar1IsDemo ? '1' : ''),
       __GTAR_STAGE_CAST2_ENABLED__: JSON.stringify(isStageCast2Dev),
+      __GTAR_SETLIST_AUTO_FOLLOW_DEV__: JSON.stringify(!isProd && (isDev || isPreview)),
       __GTAR_PROD_VERSION__: JSON.stringify(releaseIdentity?.version ?? gtar1Release.version),
       __GTAR_PREVIEW_IDENTITY__: JSON.stringify(previewIdentity),
       __GTAR_DEV_VERSION__: JSON.stringify(
@@ -389,7 +390,8 @@ export default defineConfig(({ mode }) => {
             '**/*.{js,css,html,ico,png,jpg,jpeg,svg,gif,webp,json,woff,woff2,ttf,eot,otf,mp3,wav,webmanifest}',
           ],
           navigateFallback: '/index.html',
-          navigateFallbackDenylist: [/^\/api\//],
+          // /cdn-cgi/ is Cloudflare (Access sign-in); it must reach the network, not cached index.html.
+          navigateFallbackDenylist: [/^\/api\//, /^\/cdn-cgi\//],
           cleanupOutdatedCaches: true,
           clientsClaim: true,
           skipWaiting: true,
