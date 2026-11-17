@@ -1,0 +1,25 @@
+const { test } = require('node:test')
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
+const { runFiles } = require('../scripts/run-tests.cjs')
+
+test('runner fails closed for empty, skipped-only and failing suites and reports executed tests', async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gtar1-runner-'))
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }))
+  const run = async source => {
+    const file = path.join(dir, 'fixture.test.cjs')
+    fs.writeFileSync(file, source)
+    return runFiles([file], { report: () => {} })
+  }
+  assert.equal((await runFiles([], { report: () => {} })).success, false)
+  assert.equal((await run('')).success, false)
+  assert.equal((await run("require('node:test').test.skip('skipped', () => {})")).success, false)
+  const failed = await run("require('node:test').test('regression', () => require('node:assert/strict').equal(1, 2))")
+  assert.equal(failed.success, false)
+  assert.equal(failed.results[0].fail, 1)
+  const passed = await run("require('node:test').test('behavior', () => require('node:assert/strict').equal(1, 1))")
+  assert.equal(passed.success, true)
+  assert.equal(passed.results[0].pass, 1)
+})
