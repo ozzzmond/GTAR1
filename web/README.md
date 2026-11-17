@@ -1,106 +1,36 @@
-# GTAR Web/PWA
+# GTAR1 Web/PWA
 
-GTAR's active implementation is the Web/PWA app. Historical native Android code belongs in [ozzzmond/GTAR-Android-Legacy](https://github.com/ozzzmond/GTAR-Android-Legacy).
+GTAR1's application lives in `web/`. See the [project README](../README.md) for features, demo behavior, and All Rights Reserved terms, and [CONTRIBUTING.md](../CONTRIBUTING.md) for contribution policy.
 
 ## Local development
 
-Run commands from `web`. Install dependencies with `npm install`.
+Use Node.js 24 LTS and npm (also used by CI). From the repository root:
 
-On Windows, use `Run_Full_Stack_Dev.bat` as the normal local entry point. It applies/verifies local D1 migrations and starts the frontend at http://localhost:5173 and the local Cloudflare Pages Functions/API at http://localhost:8788. Port 5173 must be available; Vite enforces a strict port for the canonical local origin.
+```sh
+cd web
+npm ci
+npm run dev
+```
 
-Use `Run_API_Dev.bat` for the backend only. It also applies/verifies local D1 migrations before starting the API.
+Open http://localhost:5173. Keep that port available; Vite uses a strict port. The local songbook, chart editing, and setlists do not require sign-in or server credentials. Browser data is origin-specific; export backups before clearing it.
 
-`npm run dev` starts the Vite frontend; use the API helper when local backend access is needed.
+`npm run dev` starts the Vite frontend, not Pages Functions. Optional account and online services need additional backend configuration and network access; they are not prerequisites for the local-first core.
 
-## Environment and account prerequisites
+## Optional local API
 
-Use the Node runtime selected by GitHub Actions (Node 22) and npm. A pristine
-checkout contains `package-lock.json`; `npm ci` reproduces its dependency set.
-The npm scripts use the repository's local Vite, TypeScript and Wrangler tools.
+The tracked [Run_Full_Stack_Dev.bat](Run_Full_Stack_Dev.bat) starts Vite and the local Pages Functions API on Windows. [Run_API_Dev.bat](Run_API_Dev.bat) starts only the API. Both apply tracked D1 migrations **locally** before API startup; the API uses port 8788. On other systems, the equivalent scripts are `npm run d1:migrate:local` followed by `npm run dev:api`, with Vite in another terminal.
 
-For Google sign-in, configure the frontend `VITE_GOOGLE_CLIENT_ID` in the ignored
-`.env.local` using `.env.example`. Register `http://localhost:5173` and each exact
-hosted origin with the Google Web application OAuth client. See
-[Google sign-in and server sync](GOOGLE_SYNC.md).
+For optional Google sign-in, supply your own frontend `VITE_GOOGLE_CLIENT_ID` in ignored `.env.local`. There is no tracked `.env.example` in this checkout. Register the exact local origin with the OAuth client. Pages Functions requires its own runtime bindings in ignored `.dev.vars`: `DB` is configured in [wrangler.jsonc](wrangler.jsonc); the OAuth audience is `GOOGLE_CLIENT_ID` (or its supported `VITE_GOOGLE_CLIENT_ID` alias), and `AUTH_SECRET` is a private server-only session-signing secret. Frontend variables do not configure server bindings. Never put a signing secret in a `VITE_` variable or commit credentials. Account access may also require owner-managed approval; local startup does not configure hosted accounts.
 
-Supply these server bindings to the local Pages Functions runtime, separately
-from frontend Vite variables:
-
-- `DB`: the D1 binding in `wrangler.jsonc`; apply the tracked `migrations/*.sql`
-  locally before backend use. Both BAT launchers run the local migration command.
-- `GOOGLE_CLIENT_ID`, or the supported `VITE_GOOGLE_CLIENT_ID` alias: the OAuth
-  audience verified by the server; use the same client as the frontend.
-  This must be a non-empty Pages Functions runtime binding on `context.env`;
-  a frontend build variable alone is insufficient. Missing or invalid bindings
-  reject Google credentials; existing private-key sessions remain valid.
-  `GOOGLE_CLIENT_ID` takes precedence when configured, including invalid values.
-  Read-only Pages project configuration inspection on 2026-10-10 confirmed
-  `VITE_GOOGLE_CLIENT_ID` under `deployment_configs.preview.env_vars` (plain text)
-  and `deployment_configs.production.env_vars` (secret); `GOOGLE_CLIENT_ID` was
-  absent in both. Values were not inspected. Cloudflare documents both as runtime
-  bindings: [Pages environment variables and secrets](https://developers.cloudflare.com/pages/functions/bindings/#environment-variables).
-- `AUTH_SECRET`: a private HS256 session-signing secret, required locally and in
-  each Cloudflare Pages production and DEV preview environment. Missing, empty,
-  whitespace-only, non-string and retired public-fallback keys fail closed:
-  session signing fails, verification rejects tokens, and authentication handlers
-  return a generic 503 before identity lookup or database writes. There is no
-  automatic local or deployed key. Never use a `VITE_` variable for this secret.
-- `BOOTSTRAP_ADMIN_GOOGLE_SUB` or `BOOTSTRAP_ADMIN_EMAIL`: explicitly identify the
-  intended first administrator on the server. First-login-wins is not supported.
-  Other registrations start pending. The in-app Manage Users screen and the
-  `/api/admin/*` approval endpoints were retired (#453), and so were the
-  server-side admin helpers. Accounts are approved or denied in D1 directly
-  (`users.access_status`); the account gate checks that status on every request.
-
-Wrangler supports a local `.dev.vars` file for bindings/secrets. `.dev.vars` and
-`.dev.vars.*` are repository-ignored by `web/.gitignore`. Real secret values must
-never be committed. Do not assume frontend `.env.local` configures the API.
-`TEST_MOCK_AUTH` is a local test facility and must remain disabled in hosted environments.
-Mock credentials require the exact flag `true`, an explicit request URL with a
-loopback hostname (`localhost`, `127.0.0.1`, or `[::1]`), and no Cloudflare Pages
-runtime markers. Missing request context and hosted URLs fail closed even when
-the flag is enabled. Request headers cannot enable the mock path.
-Disposable unit tests supply their own explicit signing key; mock identities do
-not bypass the signing-key requirement. Local API development requires a private
-`AUTH_SECRET` in ignored `.dev.vars`; Vite alone does not supply server bindings.
-
-Before deployment, an operator must verify that Pages has the private server
-`AUTH_SECRET` binding in **both production and preview**, alongside the appropriate
-`DB` and Google OAuth audience bindings. `wrangler.jsonc` does not establish that
-hosted secrets exist. Live production/preview secret configuration and historical
-fallback exposure are **UNVERIFIED** by repository tests. This change does not
-inspect secret values, alter Cloudflare settings or rotate keys. Keep the existing
-private production key byte-for-byte unchanged to preserve existing HS256 sessions.
-Sessions signed with the retired public key cannot safely be preserved.
-
-Protected member/admin endpoints require an active authoritative D1 record and
-matching session `uid`/`sub`; admin endpoints also require the current D1 admin
-role. Session GET intentionally reports pending/denied approval status to the
-authenticated owner for the existing approval screen; that response grants no
-protected access. Session claims do not override D1 roles or approval status.
-
-For an existing local test identity, `npm run admin:bootstrap:local -- <email>`
-configures local D1 access only; its documented role/status and revert options
-remain available. It does not configure hosted accounts or remote D1.
-
-Start `Run_Full_Stack_Dev.bat` after dependency/environment setup. Keep ports 5173
-(Vite/OAuth origin) and 8788 (Pages Functions) available. `Run_API_Dev.bat` is the
-backend-only helper; `npm run dev` alone does not start the API. These launchers
-apply local migrations; they do not apply remote DEV/PROD migrations or deploy.
+No hosted setup, migrations, or deployment are part of this guide's verification steps. Existing demo and Cloudflare configuration remain owner-controlled.
 
 ## Development checks
 
-- `npm test` — Web/PWA regression tests; see the [test catalog](tests/README.md) for subsystem groups and individual-file commands.
-- `npm run lint` — whole-tree ESLint checks.
-- `npm run lint:sync` — focused sync and storage utility lint checks.
-- `npm run build` — TypeScript checks, production Web/PWA build, then the service worker precache gate (`scripts/check-sw-precache.cjs`).
+Run from `web/`:
 
-## Legacy Drive state retirement (2026-09-15)
+- `npm ci` — install the locked dependency set.
+- `npm run lint` — whole-workspace ESLint.
+- `npm run build` — TypeScript checks, Vite/PWA build into `dist/`, and service worker precache validation.
+- `npm run preview` — serve the built frontend locally; this does not start the API.
 
-Startup validates canonical song IDs, record fields and setlist references before retiring legacy storage. Acknowledged pending uploads (full libraries or baseline-relative deltas) reconcile against their pre-upload library. Independent additions can be recovered; conflicting edits, uncertain uploads, malformed records and unknown snapshot formats require manual recovery.
-
-Recovery snapshots and divergent legacy stores are reconciled only when their contents can be preserved unambiguously. The migrated canonical library is written and read back before the retirement marker or any source deletion. An existing retirement marker does not bypass inspection of remaining sources. Retries are idempotent, including interrupted cleanup.
-
-Quota recovery trims debug logs only. It never deletes journals, recovery snapshots or legacy song/setlist stores to make room. If reconciliation or persistence fails, original sources remain. Startup displays **Export recovery data**; its JSON contains the raw canonical, legacy and Drive recovery storage values. Save that file before clearing storage. It is a recovery archive for manual reconciliation, not a normal songbook backup. A malformed canonical library blocks library editing to prevent accidental overwrite; valid canonical data remains usable when legacy reconciliation is unresolved.
-
-Regression coverage: `tests/storageRetirement.test.cjs`, `tests/syncJournal.test.cjs`, and `tests/adversarialDev13.test.cjs`. Run `npm test`, `npm run lint:sync`, and `npm run build` from `web`.
+`package.json` retains test-tier scripts, but this exported checkout has no `tests/` directory or test manifest. `npm test` is not currently a working validation gate. CI requires lint and build only; it does not deploy or run migrations.

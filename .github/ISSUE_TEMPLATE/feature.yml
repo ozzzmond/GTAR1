@@ -1,0 +1,28 @@
+name: Feature request
+description: Suggest a focused improvement to GTAR1.
+title: "[Feature] "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and use case
+      description: Who needs this and what currently gets in their way?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe a small improvement and how to verify success.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives and scope
+      description: Existing workarounds, alternatives, and what can stay out of scope.
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Optional screenshots or examples without secrets, personal data, or unlicensed content.
