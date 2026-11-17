@@ -16,8 +16,8 @@ const resolveReleaseIdentity = (_root: string, env: Record<string, string | unde
   : null
 const gtar1IsDemo = process.env.CF_PAGES_BRANCH === 'demo'
 type Gtar1DevIdentity = { tag?: string; version?: string; tagStatus?: string; shortSha?: string; deploymentId?: string } | null
-const resolveDevIdentity = (..._args: unknown[]): Gtar1DevIdentity => null
-const getCommittedDevVersion = (..._args: unknown[]): string => gtar1Release.version
+const resolveDevIdentity: (...args: unknown[]) => Gtar1DevIdentity = () => null
+const getCommittedDevVersion: (...args: unknown[]) => string = () => gtar1Release.version
 
 import {
   parseSearchResults,
