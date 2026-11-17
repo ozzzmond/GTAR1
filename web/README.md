@@ -33,4 +33,4 @@ Run from `web/`:
 - `npm run build` — TypeScript checks, Vite/PWA build into `dist/`, and service worker precache validation.
 - `npm run preview` — serve the built frontend locally; this does not start the API.
 
-`package.json` retains test-tier scripts, but this exported checkout has no `tests/` directory or test manifest. `npm test` is not currently a working validation gate. CI requires lint and build only; it does not deploy or run migrations.
+Run `npm test` for the focused automated regression suite. See [tests/README.md](tests/README.md) for coverage, single-file execution, and catalog maintenance. CI runs tests, lint, and build; it does not deploy or run migrations.

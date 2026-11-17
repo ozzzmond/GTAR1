@@ -68,13 +68,16 @@ async function runFiles(files, { concurrency = 4, report = console.log } = {}) {
       const code = await new Promise((resolve, reject) => { child.once('error', reject); child.once('close', resolve) })
       const result = { file, code, ms: performance.now() - start }
       for (const key of ['tests', 'pass', 'fail', 'skipped']) result[key] = Number(output.match(new RegExp(`^# ${key} (\\d+)$`, 'm'))?.[1] ?? 0)
+      // Node reports an empty file as a synthetic passing subtest named by its path.
+      const emptyFile = output.includes(`# Subtest: ${file}\n`) && result.tests === 1
+      result.executed = !emptyFile && result.tests > result.skipped && result.pass > 0
       results.push(result)
-      report(`${code === 0 ? 'PASS' : 'FAIL'} ${path.basename(file)} ${(result.ms / 1000).toFixed(3)} s`)
-      if (code !== 0) report(output)
+      report(`${code === 0 && result.executed ? 'PASS' : 'FAIL'} ${path.basename(file)} ${(result.ms / 1000).toFixed(3)} s`)
+      if (code !== 0 || !result.executed) report(output)
     }
   }
   await Promise.all(Array.from({ length: Math.min(concurrency, files.length) }, worker))
-  return { results, ms: performance.now() - started, success: results.every(result => result.code === 0) }
+  return { results, ms: performance.now() - started, success: results.length > 0 && results.every(result => result.code === 0 && result.executed) }
 }
 
 async function main(args) {
@@ -93,6 +96,7 @@ async function main(args) {
     if (tier !== 'fast') throw new Error('Sharding is only supported for fast; test:all always runs everything')
     selected = shardFiles(selected, shard, Object.fromEntries(manifest.files.filter(entry => entry.fastShard !== undefined).map(entry => [entry.file, entry.fastShard])))
   }
+  if (!selected.length) throw new Error(`No tests selected for tier ${tier}`)
   const concurrency = process.env.GTAR_TEST_CONCURRENCY === undefined ? Math.min(4, availableParallelism()) : Number(process.env.GTAR_TEST_CONCURRENCY)
   console.log(`Test tier ${tier}: ${selected.length}/${files.length} files${shard === undefined ? '' : `; shard ${shard}`}; concurrency ${concurrency}`)
   const result = await runFiles(selected.map(file => path.join(directory, file)), { concurrency })

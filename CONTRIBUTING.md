@@ -13,7 +13,7 @@ npm ci
 npm run dev
 ```
 
-Before handoff, run `npm run lint` and `npm run build`. The latter includes TypeScript, Vite/PWA output, and service worker precache validation. The exported checkout has test runner scripts but no `web/tests/` suite, so `npm test` is not a current gate. Add focused tests with future behavior changes when a working suite is established.
+Before handoff, run `npm test`, `npm run lint`, and `npm run build`. Tests cover ChordPro parsing/transposition, songbook and setlist identity/lifecycle, and JSON backup round trips and rejection. See [test instructions](web/tests/README.md) for focused execution and catalog maintenance. The build includes TypeScript, Vite/PWA output, and service worker precache validation.
 
 ## Pull requests
 
@@ -21,4 +21,4 @@ Read [AGENTS.md](AGENTS.md). Branch from current `origin/main`; open a **DRAFT P
 
 `main` is the canonical integration branch. `demo` is the public interactive demo branch, not a staging gate; there is no `dev` or staging branch. Do not change demo or Cloudflare configuration as routine contribution setup.
 
-The owner performs preview QA and controls Ready for Review, merge, release, and deployment. CI only installs dependencies, lints, and builds; it does not deploy.
+The owner performs preview QA and controls Ready for Review, merge, release, and deployment. CI only installs dependencies, tests, lints, and builds; it does not deploy.
