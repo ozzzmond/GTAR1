@@ -10,10 +10,11 @@ import { applyThemeRuntime, hydrateThemeSettings } from './components/ThemeModal
 
 const initialTheme = hydrateThemeSettings()
 applyThemeRuntime(initialTheme.mode, initialTheme.standalone)
-// Root bootstrap is a singleton entrypoint, not a component refresh boundary.
-// eslint-disable-next-line react-refresh/only-export-components -- The lazy import is rendered by the existing guarded root.
 import { gtar1DemoReady } from './data/gtar1DemoReset'
-const App = lazy(async () => { await gtar1DemoReady; return import('./App.tsx') })
+// Keep the lazy component in the singleton bootstrap namespace, not a refresh boundary.
+const bootstrap = {
+  App: lazy(async () => { await gtar1DemoReady; return import('./App.tsx') }),
+}
 
 import { isDevEnv } from './utils/env'
 import { requestDurableStorage } from './utils/syncJournal'
@@ -151,6 +152,6 @@ if (!_win.__GTAR_REACT_ROOT__) {
 }
 _win.__GTAR_REACT_ROOT__.render(
   <StrictMode>
-    {cast2ReceiverRoute ? <StageCast2Panel receiver /> : <AuthGate deviceOwned><Suspense fallback={<p role="status">Loading GTAR...</p>}><App /></Suspense></AuthGate>}
+    {cast2ReceiverRoute ? <StageCast2Panel receiver /> : <AuthGate deviceOwned><Suspense fallback={<p role="status">Loading GTAR...</p>}><bootstrap.App /></Suspense></AuthGate>}
   </StrictMode>,
 )
