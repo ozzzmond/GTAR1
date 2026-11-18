@@ -26,6 +26,46 @@ Open the app online first so its service worker can cache the application. Use y
 
 Browser storage can be cleared or evicted. Export backups regularly, especially before clearing site data or changing devices. The interactive demo resets its library and is intended for trying the app.
 
+## Development status and stack
+
+GTAR1 is actively evolving as an independent public-facing product. The local-first core is working; optional integrations include placeholders, and automated coverage is currently focused on utility behavior rather than browser/UI or optional-service flows.
+
+The frontend uses React 19, TypeScript, Vite 8, Tailwind CSS 4, and a PWA service worker. Local song data uses IndexedDB. Optional backend services use Cloudflare Pages Functions and D1; they are not required to develop the local-first core.
+
+## Development and contribution
+
+Use Node.js 24 LTS and npm. From the repository root:
+
+```sh
+cd web
+npm ci
+npm run dev
+```
+
+See the [development guide](web/README.md) for local startup and optional API setup. Before handoff, run these from `web/`:
+
+```sh
+npm test
+npm run lint
+npm run build
+```
+
+The [testing guide](web/tests/README.md) describes the focused Node regression suite: ChordPro parsing/transposition, songbook and setlist identity/lifecycle, JSON backup handling, and runner safeguards. The build separately checks TypeScript and PWA precaching.
+
+Read the [contribution policy](CONTRIBUTING.md) and [agent guidance](AGENTS.md). Branch from current `origin/main` and submit a **DRAFT PR targeting `main`** linked to an issue. `main` is canonical; `demo` serves the public interactive demo. There is no dev or staging branch. The owner controls preview QA, Ready for Review, merging, and deployment.
+
+Report suspected vulnerabilities using the [security reporting instructions](SECURITY.md); keep vulnerability details and private data out of public issues.
+
+## Roadmap and legacy GTAR
+
+Planned work, subject to assessment and scope approval:
+
+- Expand regression coverage to browser/UI behavior and optional services.
+- Develop the broader Advanced Tools extension system beyond its current tool grouping and placeholders.
+- Assess substantial, proven features from [legacy GTAR](https://github.com/ozzzmond/GTAR) for selected future GTAR1 iterations.
+
+Legacy GTAR remains a valuable reference implementation. GTAR1 is an independent public-facing product: each proposed adoption requires independent assessment, scope approval, implementation, and testing. There is no automatic source synchronization or automatic copying of legacy application features. Adoption should avoid accumulated technical debt and exclude legacy release-promotion machinery. Planned capabilities are not available merely because they exist in legacy GTAR.
+
 ## AI-Assisted Development
 
 GTAR1 is independently developed with extensive assistance from AI coding agents.

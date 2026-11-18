@@ -10,16 +10,18 @@ Base SHA:
 Head SHA (before this PR body update):
 
 - `cd web && npm ci`:
+- `npm test`:
 - `npm run lint`:
 - `npm run build`:
 - Targeted checks / documentation links / workflow syntax, as applicable:
 - Limitations or failures:
 
-Test scripts alone do not establish a working suite; this checkout has no `web/tests/` suite. Do not claim an unrun test passed.
+The focused regression suite is documented in [web/tests/README.md](../web/tests/README.md). Run validation commands from `web/`; do not claim an unrun test passed.
 
 ## Author checklist
 
 - [ ] PR is **DRAFT**, targets `main`, and branches from current `main`.
+- [ ] `npm test`, `npm run lint`, and `npm run build` results recorded; failures or unrun checks explained.
 - [ ] Scope matches the issue; evidence and limitations recorded above.
 - [ ] No credentials, secret values, generated output, or private user content.
 - [ ] Application behavior, release identity, demo and Cloudflare configuration preserved unless explicitly authorized.
