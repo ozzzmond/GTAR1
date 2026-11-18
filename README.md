@@ -52,7 +52,7 @@ npm run build
 
 The [testing guide](web/tests/README.md) describes the focused Node regression suite: ChordPro parsing/transposition, songbook and setlist identity/lifecycle, JSON backup handling, and runner safeguards. The build separately checks TypeScript and PWA precaching.
 
-Read the [contribution policy](CONTRIBUTING.md) and [agent guidance](AGENTS.md). Community contributors may fork GTAR1 from current `main` and submit a **DRAFT PR targeting GTAR1 `main`** linked to an issue. Community PRs are proposals only and must not be directly merged into GTAR1 `main`; green CI does not authorize integration. The owner evaluates proposals, and accepted changes are independently reviewed and ported into original GTAR `dev` for normal development, verification, QA, and release approval. GTAR1 `main` is the public release source; `demo` is the public interactive demonstration. GTAR1 has no dev or staging branch. The owner controls preview QA, Ready for Review, authorized maintainer merges, and deployment.
+Community contributors may fork GTAR1 and open a **draft PR targeting GTAR1 `main`**. These PRs are proposals only. The owner routes accepted proposals through GitHub issues in original GTAR for implementation and testing on GTAR `dev`. See the [community PR handoff](CONTRIBUTING.md#pull-requests) and [agent guidance](AGENTS.md).
 
 Report suspected vulnerabilities using the [security reporting instructions](SECURITY.md); keep vulnerability details and private data out of public issues.
 
@@ -64,9 +64,7 @@ Planned work, subject to assessment and scope approval:
 - Develop the broader Advanced Tools extension system beyond its current tool grouping and placeholders.
 - Assess substantial, proven features from [original GTAR](https://github.com/ozzzmond/GTAR) for selected future GTAR1 iterations through the approved release path.
 
-Original GTAR remains the canonical development and release source and a valuable reference implementation. GTAR `dev` is the development integration branch; GTAR `main` is the approved production release branch. GTAR `dev` changes undergo normal QA and approval, then approved releases are promoted through original GTAR's existing release workflow. GTAR1 `main` receives the approved public-release source snapshot, and GTAR1 `demo` receives the corresponding demo-compatible update.
-
-GTAR1 maintains its own lightweight governance, branding, configuration, demo data, and public identity; it is not a byte-for-byte copy of GTAR. Synchronization is deliberate and owner-controlled, not blind repository copying. Feature selection requires independent assessment, scope approval, implementation, and testing while avoiding accumulated technical debt. There is no automatic feature or source synchronization, copying, tagging, merging, or deployment. Original GTAR's existing release infrastructure remains in original GTAR; release-promotion machinery is not imported into GTAR1. Planned capabilities are not available merely because they exist in original GTAR.
+GTAR1 `main` is the public release branch and receives approved GTAR production releases through [owner-authorized synchronization](CONTRIBUTING.md#canonical-development-and-public-releases). The public `demo` branch follows its own approved demo requirements. GTAR1 maintains its own governance, branding, configuration, demo data, and public identity. Bringing features from original GTAR into GTAR1 requires assessment, scope approval, implementation, and testing.
 
 ## AI-Assisted Development
 
