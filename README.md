@@ -28,7 +28,7 @@ Browser storage can be cleared or evicted. Export backups regularly, especially 
 
 ## Development status and stack
 
-GTAR1 is actively evolving as an independent public-facing product. The local-first core is working; optional integrations include placeholders, and automated coverage is currently focused on utility behavior rather than browser/UI or optional-service flows.
+GTAR1 is an independently governed public-facing product that currently depends on approved releases from original GTAR, the canonical development and release source. The local-first core is working; optional integrations include placeholders, and automated coverage is currently focused on utility behavior rather than browser/UI or optional-service flows.
 
 The frontend uses React 19, TypeScript, Vite 8, Tailwind CSS 4, and a PWA service worker. Local song data uses IndexedDB. Optional backend services use Cloudflare Pages Functions and D1; they are not required to develop the local-first core.
 
@@ -52,23 +52,25 @@ npm run build
 
 The [testing guide](web/tests/README.md) describes the focused Node regression suite: ChordPro parsing/transposition, songbook and setlist identity/lifecycle, JSON backup handling, and runner safeguards. The build separately checks TypeScript and PWA precaching.
 
-Read the [contribution policy](CONTRIBUTING.md) and [agent guidance](AGENTS.md). Branch from current `origin/main` and submit a **DRAFT PR targeting `main`** linked to an issue. `main` is canonical; `demo` serves the public interactive demo. There is no dev or staging branch. The owner controls preview QA, Ready for Review, merging, and deployment.
+Read the [contribution policy](CONTRIBUTING.md) and [agent guidance](AGENTS.md). Community contributors may fork GTAR1 from current `main` and submit a **DRAFT PR targeting GTAR1 `main`** linked to an issue. Community PRs are proposals only and must not be directly merged into GTAR1 `main`; green CI does not authorize integration. The owner evaluates proposals, and accepted changes are independently reviewed and ported into original GTAR `dev` for normal development, verification, QA, and release approval. GTAR1 `main` is the public release source; `demo` is the public interactive demonstration. GTAR1 has no dev or staging branch. The owner controls preview QA, Ready for Review, authorized maintainer merges, and deployment.
 
 Report suspected vulnerabilities using the [security reporting instructions](SECURITY.md); keep vulnerability details and private data out of public issues.
 
-## Roadmap and legacy GTAR
+## Roadmap and original GTAR
 
 Planned work, subject to assessment and scope approval:
 
 - Expand regression coverage to browser/UI behavior and optional services.
 - Develop the broader Advanced Tools extension system beyond its current tool grouping and placeholders.
-- Assess substantial, proven features from [legacy GTAR](https://github.com/ozzzmond/GTAR) for selected future GTAR1 iterations.
+- Assess substantial, proven features from [original GTAR](https://github.com/ozzzmond/GTAR) for selected future GTAR1 iterations through the approved release path.
 
-Legacy GTAR remains a valuable reference implementation. GTAR1 is an independent public-facing product: each proposed adoption requires independent assessment, scope approval, implementation, and testing. There is no automatic source synchronization or automatic copying of legacy application features. Adoption should avoid accumulated technical debt and exclude legacy release-promotion machinery. Planned capabilities are not available merely because they exist in legacy GTAR.
+Original GTAR remains the canonical development and release source and a valuable reference implementation. GTAR `dev` is the development integration branch; GTAR `main` is the approved production release branch. GTAR `dev` changes undergo normal QA and approval, then approved releases are promoted through original GTAR's existing release workflow. GTAR1 `main` receives the approved public-release source snapshot, and GTAR1 `demo` receives the corresponding demo-compatible update.
+
+GTAR1 maintains its own lightweight governance, branding, configuration, demo data, and public identity; it is not a byte-for-byte copy of GTAR. Synchronization is deliberate and owner-controlled, not blind repository copying. Feature selection requires independent assessment, scope approval, implementation, and testing while avoiding accumulated technical debt. There is no automatic feature or source synchronization, copying, tagging, merging, or deployment. Original GTAR's existing release infrastructure remains in original GTAR; release-promotion machinery is not imported into GTAR1. Planned capabilities are not available merely because they exist in original GTAR.
 
 ## AI-Assisted Development
 
-GTAR1 is independently developed with extensive assistance from AI coding agents.
+GTAR1 and its canonical GTAR development source evolve with extensive assistance from AI coding agents, under owner direction.
 
 AI tools help with coding, testing, debugging, and documentation. The project maintainer manages product direction, feature requirements, user experience, quality assurance, and release decisions.
 
