@@ -129,7 +129,7 @@ export function ExplorerNavigation({ isOpen, onClose, isHidden = false, ...nav }
         aria-controls="explorer-sidebar" onClick={() => setCollapsedPersisted(false)}
         className="group relative z-20 hidden md:flex w-6 shrink-0 self-stretch items-start justify-start overflow-visible border-r border-app-border bg-app-toolbar cursor-pointer transition-opacity duration-200 ease-out motion-reduce:transition-none">
         {/* 24x44 target stays inside the strip: an overhanging hit area would paint under main's z-20 top bar. */}
-        <span className="flex h-11 w-6 shrink-0 items-center justify-start">
+        <span className="sticky top-[var(--app-header-height,57px)] z-20 flex h-11 w-6 shrink-0 items-center justify-start">
           <span className="flex h-11 w-6 items-center justify-center rounded-r-lg border border-l-0 border-app-border bg-app-surface text-app-muted shadow-md group-hover:text-app-heading group-focus-visible:ring-2 group-focus-visible:ring-app-action">
             <ChevronRight className="h-4 w-4" />
           </span>
@@ -140,7 +140,7 @@ export function ExplorerNavigation({ isOpen, onClose, isHidden = false, ...nav }
       aria-label="Music Explorer sidebar" aria-hidden={collapsed}
       inert={collapsed ? true : undefined}
       style={width && !collapsed ? { width } : undefined}
-      className={`relative hidden md:block shrink-0 bg-app-toolbar border-r border-app-border transition-[width,opacity] duration-200 ease-out motion-reduce:transition-none overflow-hidden ${
+      className={`sticky top-[var(--app-header-height,57px)] z-20 hidden md:block shrink-0 bg-app-toolbar border-r border-app-border h-[calc(100vh-var(--app-header-height,57px))] max-h-[calc(100vh-var(--app-header-height,57px))] transition-[width,opacity] duration-200 ease-out motion-reduce:transition-none overflow-hidden ${
         collapsed ? 'w-0 border-r-0 opacity-0 pointer-events-none' : (width ? '' : 'w-64 lg:w-72')
       }`}>
       <div className="h-full w-full overflow-y-auto"><MusicExplorerNav {...nav} headerAction={collapseButton} /></div>

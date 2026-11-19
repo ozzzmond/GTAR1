@@ -34,7 +34,11 @@ import {
   AlertCircle,
   Tag,
   Link,
+  PanelRight,
 } from 'lucide-react'
+import { WorkspacePreviewPane } from './WorkspacePreviewPane'
+import { WorkspaceSongPreview } from './WorkspaceSongPreview'
+import { readWorkspaceEnabled, rememberWorkspaceEnabled, readWorkspaceWidth, rememberWorkspaceWidth, clampWorkspaceWidth, useIsDesktop } from '../utils/workspacePreview'
 import { exportAllDataJson, exportSingleSetlistJson, parseBackupJson } from '../utils/jsonBackup'
 import { getSongMetadataStatus, formatTempoLabel, syncCanonicalDirectives } from '../utils/chordProMetadata'
 import { resolveSongKeys } from '../utils/songKeySemantics'
@@ -64,6 +68,11 @@ interface SongbookHomeViewProps {
   onDeleteSong: (index: number) => void
   onRequestTrashSetlist?: (id: string | number) => void
   onDeleteSetlist?: (setlistId: string | number) => boolean
+  onMoveSong?: (setlistId: string | number, index: number, direction: 'up' | 'down') => boolean
+  onRemoveSong?: (setlistId: string | number, index: number) => boolean
+  onAddSongs?: (setlistId: string | number, songIds: Array<string | number>) => boolean | Promise<boolean>
+  onSetlistFolderChange?: (id: string | number, folderId: string | null) => boolean
+  shortcutsBlocked?: boolean
   setlists?: WebSetlist[]
   onSelectSetlistSong?: (setlistId: string | number, songIdx: number) => void
   openSetlistId?: string | number | null
@@ -88,6 +97,11 @@ interface SongbookHomeViewProps {
   onEditSong?: (index: number) => void
   /** Heading "Browse Sources" (GTAR1); sources stay out of the Explorer sidebar. */
   onOpenSources?: () => void
+  isWorkspaceOpen?: boolean
+  onToggleWorkspace?: () => void
+  workspaceWidth?: number | null
+  onWorkspaceWidthChange?: (width: number) => void
+  onPreviewSong?: (index: number) => void
 }
 
 const cardMenuItem = 'w-full min-h-11 px-2.5 rounded-lg text-left hover:bg-app-base text-app-text flex items-center gap-2 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
@@ -104,11 +118,15 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
   onNewSetlist,
   onOpenSetlists,
   onManageSetlist,
-  onOpenSetlistManager,
   onDeleteSong,
   onRequestTrashSetlist,
   onRenameSetlist,
   onDeleteSetlist,
+  onMoveSong,
+  onRemoveSong,
+  onAddSongs,
+  onSetlistFolderChange,
+  shortcutsBlocked,
   setlists = [],
   onSelectSetlistSong,
   openSetlistId,
@@ -126,7 +144,40 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
   view,
   onSelectView,
   onEditSong,
+  isWorkspaceOpen: controlledWorkspaceOpen,
+  onToggleWorkspace,
+  workspaceWidth: controlledWorkspaceWidth,
+  onWorkspaceWidthChange,
+  onPreviewSong,
 }) => {
+  const isDesktop = useIsDesktop()
+  const [localWorkspaceOpen, setLocalWorkspaceOpen] = useState(readWorkspaceEnabled)
+  const isWorkspaceOpen = controlledWorkspaceOpen !== undefined ? controlledWorkspaceOpen : localWorkspaceOpen
+  const handleToggleWorkspace = () => {
+    if (onToggleWorkspace) {
+      onToggleWorkspace()
+    } else {
+      setLocalWorkspaceOpen(prev => {
+        const next = !prev
+        rememberWorkspaceEnabled(next)
+        return next
+      })
+    }
+  }
+  const isEffectiveWorkspace = Boolean(isWorkspaceOpen && isDesktop)
+  const [localWorkspaceWidth, setLocalWorkspaceWidth] = useState<number | null>(() => {
+    return readWorkspaceWidth()
+  })
+  const workspaceWidth = controlledWorkspaceWidth !== undefined ? controlledWorkspaceWidth : localWorkspaceWidth
+  const handleWorkspaceWidthChange = (w: number) => {
+    if (onWorkspaceWidthChange) onWorkspaceWidthChange(w)
+    else {
+      const clamped = clampWorkspaceWidth(w)
+      setLocalWorkspaceWidth(clamped)
+      rememberWorkspaceWidth(clamped)
+    }
+  }
+
   const { colors: tagColors, onAddToTag } = useTagLibrary()
   const [tagPickerOpen, setTagPickerOpen] = useState(false)
   const [tagName, setTagName] = useState('')
@@ -469,6 +520,18 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
     return sortDirection === 'desc' ? list.reverse() : list
   }, [filteredIndexedSongs, sortBy, sortDirection])
 
+  const effectivePreviewIdx = useMemo(() => {
+    if (sortedIndexedSongs.length === 0) return -1
+    const found = sortedIndexedSongs.find(s => s.originalIdx === activeSongIndex)
+    if (found) return found.originalIdx
+    return sortedIndexedSongs[0].originalIdx
+  }, [activeSongIndex, sortedIndexedSongs])
+
+  const effectivePreviewSong = useMemo(() => {
+    if (!isEffectiveWorkspace || effectivePreviewIdx < 0 || effectivePreviewIdx >= songs.length) return null
+    return songs[effectivePreviewIdx] || null
+  }, [isEffectiveWorkspace, songs, effectivePreviewIdx])
+
   // #252: long lists render only the rows near the viewport (no change below the threshold).
   const songGridRef = useRef<HTMLDivElement>(null)
   const songWindow = useListWindow(sortedIndexedSongs.length, songGridRef)
@@ -493,7 +556,22 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
   }, [activeSetlists, searchQuery, songs, songIndex, currentView, folders])
 
   type SetlistSortOption = 'manual' | 'title_asc' | 'title_desc' | 'newest' | 'oldest'
-  const [setlistSortBy, setSetlistSortBy] = useState<SetlistSortOption>('manual')
+  const [setlistSortBy, setSetlistSortBy] = useState<SetlistSortOption>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('gtar_setlist_sort')
+      if (saved === 'newest' || saved === 'oldest' || saved === 'manual' || saved === 'title_asc' || saved === 'title_desc') {
+        return saved as SetlistSortOption
+      }
+    }
+    return 'newest'
+  })
+
+  const handleSetlistSortChange = (newSort: SetlistSortOption) => {
+    setSetlistSortBy(newSort)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('gtar_setlist_sort', newSort)
+    }
+  }
 
   const hasReliableSetlistTimestamps = useMemo(() => {
     return (
@@ -616,7 +694,7 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
   }
 
   return (
-    <div data-testid="songbook-canvas" className="songbook-ui explorer-canvas flex-1 flex flex-col min-w-0 w-full overflow-y-auto bg-app-base select-none">
+    <div data-testid="songbook-canvas" className="songbook-ui explorer-canvas flex-1 flex flex-col min-w-0 w-full overflow-x-clip bg-app-base select-none">
       {membershipSong && <SongSetlistDialog
         song={membershipSong}
         setlists={activeSetlists}
@@ -933,14 +1011,14 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
 
       {/* 1. Breadcrumbs & scope bar (GTAR1 filter bar) */}
       {!isSetlistContext && (
-      <div data-testid="songbook-filter-bar" className="ui-filter-bar bg-app-filter border-b border-app-border px-4 py-1 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 sm:flex sm:flex-wrap sm:justify-between sm:gap-y-2">
-        <nav aria-label="Breadcrumb" className="col-start-1 row-start-1 flex items-center gap-1.5 text-xs text-app-muted min-w-0 min-h-11 overflow-hidden whitespace-nowrap">
+      <div data-testid="songbook-filter-bar" className="ui-filter-bar sticky top-[var(--app-header-height,57px)] z-30 bg-app-filter border-b border-app-border px-4 sm:px-6 py-1 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 sm:flex sm:flex-wrap sm:justify-between sm:gap-y-2">
+        <nav aria-label="Breadcrumb" className="col-start-1 row-start-1 flex items-center gap-1.5 text-xs text-app-muted min-w-0 min-h-[42px] h-[42px] overflow-hidden whitespace-nowrap">
           {breadcrumbItems.map((item, idx) => (
             <React.Fragment key={idx}>
               {idx > 0 && <ChevronRight className="w-3.5 h-3.5 text-app-muted/70 shrink-0" />}
               {item.target ? (
                 <button type="button" onClick={() => onSelectView?.(item.target!)}
-                  className="min-h-11 shrink-0 text-app-muted hover:text-app-link font-medium transition-colors cursor-pointer">
+                  className="min-h-[42px] h-[42px] flex items-center shrink-0 text-app-muted hover:text-app-link font-medium transition-colors cursor-pointer">
                   {item.label}
                 </button>
               ) : (
@@ -1022,6 +1100,21 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
                   <span>Select</span>
                 </button>
             )}
+            <button
+              type="button"
+              data-testid="workspace-toggle"
+              aria-label={isWorkspaceOpen ? "Hide Preview Pane" : "Show Preview Pane"}
+              aria-pressed={isWorkspaceOpen}
+              onClick={handleToggleWorkspace}
+              className={`hidden md:flex items-center gap-1.5 shrink-0 min-h-11 sm:min-h-9 px-2.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
+                isWorkspaceOpen
+                  ? 'bg-app-action/15 border-app-action text-app-action'
+                  : 'ui-button bg-app-button border-app-border text-app-button-text hover:brightness-110'
+              }`}
+            >
+              <PanelRight className="w-4 h-4" />
+              <span className="hidden xl:inline">Preview</span>
+            </button>
             {(onOpenImportSongs || onTrashDuplicates) && (
               <div className={`${songs.length > 0 ? 'row-start-2' : 'row-start-1'} col-start-2 justify-self-end self-start sm:self-auto flex items-center gap-2 shrink-0`}>
                 <SongsLibraryHelp canImport={Boolean(onOpenImportSongs)} canCheckDuplicates={Boolean(onTrashDuplicates)} />
@@ -1099,7 +1192,6 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
         </div>
       )}
 
-      <div className="px-4 py-3 sm:px-6 sm:py-4 w-full">
       {isSetlistContext ? (
         <>
           <input
@@ -1112,6 +1204,8 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
           <SetlistWorkspace onRequestTrashSetlist={onRequestTrashSetlist}
             key={currentView.type === 'FOLDER' ? currentView.folderId : currentView.type}
             folderName={currentView.type === 'FOLDER' ? folders.find(folder => folder.id === currentView.folderId)?.name : undefined}
+            folders={folders}
+            onSetlistFolderChange={onSetlistFolderChange}
             scope={currentView.type === 'FOLDER' ? 'ALL_SETLISTS' : currentView.type as SetlistWorkspaceScope}
             setlists={sortedSetlists}
             songs={songs}
@@ -1119,6 +1213,14 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
             onManageSetlist={onManageSetlist}
             onRenameSetlist={onRenameSetlist}
             onDeleteSetlist={onDeleteSetlist}
+            onMoveSong={onMoveSong}
+            onRemoveSong={onRemoveSong}
+            onAddSongs={onAddSongs}
+            shortcutsBlocked={shortcutsBlocked}
+            isWorkspaceOpen={isWorkspaceOpen}
+            onToggleWorkspace={handleToggleWorkspace}
+            workspaceWidth={workspaceWidth}
+            onWorkspaceWidthChange={handleWorkspaceWidthChange}
             onPlaySetlistPosition={(setlistId, position) => onSelectSetlistSong?.(setlistId, position)}
             onOpenSong={onSelectSetlistSong}
             openSetlistId={openSetlistId}
@@ -1134,19 +1236,19 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
                   ? [{ value: 'newest', label: 'Newest First' }, { value: 'oldest', label: 'Oldest First' }]
                   : []),
               ],
-              onSortChange: (value) => setSetlistSortBy(value as SetlistSortOption),
+              onSortChange: (value) => handleSetlistSortChange(value as SetlistSortOption),
               onShareAll: activeSetlists.length > 0 ? handleMainShareSetlist : undefined,
               onShareSetlist,
               onImport: () => { setImportLinkError(null); setIsImportModalOpen(true) },
               onExportSetlist: (sl) => exportSingleSetlistJson(sl, songs),
               onExportAllSetlists: () => exportAllDataJson(songs, setlists, folders, tagColors),
               onNewSetlist: onNewSetlist,
-              onManageSetlists: onOpenSetlistManager ?? onOpenSetlists,
             }}
           />
         </>
       ) : (
-      <>
+      <div className="w-full flex-1 min-w-0 flex flex-row items-start">
+        <div className="flex-1 min-w-0 px-4 py-3 sm:px-6 sm:py-4">
       {isDuplicateReviewOpen && onTrashDuplicates && (
         <DuplicateReviewDialog songs={songs} setlists={setlists} onTrashDuplicates={onTrashDuplicates}
           onClose={() => setIsDuplicateReviewOpen(false)} />
@@ -1165,7 +1267,7 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
           </h2>
           <div className="flex items-center gap-1.5 shrink-0">
             <button type="button" data-testid="songs-add-song" onClick={onNewSong}
-              className="min-h-11 px-3 rounded-xl bg-app-action hover:brightness-110 text-app-on-action font-semibold text-xs transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer">
+              className="min-h-[42px] h-[42px] px-3 rounded-xl bg-app-action hover:brightness-110 text-app-on-action font-semibold text-xs transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer">
               <span>Add Song</span>
             </button>
           </div>
@@ -1178,7 +1280,7 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
             <p className="text-xs text-app-muted max-w-sm mx-auto mt-1 mb-4">Create a song or import charts.</p>
             <div className="flex justify-center gap-2 flex-wrap">
               <button type="button" onClick={onNewSong}
-                className="min-h-11 px-3.5 bg-app-action hover:brightness-110 rounded-xl text-xs text-app-on-action font-semibold flex items-center gap-1 shadow-sm cursor-pointer">
+                className="min-h-[42px] h-[42px] px-3.5 bg-app-action hover:brightness-110 rounded-xl text-xs text-app-on-action font-semibold flex items-center gap-1 shadow-sm cursor-pointer">
                 <Plus className="w-3.5 h-3.5" />
                 <span>Create First Song</span>
               </button>
@@ -1197,16 +1299,16 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
                 handleFilterTagsChange('ALL')
                 if (currentView.type === 'TAG') onSelectView?.({ type: 'ALL_SONGS' })
               }}
-              className="ui-button min-h-11 px-3 bg-app-button hover:brightness-110 rounded-xl text-xs text-app-button-text font-semibold border border-app-border cursor-pointer">
+              className="ui-button min-h-[42px] h-[42px] px-3 bg-app-button hover:brightness-110 rounded-xl text-xs text-app-button-text font-semibold border border-app-border cursor-pointer">
               Reset Filters
             </button>
           </div>
         ) : (
           <div ref={songGridRef} id="songbook-song-cards" data-testid="song-grid" data-window={songWindow.active ? `${songWindow.start}-${songWindow.end}` : undefined}
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(18rem,1fr))] gap-2.5"
+            className={isEffectiveWorkspace ? "grid grid-cols-1 gap-3 sm:gap-3.5" : "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-3.5"}
             style={songWindow.active ? { paddingTop: songWindow.padTop, paddingBottom: songWindow.padBottom } : undefined}>
             {visibleIndexedSongs.map(({ song, originalIdx }) => {
-              const isSelected = originalIdx === activeSongIndex
+              const isSelected = isEffectiveWorkspace ? originalIdx === effectivePreviewIdx : originalIdx === activeSongIndex
               const isDeleting = confirmDeleteIdx === originalIdx
               const isMenuOpen = activeMenuSongIdx === originalIdx
               const isSongChosen = selectedSongIds.has(song.id ?? originalIdx)
@@ -1236,13 +1338,16 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
                   className="rounded-2xl"
                   cardClassName={`ui-song-card group relative p-3 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between shadow-sm h-full ${
                     isSongChosen || isSelected
-                      ? 'ui-selection-card bg-app-selected border-app-selected-border'
+                      ? 'ui-selection-card bg-app-selected border-app-selected-border ring-2 ring-app-action/40'
                       : 'bg-app-song hover:brightness-95 border-app-border'
                   }`}
                   onClick={() => {
                     if (isRenaming) return
                     if (isSongSelectionMode) {
                       toggleSongSelection(song.id ?? originalIdx)
+                    } else if (isEffectiveWorkspace) {
+                      if (onPreviewSong) onPreviewSong(originalIdx)
+                      else onSelectSong(originalIdx)
                     } else {
                       onSelectSong(originalIdx)
                     }
@@ -1716,9 +1821,30 @@ export const SongbookHomeView: React.FC<SongbookHomeViewProps> = ({
           </div>
         )}
       </section>
-      </>
-      )}
+        </div>
+        <WorkspacePreviewPane
+          isOpen={isEffectiveWorkspace}
+          width={workspaceWidth}
+          onWidthChange={handleWorkspaceWidthChange}
+          ariaLabel="Song Preview Pane"
+          testId="workspace-preview-pane"
+        >
+          <WorkspaceSongPreview
+            song={effectivePreviewSong}
+            onMaximize={() => {
+              if (effectivePreviewSong && effectivePreviewIdx >= 0) {
+                onSelectSong(effectivePreviewIdx)
+              }
+            }}
+            onTransposeChange={onUpdateSong ? (newOffset) => {
+              if (effectivePreviewSong) {
+                onUpdateSong({ id: effectivePreviewSong.id, transposeOffset: newOffset })
+              }
+            } : undefined}
+          />
+        </WorkspacePreviewPane>
       </div>
+      )}
     </div>
   )
 }

@@ -93,6 +93,7 @@ import { canonicalSongKey } from './utils/musicalKey'
 import type { ActiveSongState, WebSetlist, SetlistFolder } from './types/gtar'
 import type { FetchedChordSheet } from './utils/onlineSearch'
 import { isDevEnv } from './utils/env'
+import { readWorkspaceWidth, rememberWorkspaceWidth, clampWorkspaceWidth } from './utils/workspacePreview'
 import { buildViewHistoryState, isGtarViewHistoryState } from './utils/viewHistory'
 
 // The import dialog pulls in ChordSheetJS (~230 KB); load it only when first opened (#85).
@@ -412,6 +413,35 @@ function LibraryApp() {
     initialStageSession.isValid ? initialStageSession.queueMode : 'library'
   )
   const [searchQuery, setSearchQuery] = useState<string>('')
+
+  // GH-579 Phase 2: Optional Workspace Preview Pane (desktop/tablet only, default OFF)
+  const [isWorkspaceOpen, setIsWorkspaceOpen] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('gtar_workspace_preview_enabled') === 'true'
+    } catch {
+      return false
+    }
+  })
+  const handleToggleWorkspace = useCallback(() => {
+    setIsWorkspaceOpen(prev => {
+      const next = !prev
+      try {
+        localStorage.setItem('gtar_workspace_preview_enabled', String(next))
+      } catch {
+        /* Storage preference is optional. */
+      }
+      return next
+    })
+  }, [])
+
+  const [workspaceWidth, setWorkspaceWidth] = useState<number | null>(() => {
+    return readWorkspaceWidth()
+  })
+  const handleWorkspaceWidthChange = useCallback((w: number) => {
+    const clamped = clampWorkspaceWidth(w)
+    setWorkspaceWidth(clamped)
+    rememberWorkspaceWidth(clamped)
+  }, [])
 
   // Display Settings (persisted in localStorage)
   const [fontStyle, setFontStyle] = useState<SongFontStyleOption>(() => {
@@ -865,8 +895,7 @@ function LibraryApp() {
 
   const handleManageSetlist = (setlist: WebSetlist) => openSetlistManager(setlist)
 
-  // #312 S2 (DEV): GTAR1 Setlist Manager. Each change is one guarded write (stale-write guard);
-  // a handler returns false and reports the failure when nothing was saved.
+  // #312 S2 / #579 Phase 1: GTAR1 Setlist Manager retained as fallback for existing consumers.
   const [isSetlistManagerOpen, setIsSetlistManagerOpen] = useState(false)
   const [setlistManagerId, setSetlistManagerId] = useState<string | number | null>(null)
   const [setlistManagerOpener, setSetlistManagerOpener] = useState<HTMLElement | null>(null)
@@ -981,6 +1010,9 @@ function LibraryApp() {
       setQueueMode('library')
     }
     setSetlistManagerId(null)
+    if (String(workspaceSetlistId) === String(setlistId)) {
+      setWorkspaceSetlistId(null)
+    }
     return true
   }
   const handleManagerMove = (setlistId: string | number, index: number, direction: 'up' | 'down') => {
@@ -1628,13 +1660,18 @@ function LibraryApp() {
           isTrashActive={activeView === 'trash'}
           onOpenTrash={() => navigateSafely(() => setActiveView('trash'))}
         />
-      <main className="flex-1 min-w-0 flex overflow-hidden">
+      <main className="flex-1 min-w-0 flex overflow-x-clip">
         {activeView === 'songbook' ? (
           <SongbookHomeView onRequestTrashSetlist={setTrashSetlistId} folders={folders} trashDropIds={trashDropIds} onDismissTrashDrop={() => setTrashDropIds(null)}
             songs={songs}
             searchQuery={searchQuery}
             onSearchQueryChange={setSearchQuery}
             activeSongIndex={activeSongIndex}
+            isWorkspaceOpen={isWorkspaceOpen}
+            onToggleWorkspace={handleToggleWorkspace}
+            workspaceWidth={workspaceWidth}
+            onWorkspaceWidthChange={handleWorkspaceWidthChange}
+            onPreviewSong={handleSelectLibrarySong}
             onSelectSong={(songIdx) => {
               handleSelectLibrarySong(songIdx)
               setActiveView('stage')
@@ -1652,6 +1689,11 @@ function LibraryApp() {
             onDeleteSong={handleDeleteSong}
             onRenameSetlist={handleManagerRename}
             onDeleteSetlist={handleManagerDelete}
+            onMoveSong={handleManagerMove}
+            onRemoveSong={handleManagerRemove}
+            onAddSongs={handleManagerAddSongs}
+            onSetlistFolderChange={handleSetlistFolderChange}
+            shortcutsBlocked={isStagePerformanceMode}
             setlists={setlists}
             onSelectSetlistSong={(setlistId, songIdx) => {
               handleSelectSetlistSong(setlistId, songIdx)
@@ -1734,8 +1776,7 @@ function LibraryApp() {
                 isHeaderKeyPickerOpen ||
                 isTvPresentationModalOpen ||
                 isHeaderOverlayOpen ||
-                recoveryDataOpen ||
-                isSetlistManagerOpen
+                recoveryDataOpen
               }
               onBack={() => setActiveView('songbook')}
               onOpenEditor={() => navigateSafely(() => setActiveView('editor'))}
@@ -1746,6 +1787,10 @@ function LibraryApp() {
               isTwoColumn={isTwoColumn}
               onToggleTwoColumn={setIsTwoColumn}
               onPerformanceModeChange={setIsStagePerformanceMode}
+              onToggleThemeMode={handleToggleThemeMode}
+              currentTheme={stageTheme}
+              customColors={customThemeColors}
+              themeModeAssignments={themeAssignments}
             />
           </StageErrorBoundary>
         )}
