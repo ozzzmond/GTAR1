@@ -23,3 +23,14 @@ test('runner fails closed for empty, skipped-only and failing suites and reports
   assert.equal(passed.success, true)
   assert.equal(passed.results[0].pass, 1)
 })
+
+test('runner detects empty files whose path TAP escapes (backslashes on Windows, # elsewhere)', async t => {
+  const { tapEscape } = require('../scripts/run-tests.cjs')
+  assert.equal(tapEscape('C:\\a\\b.test.cjs'), 'C:\\\\a\\\\b.test.cjs')
+  assert.equal(tapEscape('a#b'), 'a\\#b')
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gtar1-runner-#'))
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }))
+  const file = path.join(dir, 'empty.test.cjs')
+  fs.writeFileSync(file, '')
+  assert.equal((await runFiles([file], { report: () => {} })).success, false)
+})

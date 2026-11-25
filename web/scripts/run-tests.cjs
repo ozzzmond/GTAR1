@@ -50,6 +50,9 @@ function shardFiles(files, shard, pinned = {}) {
     .filter((_, position) => position % free.length === free.indexOf(index))
 }
 
+// Node's TAP reporter escapes backslashes and '#' in subtest names, so a Windows path never matches verbatim.
+const tapEscape = text => text.replaceAll('\\', '\\\\').replaceAll('#', '\\#')
+
 // Isolated processes retain each file's globals, hooks and complete test selection.
 // Bound concurrency to avoid launching the whole suite (and its DOMs) at once.
 async function runFiles(files, { concurrency = 4, report = console.log } = {}) {
@@ -69,7 +72,7 @@ async function runFiles(files, { concurrency = 4, report = console.log } = {}) {
       const result = { file, code, ms: performance.now() - start }
       for (const key of ['tests', 'pass', 'fail', 'skipped']) result[key] = Number(output.match(new RegExp(`^# ${key} (\\d+)$`, 'm'))?.[1] ?? 0)
       // Node reports an empty file as a synthetic passing subtest named by its path.
-      const emptyFile = output.includes(`# Subtest: ${file}\n`) && result.tests === 1
+      const emptyFile = output.includes(`# Subtest: ${tapEscape(file)}\n`) && result.tests === 1
       result.executed = !emptyFile && result.tests > result.skipped && result.pass > 0
       results.push(result)
       report(`${code === 0 && result.executed ? 'PASS' : 'FAIL'} ${path.basename(file)} ${(result.ms / 1000).toFixed(3)} s`)
@@ -110,4 +113,4 @@ async function main(args) {
 }
 
 if (require.main === module) main(process.argv.slice(2)).catch(error => { console.error(error.message); process.exitCode = 1 })
-module.exports = { tiers, discover, partition, runFiles, shardFiles }
+module.exports = { tiers, discover, partition, runFiles, shardFiles, tapEscape }
