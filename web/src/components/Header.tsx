@@ -54,7 +54,7 @@ import {
   type FetchedChordSheet,
 } from '../utils/onlineSearch'
 import { setOnlineSourcesEnabled, useOnlineSourcesEnabled } from '../utils/onlineSources'
-import { getSearchLinks, useOnlineSourceSettings } from '../utils/onlineSourceSettings'
+import { useOnlineSourceSettings } from '../utils/onlineSourceSettings'
 import { ChordPreviewModal } from './ChordPreviewModal'
 import { DebugLogsModal } from './DebugLogsModal'
 import { OnlineSourcesDialog, OnlineSourcesRow } from './OnlineSourcesRow'
@@ -119,6 +119,7 @@ interface HeaderProps {
   queueMode?: 'library' | 'setlist'
   activeSetlistSongsCount?: number
   activeSetlistSongIndex?: number
+  restoredSearch?: { scrollTop: number }
   searchQuery: string
   onSearchQueryChange: (query: string) => void
   onSelectSearchSong?: (songIndex: number) => void
@@ -162,6 +163,7 @@ export const Header: React.FC<HeaderProps> = ({
   onViewChange,
   allSongs = [],
   deletedSongsCount = 0,
+  restoredSearch,
   searchQuery,
   onSearchQueryChange,
   onSelectSearchSong,
@@ -283,9 +285,21 @@ export const Header: React.FC<HeaderProps> = ({
     }
   }, [])
 
-  const [isSearchFocused, setIsSearchFocused] = useState(false)
-  const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
+  const [isSearchFocused, setIsSearchFocused] = useState(Boolean(restoredSearch))
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(Boolean(restoredSearch))
   const [compact, setCompact] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768)
+  const [lastRestoredSearch, setLastRestoredSearch] = useState(restoredSearch)
+  if (restoredSearch !== lastRestoredSearch) {
+    setLastRestoredSearch(restoredSearch)
+    if (restoredSearch) {
+      setIsSearchFocused(true)
+      setMobileSearchOpen(compact)
+    }
+  }
+  React.useLayoutEffect(() => {
+    const results = document.getElementById('global-search-results')
+    if (restoredSearch && results) results.scrollTop = restoredSearch.scrollTop
+  }, [restoredSearch])
   const searchInputRef = useRef<HTMLInputElement>(null)
   const searchTriggerRef = useRef<HTMLButtonElement>(null)
   useEffect(() => {
@@ -607,7 +621,6 @@ export const Header: React.FC<HeaderProps> = ({
       isSearchingOnline={isSearchingOnline}
       isOffline={isOffline}
       onlineError={onlineError}
-      searchLinks={onlineSourcesEnabled ? getSearchLinks(onlineSourceSettings, searchQuery) : []}
       onSelectSong={(originalIdx) => {
         dismissResults()
         onSelectSearchSong?.(originalIdx)
