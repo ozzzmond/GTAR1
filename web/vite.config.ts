@@ -15,6 +15,7 @@ const resolveReleaseIdentity = (_root: string, env: Record<string, string | unde
   ? { version: gtar1Release.version, sourceTag: gtar1Release.sourceTag, sha: gtar1Release.sourceSha }
   : null
 const gtar1IsDemo = process.env.CF_PAGES_BRANCH === 'demo'
+const gtar1OnlineProvidersDisabled = process.env.CF_PAGES_BRANCH !== 'main'
 type Gtar1DevIdentity = { tag?: string; version?: string; tagStatus?: string; shortSha?: string; deploymentId?: string } | null
 const resolveDevIdentity: (...args: unknown[]) => Gtar1DevIdentity = () => null
 const getCommittedDevVersion: (...args: unknown[]) => string = () => gtar1Release.version
@@ -25,6 +26,14 @@ import {
   validateSearchQuery,
   validateTabUrl,
 } from './src/utils/ugCore.ts'
+import {
+  DEFAULT_GUITARSONGS_HOST,
+  GUITARSONGS_LIVE_ACCESS_PERMITTED,
+  parseGuitarSongsSearchHtml,
+  parseGuitarSongsTabSheet,
+  validateGuitarSongsQuery,
+  validateGuitarSongsSongUrl,
+} from './src/utils/guitarSongsCore.ts'
 
 const UG_HEADERS = {
   'User-Agent':
@@ -186,6 +195,139 @@ function ugScraperPlugin(): Plugin {
         }
       })
 
+      server.middlewares.use('/api/gs-search', async (req, res) => {
+        res.setHeader('Content-Type', 'application/json; charset=utf-8')
+        res.setHeader('Access-Control-Allow-Origin', '*')
+        res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        res.setHeader('Cache-Control', 'no-store')
+
+        if (!GUITARSONGS_LIVE_ACCESS_PERMITTED) {
+          res.writeHead(503)
+          res.end(JSON.stringify({ success: false, error: 'GUITARSONGS_LIVE_ACCESS_DISABLED' }))
+          return
+        }
+
+        try {
+          const parsedUrl = url.parse(req.url || '', true)
+          const validation = validateGuitarSongsQuery(parsedUrl.query.q)
+
+          if (!validation.valid) {
+            res.writeHead(400)
+            res.end(JSON.stringify({ success: false, error: validation.error }))
+            return
+          }
+
+          if (!validation.query) {
+            res.writeHead(200)
+            res.end(JSON.stringify({ success: true, results: [] }))
+            return
+          }
+
+          const target = `https://${DEFAULT_GUITARSONGS_HOST}/search?q=${encodeURIComponent(validation.query)}`
+          const { status, data } = await fetchHttps(target)
+
+          if (status === 403) {
+            res.writeHead(403)
+            res.end(JSON.stringify({ success: false, error: 'GuitarSongs.club restricted automated retrieval' }))
+            return
+          }
+          if (status === 429) {
+            res.writeHead(429)
+            res.end(JSON.stringify({ success: false, error: 'Rate limit exceeded on GuitarSongs.club' }))
+            return
+          }
+          if (status !== 200) {
+            res.writeHead(502)
+            res.end(JSON.stringify({ success: false, error: `Upstream error from GuitarSongs.club (HTTP ${status})` }))
+            return
+          }
+
+          const results = parseGuitarSongsSearchHtml(data, {
+            baseUrl: `https://${DEFAULT_GUITARSONGS_HOST}`,
+            query: validation.query,
+          })
+          res.writeHead(200)
+          res.end(JSON.stringify({ success: true, results }))
+        } catch (err: unknown) {
+          const error = err instanceof Error ? (err as Error & { code?: string }) : null
+          const isTimeout = error?.code === 'ETIMEDOUT' || error?.message?.includes('timed out')
+          res.writeHead(isTimeout ? 504 : 502)
+          res.end(
+            JSON.stringify({
+              success: false,
+              error: isTimeout ? 'Gateway timeout contacting GuitarSongs.club' : (error?.message || 'Internal proxy error'),
+            })
+          )
+        }
+      })
+
+      server.middlewares.use('/api/gs-tab', async (req, res) => {
+        res.setHeader('Content-Type', 'application/json; charset=utf-8')
+        res.setHeader('Access-Control-Allow-Origin', '*')
+        res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        res.setHeader('Cache-Control', 'no-store')
+
+        if (!GUITARSONGS_LIVE_ACCESS_PERMITTED) {
+          res.writeHead(503)
+          res.end(JSON.stringify({ success: false, error: 'GUITARSONGS_LIVE_ACCESS_DISABLED' }))
+          return
+        }
+
+        try {
+          const parsedUrl = url.parse(req.url || '', true)
+          const validation = validateGuitarSongsSongUrl(parsedUrl.query.url)
+
+          if (!validation.valid || !validation.parsedUrl) {
+            res.writeHead(validation.status)
+            res.end(JSON.stringify({ success: false, error: validation.error }))
+            return
+          }
+
+          const { status, data } = await fetchHttps(validation.parsedUrl.toString())
+
+          if (status === 404) {
+            res.writeHead(404)
+            res.end(JSON.stringify({ success: false, error: 'Song not found on GuitarSongs.club' }))
+            return
+          }
+          if (status === 403) {
+            res.writeHead(403)
+            res.end(JSON.stringify({ success: false, error: 'GuitarSongs.club restricted automated retrieval' }))
+            return
+          }
+          if (status === 429) {
+            res.writeHead(429)
+            res.end(JSON.stringify({ success: false, error: 'Rate limit exceeded on GuitarSongs.club' }))
+            return
+          }
+          if (status !== 200) {
+            res.writeHead(502)
+            res.end(JSON.stringify({ success: false, error: `Upstream error from GuitarSongs.club (HTTP ${status})` }))
+            return
+          }
+
+          const parseResult = parseGuitarSongsTabSheet(data, validation.parsedUrl.toString())
+          if (!parseResult.success) {
+            res.writeHead(parseResult.status)
+            res.end(JSON.stringify({ success: false, error: parseResult.error }))
+            return
+          }
+
+          res.writeHead(200)
+          res.end(JSON.stringify({ success: true, sheet: parseResult.sheet }))
+        } catch (err: unknown) {
+          const error = err instanceof Error ? (err as Error & { code?: string }) : null
+          const isTimeout = error?.code === 'ETIMEDOUT' || error?.message?.includes('timed out')
+          res.writeHead(isTimeout ? 504 : 502)
+          res.end(
+            JSON.stringify({
+              success: false,
+              error: isTimeout ? 'Gateway timeout contacting GuitarSongs.club' : (error?.message || 'Internal proxy error'),
+            })
+          )
+        }
+      })
+
       // DEV-only local LAN IP discovery endpoint for Chromecast / Smart TV receiver
       server.middlewares.use('/api/dev-lan-ip', (_req, res) => {
         try {
@@ -310,6 +452,7 @@ export default defineConfig(({ mode }) => {
     define: {
       'import.meta.env.VITE_APP_ENV': JSON.stringify(appEnv),
       'import.meta.env.VITE_GTAR1_DEMO': JSON.stringify(gtar1IsDemo ? '1' : ''),
+      'import.meta.env.VITE_ONLINE_PROVIDERS_DISABLED': JSON.stringify(gtar1OnlineProvidersDisabled ? '1' : ''),
       __GTAR_STAGE_CAST2_ENABLED__: JSON.stringify(isStageCast2Dev),
       __GTAR_SETLIST_AUTO_FOLLOW_DEV__: JSON.stringify(!isProd && (isDev || isPreview)),
       __GTAR_PROD_VERSION__: JSON.stringify(releaseIdentity?.version ?? gtar1Release.version),

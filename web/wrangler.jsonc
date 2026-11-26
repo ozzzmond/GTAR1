@@ -34,7 +34,7 @@
         }
       ],
       "vars": {
-        "UG_PROXY_MODE": "disabled"
+        "UG_PROXY_MODE": "enabled"
       }
     },
     "preview": {
